@@ -1,0 +1,41 @@
+[
+ {
+  "bookSourceComment": "version: 2\nauthor: liruohrh\ngithub: https://github.com/liruohrh/legado-booksource\n\n\n# 2025/03/13\n1. 请求头不要带Accept、Accept-Encoding，不然会乱码。\n\n# 2025/03/12",
+  "bookSourceGroup": "免费漫画,漫画,我的漫画",
+  "bookSourceName": "读漫屋",
+  "bookSourceType": 2,
+  "bookSourceUrl": "https://m.dumanwu.com/",
+  "customOrder": 0,
+  "enabled": true,
+  "enabledCookieJar": true,
+  "enabledExplore": true,
+  "header": "{\n'User-Agent':  'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1 Edg/122.0.0.0',\n 'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5'\n}",
+  "lastUpdateTime": 0,
+  "respondTime": 180000,
+  "ruleBookInfo": {
+   "author": "@css: .author@text##作者：##",
+   "coverUrl": "@css: .banner-pic@data-src",
+   "intro": "@css: .introduction@text",
+   "name": "@css: .banner-title@text"
+  },
+  "ruleContent": {
+   "content": "<js>\nvar imgEls = java.getElements(\"@css: .chapter-img-box > img\");\nvar result = \"\";\nfor(let i=0; i<imgEls.length; i++){\n  result += `<img src=\"${imgEls[i].attr(\"data-src\")}\">\\n`;\n}\nresult;\n</js>"
+  },
+  "ruleExplore": {},
+  "ruleSearch": {
+   "author": "",
+   "bookList": "$.data",
+   "bookUrl": "$.id<js>\"https://m.dumanwu.com/\"+result + `,{'webView': true}`</js>",
+   "coverUrl": "$.imgurl",
+   "lastChapter": "$.remarks",
+   "name": "$.name"
+  },
+  "ruleToc": {
+   "chapterList": "<js>\nvar cEls = java.getElements(\"@css: .chaplist-box > ul > li > a\");\n\nvar chapters = [];\nfor(let i=0; i<cEls.length; i++){\n  chapters.push({\n      title: cEls[i].text(),\n      url: \"https://m.dumanwu.com\" + cEls[i].attr(\"href\")\n  });\n}\nvar moreText = java.getElement(\"@css: .chaplist-box > .chaplist-more\");\nif(moreText ){\nvar url = baseUrl;\nif(baseUrl.endsWith(\"/\")){\n   url = url.substring(0, url.length-1);\n}\nvar id = url .substring(url .lastIndexOf(\"/\")+1).split(\",\", 2)[0];\nvar map = new Packages.java.util.HashMap();\nmap.put(\"Content-Type\", \"application/x-www-form-urlencoded; charset=UTF-8\");\nvar resp = java.post(\"https://m.dumanwu.com/morechapter\", \"id=\"+id, map);\nif(resp.statusCode() == 200){\n var body = JSON.parse(resp.body());\n  if(body.code != -1){\n       for(let i=0; i<body.data.length; i++){\n        chapters.push({\n         title: body.data[i].chaptername,\n         url: `https://m.dumanwu.com/${id}/${body.data[i].chapterid}.html`\n       });\n     }\n  } \n }\n}else{\n java.log(\"moreText =\"+moreText );\n}\nchapters.reverse();\n</js>",
+   "chapterName": "title",
+   "chapterUrl": "url##$##, {\"webView\": true}"
+  },
+  "searchUrl": "https://m.dumanwu.com/s, { \"method\":  \"POST\", \"body\":  \"k={{key}}\" , \"headerMap\": { \"Content-Type\": \"application/x-www-form-urlencoded; charset=UTF-8\"  }  }",
+  "weight": 0
+ }
+]

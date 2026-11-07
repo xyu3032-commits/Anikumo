@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Anikumo
+Comment=Watch Animes online with danmaku support.
+Comment[zh_CN]=一款好用的追番软件
+Exec=anikumo %u
+StartupWMClass=anikumo
+Icon=com.anikumo.app
+Terminal=false
+Type=Application
+Categories=AudioVideo;Audio;Video;
+MimeType=x-scheme-handler/anikumo;

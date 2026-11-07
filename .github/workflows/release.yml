@@ -1,0 +1,224 @@
+name: Release
+
+# Builds Anikumo for every platform and publishes the
+# artifacts to a GitHub Release named "Anikumo <version>".
+#
+# Trigger either by pushing a version tag (v1.0.0) or
+# manually from the Actions tab (workflow_dispatch).
+#
+# Android APKs are signed with the project's permanent
+# signing key (repository secrets ANDROID_KEYSTORE_BASE64
+# and ANDROID_KEYSTORE_PASSWORD) so GitHub builds install
+# over each other — and over locally built releases, which
+# use the same key.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version label, e.g. 1.0.0'
+        required: true
+        default: '1.0.0'
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: '3.47.9'
+
+jobs:
+  android:
+    name: Android APKs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Resolve version
+        run: |
+          VER="${{ inputs.version }}"
+          if [ -z "$VER" ]; then VER="${GITHUB_REF_NAME#v}"; fi
+          echo "VERSION=$VER" >> "$GITHUB_ENV"
+      - run: flutter pub get
+      - name: Build split APKs
+        run: flutter build apk --release --split-per-abi
+      - name: Sign with the permanent key and rename
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > /tmp/anikumo.keystore
+          BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -1)
+          OUT=build/app/outputs/flutter-apk
+          mkdir -p dist
+          for spec in "arm64-v8a arm64" "armeabi-v7a armeabi-v7a" "x86_64 x86_64"; do
+            set -- $spec
+            "$BT/zipalign" -f -p 4 "$OUT/app-$1-release.apk" "/tmp/aligned-$2.apk"
+            "$BT/apksigner" sign \
+              --ks /tmp/anikumo.keystore --ks-key-alias anikumo \
+              --ks-pass "pass:$KEYSTORE_PASSWORD" \
+              --key-pass "pass:$KEYSTORE_PASSWORD" \
+              --out "dist/Anikumo-${VERSION}-$2.apk" "/tmp/aligned-$2.apk"
+          done
+          rm -f /tmp/anikumo.keystore dist/*.idsig
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: dist/*
+
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Resolve version
+        shell: bash
+        run: |
+          VER="${{ inputs.version }}"
+          if [ -z "$VER" ]; then VER="${GITHUB_REF_NAME#v}"; fi
+          echo "VERSION=$VER" >> "$GITHUB_ENV"
+      - run: flutter pub get
+      - name: Build Windows
+        run: flutter build windows --release
+      - name: Package zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "build/windows/x64/runner/Release/*" `
+            -DestinationPath "Anikumo-$env:VERSION-windows-x64.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: Anikumo-*-windows-x64.zip
+
+  macos:
+    name: macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Resolve version
+        run: |
+          VER="${{ inputs.version }}"
+          if [ -z "$VER" ]; then VER="${GITHUB_REF_NAME#v}"; fi
+          echo "VERSION=$VER" >> "$GITHUB_ENV"
+      - run: flutter pub get
+      - name: Build macOS
+        run: flutter build macos --release
+      - name: Package dmg (unsigned)
+        run: |
+          APP=$(ls -d build/macos/Build/Products/Release/*.app | head -1)
+          echo "Packaging $APP"
+          mkdir -p dmgroot
+          cp -R "$APP" dmgroot/
+          ln -s /Applications dmgroot/Applications
+          hdiutil create -volname "Anikumo" -srcfolder dmgroot \
+            -ov -format UDZO "Anikumo-${VERSION}-macos.dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: Anikumo-*-macos.dmg
+
+  ios:
+    name: iOS (unsigned)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Resolve version
+        run: |
+          VER="${{ inputs.version }}"
+          if [ -z "$VER" ]; then VER="${GITHUB_REF_NAME#v}"; fi
+          echo "VERSION=$VER" >> "$GITHUB_ENV"
+      - run: flutter pub get
+      - name: Build iOS without codesigning
+        run: flutter build ios --release --no-codesign
+      - name: Package unsigned ipa
+        run: |
+          APP=$(ls -d build/ios/iphoneos/*.app | head -1)
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          zip -qry "Anikumo-${VERSION}-ios-unsigned.ipa" Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios
+          path: Anikumo-*-ios-unsigned.ipa
+
+  linux:
+    name: Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Resolve version
+        run: |
+          VER="${{ inputs.version }}"
+          if [ -z "$VER" ]; then VER="${GITHUB_REF_NAME#v}"; fi
+          echo "VERSION=$VER" >> "$GITHUB_ENV"
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev
+      - run: flutter pub get
+      - name: Build Linux
+        run: flutter build linux --release
+      - name: Package tar.gz
+        run: |
+          tar -czf "Anikumo-${VERSION}-linux-x64.tar.gz" \
+            -C build/linux/x64/release/bundle .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: Anikumo-*-linux-x64.tar.gz
+
+  release:
+    name: Publish release
+    needs: [android, windows, macos, ios, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve version
+        run: |
+          VER="${{ inputs.version }}"
+          if [ -z "$VER" ]; then VER="${GITHUB_REF_NAME#v}"; fi
+          echo "VERSION=$VER" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: List artifacts
+        run: ls -la artifacts
+      - name: Create or update the GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: Anikumo ${{ env.VERSION }}
+          files: artifacts/*
+          fail_on_unmatched_files: true
