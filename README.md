@@ -72,7 +72,7 @@
 
 ## 致谢
 
-- **特别感谢 XpathSelector**：这个优秀的项目是本项目的基石。
+- **特别感谢 XpathSelector**：的项目是这款软件的最重要的组成部分。
 - **特别感谢 Bangumi**：本项目使用了 Bangumi 开放 API 以提供番剧元数据。
 - **特别感谢 Anime4K**：本项目使用 Anime4K 进行实时超分。
 - **特别感谢 SyncPlay**：本项目使用 SyncPlay 协议并通过 SyncPlay 公共服务器实现一起看功能。
