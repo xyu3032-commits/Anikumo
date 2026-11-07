@@ -186,7 +186,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang cmake ninja-build pkg-config \
-            libgtk-3-dev liblzma-dev
+            libgtk-3-dev liblzma-dev libwebkit2gtk-4.1-dev libsoup-3.0-dev
       - run: flutter pub get
       - name: Build Linux
         run: flutter build linux --release
@@ -204,6 +204,7 @@ jobs:
     needs: [android, windows, macos, ios, linux]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Resolve version
         run: |
           VER="${{ inputs.version }}"
@@ -220,5 +221,6 @@ jobs:
         with:
           tag_name: v${{ env.VERSION }}
           name: Anikumo ${{ env.VERSION }}
+          body_path: RELEASE_NOTES.md
           files: artifacts/*
           fail_on_unmatched_files: true
