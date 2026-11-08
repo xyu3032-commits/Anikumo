@@ -4,8 +4,8 @@ import 'package:anikumo/services/logging/logger.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:media_kit/media_kit.dart';
 
-/// Batch 16: playback enhancement profile — 24 optimizations
-/// and 12 features that the stock player doesn't expose. Every
+/// Batch 16: playback enhancement profile — optimizations
+/// and features that the stock player doesn't expose. Every
 /// item resolves to concrete mpv properties (composed here as a
 /// pure function, so the whole profile is unit-testable) and is
 /// applied to each new player at initialization, mirroring how
@@ -102,13 +102,18 @@ class PlayerEnhance {
     final vf = <String>[];
     final lavf = <String>[];
 
-    // ——— 24 optimizations ———
+    // ——— optimizations ———
     if (f(PlayerEnhanceKeys.optDisplaySync)) {
       props['video-sync'] = 'display-resample';
     }
     if (f(PlayerEnhanceKeys.optInterpolation)) {
       props['interpolation'] = 'yes';
       props['tscale'] = 'oversample';
+      // Batch 114: interpolation is inert unless the sync mode is
+      // a display mode — enabling motion interpolation alone used
+      // to do nothing at all. It now implies display-resample
+      // (the same value the display-sync switch sets).
+      props['video-sync'] = 'display-resample';
     }
     if (f(PlayerEnhanceKeys.optLowPowerDecode)) {
       props['vd-lavc-fast'] = 'yes';
@@ -127,17 +132,16 @@ class PlayerEnhance {
     if (f(PlayerEnhanceKeys.optSeekableCache)) {
       props['demuxer-seekable-cache'] = 'yes';
     }
-    if (f(PlayerEnhanceKeys.optLoudnorm)) {
-      af.add('loudnorm');
-    }
     if (f(PlayerEnhanceKeys.optDeband)) {
       props['deband'] = 'yes';
     }
-    if (f(PlayerEnhanceKeys.optDenoise)) {
-      vf.add('hqdn3d');
-    }
     if (f(PlayerEnhanceKeys.optSharpen)) {
-      vf.add('unsharp=5x5:0.5');
+      // Batch 114: the bundled libmpv ships a minimal libavfilter
+      // (no unsharp/hqdn3d — verified against the shipped binary),
+      // so the old vf filter was rejected wholesale and sharpening
+      // never took effect. The renderer-native sharpen property
+      // (libplacebo, gpu/gpu-next) does the same job for real.
+      props['sharpen'] = '0.5';
     }
     if (f(PlayerEnhanceKeys.optFullRange)) {
       props['video-output-levels'] = 'full';
@@ -145,9 +149,6 @@ class PlayerEnhance {
     if (f(PlayerEnhanceKeys.optHdrToneMap)) {
       props['tone-mapping'] = 'reinhard';
       props['hdr-compute-peak'] = 'yes';
-    }
-    if (f(PlayerEnhanceKeys.optNightAudio)) {
-      af.add('dynaudnorm');
     }
     if (f(PlayerEnhanceKeys.optDownmix)) {
       props['audio-channels'] = 'stereo';
@@ -197,7 +198,9 @@ class PlayerEnhance {
     final rotate = s(PlayerEnhanceKeys.featRotate, '0');
     if (rotate != '0') props['video-rotate'] = rotate;
     if (f(PlayerEnhanceKeys.featMirror)) {
-      vf.add('hflip');
+      // Batch 114: 'hflip' is a libavfilter name and is not in the
+      // bundled build; mpv's internal 'mirror' filter is.
+      vf.add('mirror');
     }
     if (f(PlayerEnhanceKeys.featLoopEpisode)) {
       props['loop-file'] = 'inf';
@@ -220,19 +223,26 @@ class PlayerEnhance {
     final secondSid = s(PlayerEnhanceKeys.featSecondSubTrack, 'no');
     if (secondSid != 'no') props['secondary-sid'] = secondSid;
     final eq = s(PlayerEnhanceKeys.featEqualizer, 'off');
+    // Batch 114: the bass/treble filters are not in the bundled
+    // libavfilter either; the peaking 'equalizer' filter is, and
+    // expresses the same three presets.
     if (eq == 'bass') {
-      af.add('bass=g=10:f=110');
+      af.add('equalizer=frequency=110:width_type=o:width=2:gain=10');
     } else if (eq == 'treble') {
-      af.add('treble=g=8:f=3500');
+      af.add('equalizer=frequency=3500:width_type=o:width=2:gain=8');
     } else if (eq == 'voice') {
-      af.add('bass=g=-4:f=110');
-      af.add('treble=g=4:f=3500');
+      af.add('equalizer=frequency=110:width_type=o:width=2:gain=-4');
+      af.add('equalizer=frequency=3500:width_type=o:width=2:gain=4');
     }
     final channelMode = s(PlayerEnhanceKeys.featChannelMode, 'normal');
     if (channelMode == 'mono') {
-      af.add('pan=mono|c0=0.5*c0+0.5*c1');
-    } else if (channelMode == 'swap') {
-      af.add('pan=stereo|c0=c1|c1=c0');
+      // Batch 114: the 'pan' filter is absent from the bundled
+      // build; the audio-channels property is the native mono
+      // path. Set in the features section on purpose: it wins
+      // over the downmix optimization's 'stereo' when both are on.
+      // (The old 'swap' preset had no native equivalent and is
+      // gone; a stored 'swap' value now simply does nothing.)
+      props['audio-channels'] = 'mono';
     }
     final brightness = n(PlayerEnhanceKeys.featBrightness, 0);
     if (brightness != 0) props['brightness'] = brightness.round().toString();
@@ -276,6 +286,12 @@ class PlayerEnhance {
       if (platform is! NativePlayer) return;
       await platform.waitForPlayerInitialization;
       final props = currentProperties();
+      // Batch 114: filter chains leave the bulk pass — they are
+      // applied per filter below so one filter the bundled build
+      // doesn't know can no longer reject its siblings (or, for
+      // af, the pitch-correction baseline) along with itself.
+      final afChain = props.remove('af');
+      final vfChain = props.remove('vf');
       // Batch 19: issue the writes together instead of one
       // awaited round-trip per property — with the full
       // profile on this was ~40 sequential waits before the
@@ -294,6 +310,13 @@ class PlayerEnhance {
             }
           }(),
       ]);
+      await _applyFilterChain(
+        platform,
+        'af',
+        afChain,
+        baseline: 'scaletempo2=max-speed=8',
+      );
+      await _applyFilterChain(platform, 'vf', vfChain);
       if (props.isNotEmpty) {
         AnikumoLogger().i(
           'PlayerEnhance: applied ${props.length} properties',
@@ -301,6 +324,51 @@ class PlayerEnhance {
       }
     } catch (e) {
       AnikumoLogger().w('PlayerEnhance: apply failed', error: e);
+    }
+  }
+
+  /// Resets the [kind] chain ('af'/'vf') to [baseline] (or empty)
+  /// and re-adds each filter of [chain] individually, so a filter
+  /// the build rejects is dropped alone with a log line instead of
+  /// voiding the whole chain. Running this on every apply also
+  /// makes turning a filter feature OFF take effect on the
+  /// in-player re-apply, not only at the next playback start.
+  static Future<void> _applyFilterChain(
+    NativePlayer platform,
+    String kind,
+    String? chain, {
+    String? baseline,
+  }) async {
+    final filters = chain
+            ?.split(',')
+            .where((entry) => entry.isNotEmpty)
+            .toList() ??
+        const <String>[];
+    var start = 0;
+    try {
+      if (baseline != null) {
+        await platform.setProperty(kind, baseline);
+        if (filters.isNotEmpty && filters.first == baseline) {
+          start = 1;
+        }
+      } else {
+        await platform.setProperty(kind, '');
+      }
+    } catch (e) {
+      AnikumoLogger().w(
+        'PlayerEnhance: $kind chain reset rejected',
+        error: e,
+      );
+    }
+    for (final filter in filters.skip(start)) {
+      try {
+        await platform.command([kind, 'add', filter]);
+      } catch (e) {
+        AnikumoLogger().w(
+          'PlayerEnhance: $kind filter "$filter" rejected',
+          error: e,
+        );
+      }
     }
   }
 }
@@ -323,13 +391,10 @@ class PlayerEnhanceKeys {
   static const optPrebuffer = 'pxOptPrebuffer';
   static const optReconnect = 'pxOptReconnect';
   static const optSeekableCache = 'pxOptSeekableCache';
-  static const optLoudnorm = 'pxOptLoudnorm';
   static const optDeband = 'pxOptDeband';
-  static const optDenoise = 'pxOptDenoise';
   static const optSharpen = 'pxOptSharpen';
   static const optFullRange = 'pxOptFullRange';
   static const optHdrToneMap = 'pxOptHdrToneMap';
-  static const optNightAudio = 'pxOptNightAudio';
   static const optDownmix = 'pxOptDownmix';
   static const optBlendSubs = 'pxOptBlendSubs';
   static const optFrameDrop = 'pxOptFrameDrop';
@@ -358,11 +423,15 @@ class PlayerEnhanceKeys {
   static const featContrast = 'pxFeatContrast'; // num
   static const featSaturation = 'pxFeatSaturation'; // num
 
+  // Batch 114: optLoudnorm / optDenoise / optNightAudio were
+  // removed — their filters (loudnorm, hqdn3d, dynaudnorm) are not
+  // compiled into the bundled libmpv, so the switches could never
+  // do anything. Stored values for the old keys are inert leftovers.
   static const flagKeys = [
     optDisplaySync, optInterpolation, optLowPowerDecode, optPrebuffer,
-    optReconnect, optSeekableCache, optLoudnorm, optDeband,
-    optDenoise, optSharpen, optFullRange, optHdrToneMap,
-    optNightAudio, optDownmix, optBlendSubs, optFrameDrop,
+    optReconnect, optSeekableCache, optDeband,
+    optSharpen, optFullRange, optHdrToneMap,
+    optDownmix, optBlendSubs, optFrameDrop,
     optVideoQueue, optAudioQueue, optNetTimeout, optReadahead,
     optSamplerate, optSwapchain, optFboFormat, optHrSeek,
     featMirror, featLoopEpisode,

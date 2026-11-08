@@ -57,6 +57,25 @@ class VeneraBridge {
     }
   }
 
+  /// Batch 101: 5-second in-memory cache for plain GET
+  /// responses (the reference runtime's network layer does
+  /// the same). A single screen often asks a source for the
+  /// same JSON twice in one breath — a section load and its
+  /// thumbnail pass, a detail open racing a prefetch — and
+  /// every duplicate was a real round trip through a
+  /// throttled site. Only bodiless GETs with a 200 are
+  /// cached, keyed by URL + headers (cookies ride in the
+  /// headers, so per-session variants stay distinct).
+  static final Map<String, ({int at, String json})> _getCache = {};
+  static const _getCacheTtlMs = 5000;
+  static const _getCacheMaxEntries = 64;
+  static const _getCacheMaxBody = 512 * 1024;
+
+  static String _getCacheKey(String url, Map<String, dynamic> headers) {
+    final names = headers.keys.toList()..sort();
+    return '$url\n${names.map((n) => '$n=${headers[n]}').join('&')}';
+  }
+
   static Future<String> _http(Map<String, dynamic> message) async {
     final method = message['http_method']?.toString() ?? 'GET';
     final url = message['url']?.toString() ?? '';
@@ -65,6 +84,15 @@ class VeneraBridge {
     if (rawHeaders is Map) {
       for (final entry in rawHeaders.entries) {
         headers[entry.key.toString()] = entry.value;
+      }
+    }
+    final cacheable = method == 'GET' && message['data'] == null;
+    final cacheKey = cacheable ? _getCacheKey(url, headers) : null;
+    if (cacheKey != null) {
+      final hit = _getCache[cacheKey];
+      if (hit != null &&
+          DateTime.now().millisecondsSinceEpoch - hit.at < _getCacheTtlMs) {
+        return hit.json;
       }
     }
     dynamic data = message['data'];
@@ -102,11 +130,28 @@ class VeneraBridge {
           'body_b64': bytes is List<int> ? base64Encode(bytes) : '',
         });
       }
-      return jsonEncode({
+      final encoded = jsonEncode({
         'status': response.statusCode ?? 0,
         'headers': responseHeaders,
         'body': response.data?.toString() ?? '',
       });
+      // Batch 101: fill the short GET cache (see above).
+      // Responses that SET cookies are never cached: they
+      // are session/token issuers, and replaying one would
+      // hand back the pre-rotation cookie and body.
+      if (cacheKey != null &&
+          (response.statusCode ?? 0) == 200 &&
+          !responseHeaders.containsKey('set-cookie') &&
+          encoded.length <= _getCacheMaxBody) {
+        _getCache[cacheKey] = (
+          at: DateTime.now().millisecondsSinceEpoch,
+          json: encoded,
+        );
+        while (_getCache.length > _getCacheMaxEntries) {
+          _getCache.remove(_getCache.keys.first);
+        }
+      }
+      return encoded;
     } on DioException catch (e) {
       return jsonEncode({'error': '网络请求失败: ${e.message ?? e.type}'});
     }

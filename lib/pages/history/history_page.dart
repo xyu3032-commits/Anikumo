@@ -13,6 +13,9 @@ import 'package:anikumo/pages/history/history_other_media.dart';
 import 'package:anikumo/pages/search/cross_search_widgets.dart';
 import 'package:anikumo/services/manga/cross_media.dart';
 import 'package:anikumo/pages/history/history_record_tile.dart';
+import 'package:anikumo/navigation.dart';
+import 'package:anikumo/services/manga/manga_library.dart';
+import 'package:anikumo/services/novel/novel_library.dart';
 import 'package:anikumo/services/player/history_playback_service.dart';
 import 'package:anikumo/services/plugin/rule_engine_models.dart'
     show RuleCancelToken;
@@ -27,7 +30,7 @@ class HistoryPage extends StatefulWidget {
   State<HistoryPage> createState() => _HistoryPageState();
 }
 
-class _HistoryPageState extends State<HistoryPage> {
+class _HistoryPageState extends State<HistoryPage> with RouteAware {
   // Batch 80: 全部 / 动漫 / 漫画 / 小说 medium switch.
   CrossSearchMode _mode = CrossSearchMode.anime;
   bool _editing = false;
@@ -38,6 +41,45 @@ class _HistoryPageState extends State<HistoryPage> {
   void initState() {
     super.initState();
     widget.controller.init();
+    // Batch 106: the cross-media lists read the manga /
+    // novel stores at build time; deletions made on OTHER
+    // pages (the manga zone's history page above all)
+    // bumped no signal this page could hear, so coming
+    // back here kept showing the deleted records. Both
+    // stores' revision ticks now rebuild the page.
+    MangaLibraryStore.revision.addListener(_onStoresChanged);
+    NovelLibraryStore.revision.addListener(_onStoresChanged);
+  }
+
+  @override
+  void dispose() {
+    rootRouteObserver.unsubscribe(this);
+    MangaLibraryStore.revision.removeListener(_onStoresChanged);
+    NovelLibraryStore.revision.removeListener(_onStoresChanged);
+    super.dispose();
+  }
+
+  void _onStoresChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute<void>) {
+      rootRouteObserver.subscribe(this, route);
+    }
+  }
+
+  /// Batch 106: returning from a detail / reader / player
+  /// route re-reads the anime histories (progress moved,
+  /// records may have been deleted from the other side)
+  /// and rebuilds the cross-media lists.
+  @override
+  void didPopNext() {
+    widget.controller.init();
+    if (mounted) setState(() {});
   }
 
   Future<void> _deleteHistory(History history) async {

@@ -5,12 +5,24 @@ import 'package:flutter/foundation.dart';
 import 'package:anikumo/services/manga/js/js_manga_source.dart';
 import 'package:anikumo/services/manga/js/venera_engine.dart';
 import 'package:anikumo/services/manga/legado_manga_source.dart';
+import 'package:anikumo/services/manga/local_manga_source.dart';
 import 'package:anikumo/services/manga/manga_source.dart';
 import 'package:anikumo/services/novel/legado_def.dart';
 import 'package:anikumo/services/novel/legado_parse.dart';
 import 'package:anikumo/services/novel/novel_source.dart';
 import 'package:anikumo/services/novel/novel_sources.dart';
 import 'package:anikumo/services/storage/storage.dart';
+
+/// Batch 88: one entry of a Venera source index (the
+/// venera-configs `index.json` shape): a display [name], the
+/// source [key], its [version], and the [fileName] of the .js
+/// file (relative to the index URL, or an absolute URL).
+typedef VeneraIndexEntry = ({
+  String name,
+  String key,
+  String version,
+  String fileName
+});
 
 /// The source registry. Batch 59: the app ships with NO
 /// built-in sources — every manga source here is a Venera
@@ -162,7 +174,13 @@ class MangaSources {
     _allCache = combined;
     _allCacheJs = js;
     _allCacheNovel = novel;
-    return combined;
+    // Batch 102: the local (imported CBZ/ZIP) source rides
+    // along whenever books exist. It is appended outside the
+    // memoized list: the book set changes without the JS /
+    // novel registries changing, and a zero-book library must
+    // keep the batch-59 zero-source state intact.
+    if (LocalMangaLibrary.cachedBooks.isEmpty) return combined;
+    return [...combined, LocalMangaSource.instance];
   }
 
   static MangaSource? byId(String id) {
@@ -207,7 +225,7 @@ class MangaSources {
     required String code,
   }) async {
     if (VeneraEngine.extractClassName(code) == null) {
-      throw const FormatException('不是有效的 Venera 源文件');
+      throw const FormatException('不是有效的 JS 源文件');
     }
     final entries = [
       for (final existing in installedJsEntries())
@@ -268,7 +286,7 @@ class MangaSources {
   static Future<({String key, String name, String version})>
       installCustomJs(String code, {String fileName = ''}) async {
     if (VeneraEngine.extractClassName(code) == null) {
-      throw const FormatException('不是有效的 Venera 源文件（没有找到源类）');
+      throw const FormatException('不是有效的 JS 源文件（没有找到源类）');
     }
     final meta = extractJsMetadata(code);
     await installJs(
@@ -327,6 +345,41 @@ class MangaSources {
       for (final s in sources)
         if (!pins.contains(s.id)) s,
     ];
+  }
+
+  /// Batch 88: detects a Venera source *index* — a JSON array
+  /// whose every entry carries a `.js` fileName. The community
+  /// index link used to fall through to the single-source
+  /// installer and fail as "not a Venera source"; importing it
+  /// now resolves and installs every listed source. Returns
+  /// null for anything else (a single JS source, a Legado
+  /// pack, arbitrary JSON), so the other import routes are
+  /// untouched.
+  static List<VeneraIndexEntry>? parseVeneraIndex(String code) {
+    final trimmed = code.trim();
+    if (!trimmed.startsWith('[')) return null;
+    dynamic decoded;
+    try {
+      decoded = jsonDecode(trimmed);
+    } catch (_) {
+      return null;
+    }
+    if (decoded is! List || decoded.isEmpty) return null;
+    final entries = <VeneraIndexEntry>[];
+    for (final raw in decoded) {
+      if (raw is! Map) return null;
+      final fileName = raw['fileName']?.toString().trim() ?? '';
+      if (!fileName.toLowerCase().endsWith('.js')) return null;
+      final key = raw['key']?.toString().trim() ?? '';
+      final name = raw['name']?.toString().trim() ?? '';
+      entries.add((
+        name: name.isNotEmpty ? name : (key.isNotEmpty ? key : fileName),
+        key: key,
+        version: raw['version']?.toString().trim() ?? '',
+        fileName: fileName,
+      ));
+    }
+    return entries;
   }
 
   /// Batch 67: when [code] is actually a Legado book-source

@@ -1,12 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modify this file to customize your launch splash screen -->
+<!-- Batch 93: branded launch background — a deep-violet
+     night field with the app emblem centered, replacing
+     the plain white default. The in-app SplashGate picks
+     up the same palette with the animated intro, so the
+     whole cold start reads as one designed sequence. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@android:color/white" />
+    <item android:drawable="@color/splash_bg" />
 
-    <!-- You can insert your own image assets here -->
-    <!-- <item>
+    <item
+        android:width="120dp"
+        android:height="120dp"
+        android:gravity="center">
         <bitmap
             android:gravity="center"
-            android:src="@mipmap/launch_image" />
-    </item> -->
+            android:src="@drawable/splash_logo" />
+    </item>
 </layer-list>

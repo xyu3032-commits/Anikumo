@@ -8,14 +8,17 @@ class ProxyAwareImageCacheManager extends CacheManager with ImageCacheManager {
   ProxyAwareImageCacheManager._(this._fileService)
     : super(Config(
         DefaultCacheManager.key,
-        stalePeriod: const Duration(days: 30),
-        // Batch 23: the flutter_cache_manager default cap
-        // is 200 objects — a few manga chapters (page images
-        // plus covers) thrash it completely, so covers were
-        // constantly re-downloaded. 1500 objects keeps weeks
-        // of browsing resident. Same key: the existing
-        // on-disk store is kept, only eviction relaxes.
-        maxNrOfCacheObjects: 1500,
+        // Batch 103: tightened 30 days / 1500 objects ->
+        // 14 days / 800. The batch-23 bump existed because
+        // manga page images thrashed this shared store;
+        // since then the manga zone got its own page store
+        // (batch 51) and cover store (batch 102), so what
+        // remains here — mostly anime art — no longer needs
+        // the headroom, and the worst-case disk footprint
+        // roughly halves. Same key: the on-disk store is
+        // kept, eviction just tightens to the new caps.
+        stalePeriod: const Duration(days: 14),
+        maxNrOfCacheObjects: 800,
         fileService: _fileService,
       ));
 

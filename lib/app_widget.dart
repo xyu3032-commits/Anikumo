@@ -5,6 +5,7 @@ import 'package:flutter_modular/flutter_modular.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:anikumo/bean/theme/signature.dart';
+import 'package:anikumo/bean/widget/mini_player_overlay.dart';
 import 'package:anikumo/bean/widget/pin_lock_gate.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/services/ui/app_extras.dart';
@@ -536,7 +537,18 @@ class _AppWidgetState extends State<AppWidget>
               textScaler: TextScaler.linear(scale.clamp(0.8, 1.4)),
             );
             return PinLockGate(
-              child: MediaQuery(data: scaled, child: child!),
+              child: MediaQuery(
+                data: scaled,
+                // Batch 113: the in-app mini player floats above
+                // every page (inside the PIN gate, so it never shows
+                // over the lock screen).
+                child: Stack(
+                  children: [
+                    child!,
+                    const MiniPlayerHost(),
+                  ],
+                ),
+              ),
             );
           },
           scaffoldMessengerKey: rootScaffoldMessengerKey,

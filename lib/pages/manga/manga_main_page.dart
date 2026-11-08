@@ -6,7 +6,6 @@ import 'package:anikumo/utils/error_message.dart';
 import 'package:anikumo/bean/theme/violet_glass.dart';
 import 'package:anikumo/bean/widget/floating_capsule_nav.dart';
 import 'package:anikumo/bean/widget/violet_components.dart';
-import 'package:anikumo/bean/theme/signature.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:anikumo/bean/widget/fade_slide_in.dart';
@@ -18,13 +17,85 @@ import 'package:anikumo/pages/manga/manga_favorites_page.dart';
 import 'package:anikumo/pages/manga/manga_settings_page.dart';
 import 'package:anikumo/pages/manga/manga_widgets.dart';
 import 'package:anikumo/services/manga/manga_library.dart';
+import 'package:anikumo/services/manga/manga_search_utils.dart';
 import 'package:anikumo/services/manga/manga_api.dart';
 import 'package:anikumo/services/manga/manga_source.dart';
 import 'package:anikumo/services/manga/js/js_manga_source.dart';
+import 'package:anikumo/services/manga/local_manga_source.dart';
+import 'package:anikumo/services/manga/manga_image_pipeline.dart';
 import 'package:anikumo/services/manga/manga_sources.dart';
 import 'package:anikumo/services/ui/app_extras.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/utils/constants.dart';
+
+/// Batch 97: pull-to-refresh on the manga home tab bumps
+/// this tick; the per-source sections and the 猜你喜欢 rail
+/// listen and reload themselves. Before this, the tab's
+/// refresh only re-fetched the latest-updates rail — the
+/// sections below it never changed, which read as "主页刷新
+/// 不会变" next to the explore tab's very visible reshuffle.
+final mangaHomeRefreshTick = ValueNotifier<int>(0);
+
+/// Batch 100: shared gate for the home tab's network loads.
+///
+/// A pull-refresh used to fire EVERY section's forced fetch
+/// at effectively the same moment (the batch-98 stagger was
+/// 90 ms × index). Sites with rate limiting answer such a
+/// burst with 403 — while the very same source, refreshed
+/// alone on its explore page, loads fine. The user-visible
+/// result was «部分分区 js 403 / 下拉刷新显示没有资源» next to a
+/// perfectly working in-source refresh. Loads that hit the
+/// network (section popular fetches, the 猜你喜欢 rail) now
+/// pass through this gate: at most [maxConcurrent] in
+/// flight, successive starts at least [minGap] apart. The
+/// snapshot first-paint is NOT gated — sections still paint
+/// instantly; only the network fetch queues.
+class MangaHomeRefreshGate {
+  MangaHomeRefreshGate({
+    this.maxConcurrent = 2,
+    this.minGap = const Duration(milliseconds: 700),
+  });
+
+  final int maxConcurrent;
+  final Duration minGap;
+
+  int _active = 0;
+  DateTime _lastStart = DateTime.fromMillisecondsSinceEpoch(0);
+  Future<void> _chain = Future<void>.value();
+  final List<Completer<void>> _slotWaiters = [];
+
+  /// Waits for a free slot and for the minimum spacing
+  /// since the previous start, then takes a slot. Turns are
+  /// served in arrival order.
+  Future<void> acquire() {
+    final turn = Completer<void>();
+    _chain = _chain.then((_) async {
+      while (_active >= maxConcurrent) {
+        final waiter = Completer<void>();
+        _slotWaiters.add(waiter);
+        await waiter.future;
+      }
+      final wait = minGap - DateTime.now().difference(_lastStart);
+      if (wait > Duration.zero) await Future<void>.delayed(wait);
+      _active++;
+      _lastStart = DateTime.now();
+      turn.complete();
+    });
+    return turn.future;
+  }
+
+  /// Frees a slot and wakes the next queued turn.
+  void release() {
+    if (_active > 0) _active--;
+    final waiters = List<Completer<void>>.of(_slotWaiters);
+    _slotWaiters.clear();
+    for (final waiter in waiters) {
+      if (!waiter.isCompleted) waiter.complete();
+    }
+  }
+}
+
+final mangaHomeRefreshGate = MangaHomeRefreshGate();
 
 /// The manga zone shell, restructured after Venera's MainPage:
 /// bottom navigation with 首页 / 收藏 / 探索 / 分类 tabs plus the
@@ -66,6 +137,12 @@ class _MangaMainPageState extends State<MangaMainPage>
     if (activeSource is JsMangaSource) {
       unawaited(activeSource.engine.ensureInitialized().catchError((_) {}));
     }
+    // Batch 102: load the local book library so the 本地导入
+    // source (and its home section) joins the registry when
+    // books exist.
+    unawaited(LocalMangaLibrary.ensureLoaded().then((changed) {
+      if (changed) MangaSources.notifyRegistryChanged();
+    }));
   }
 
   @override
@@ -186,24 +263,61 @@ class _MangaHomeTabState extends State<MangaHomeTab> {
   List<MangaItem> _updated = const [];
   bool _loading = true;
 
+  /// Batch 104: with dozens of sources installed, mounting
+  /// a home band for EVERY source made the home a queue of
+  /// engine registrations, gated network loads and cover
+  /// decodes — the "many sources = laggy" report. Only the
+  /// first [_sourceBandCap] bands mount up front (the active
+  /// source's band leads); the rest mount on demand via the
+  /// expand row below the bands.
+  static const _sourceBandCap = 10;
+  bool _showAllSourceBands = false;
+
   @override
   void initState() {
     super.initState();
     _load();
     MangaSources.revision.addListener(_load);
+    // Batch 106: the continue-reading rail reads the
+    // library store at build time but nothing rebuilt this
+    // tab when records changed elsewhere — deleting
+    // browsing history on the history pages left the rail
+    // showing the deleted entries until some unrelated
+    // rebuild. The store's revision tick now rebuilds us.
+    MangaLibraryStore.revision.addListener(_onLibraryChanged);
   }
 
   @override
   void dispose() {
     MangaSources.revision.removeListener(_load);
+    MangaLibraryStore.revision.removeListener(_onLibraryChanged);
     super.dispose();
   }
 
-  Future<void> _load() async {
+  void _onLibraryChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _load() => _loadImpl(fresh: false);
+
+  /// Batch 90: pull-refresh bypasses the TTL memo so it
+  /// actually re-fetches (a cached "refresh" felt broken).
+  /// Batch 97: it also ticks the sections and the
+  /// recommendations rail below — they used to sit the
+  /// refresh out entirely.
+  Future<void> _refresh() {
+    mangaHomeRefreshTick.value++;
+    return _loadImpl(fresh: true);
+  }
+
+  Future<void> _loadImpl({required bool fresh}) async {
     // Batch 14: every source gets its own section below (loaded
     // per-source); the tab itself only loads the active source's
     // latest-updates list now.
-    final updated = await MangaApi.fetchRecentlyUpdated(limit: 15);
+    final updated = await MangaApi.fetchRecentlyUpdated(
+      limit: 15,
+      fresh: fresh,
+    );
     if (!mounted) return;
     setState(() {
       _updated = updated;
@@ -217,6 +331,38 @@ class _MangaHomeTabState extends State<MangaHomeTab> {
     });
   }
 
+  /// Batch 104: the source band slivers — the active
+  /// source's band first (it is the one the user works
+  /// with), then the rest in install order, capped at
+  /// [_sourceBandCap] until expanded. Each band is keyed
+  /// by source id: unkeyed, a band's state bound by INDEX,
+  /// so installing or removing a source shifted every
+  /// later band onto the wrong source's data under the new
+  /// source's name.
+  List<Widget> _sourceBandSlivers() {
+    final all = MangaSources.all();
+    final activeId = MangaSources.activeOrNull()?.id;
+    final ordered = [
+      for (final source in all)
+        if (source.id == activeId) source,
+      for (final source in all)
+        if (source.id != activeId) source,
+    ];
+    // Batch 106: ALL bands are built here; build() decides
+    // how many to mount (cap, toggle row, the rest) so the
+    // expanded state can be collapsed in place — batch 104
+    // expanded one-way and only leaving the page reset it.
+    return [
+      for (final (index, source) in ordered.indexed)
+        _SourceHomeSection(
+          key: ValueKey(source.id),
+          source: source,
+          onOpen: _openDetail,
+          startDelay: Duration(milliseconds: index * 90),
+        ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -226,8 +372,11 @@ class _MangaHomeTabState extends State<MangaHomeTab> {
     return SafeArea(
       bottom: false,
       child: RefreshIndicator(
-        onRefresh: _load,
+        onRefresh: _refresh,
         child: CustomScrollView(
+          // Batch 97: pull-to-refresh must engage even when
+          // the home content is shorter than the screen.
+          physics: const AlwaysScrollableScrollPhysics(),
           scrollCacheExtent: const ScrollCacheExtent.pixels(600),
           slivers: [
             // ── pill search bar (Violet Glass) ──────────────
@@ -396,7 +545,7 @@ class _MangaHomeTabState extends State<MangaHomeTab> {
                       leading: const Icon(Icons.extension_off_rounded),
                       title: const Text('还没有漫画源'),
                       subtitle:
-                          const Text('Anikumo 不内置任何漫画源。用你自己的 URL 链接导入 Venera JS 源后，这里就会有内容。'),
+                          const Text('Anikumo 不内置任何漫画源。用你自己的 URL 链接导入 JS 源后，这里就会有内容。'),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => context.pushNamed('/manga/sources'),
                     ),
@@ -406,13 +555,37 @@ class _MangaHomeTabState extends State<MangaHomeTab> {
             _ForYouSection(onOpen: _openDetail),
             // ── per-source sections (batch 14: multi-source
             // home — every source runs at once, one horizontal
-            // band each: its category chips row + popular rail)
-            for (final (index, source) in MangaSources.all().indexed)
-              _SourceHomeSection(
-                source: source,
-                onOpen: _openDetail,
-                startDelay: Duration(milliseconds: index * 90),
+            // band each: its category chips row + popular rail.
+            // Batch 104: capped + active-first + keyed — see
+            // _sourceBandCap. Batch 106: the toggle row sits
+            // between the capped head and the remaining bands
+            // and works BOTH ways — expanding used to be
+            // one-way; only leaving the page collapsed it.)
+            ..._sourceBandSlivers().take(_sourceBandCap),
+            if (MangaSources.all().length > _sourceBandCap)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
+                  child: OutlinedButton.icon(
+                    onPressed: () => setState(
+                      () => _showAllSourceBands = !_showAllSourceBands,
+                    ),
+                    icon: Icon(
+                      _showAllSourceBands
+                          ? Icons.expand_less_rounded
+                          : Icons.expand_more_rounded,
+                      size: 18,
+                    ),
+                    label: Text(
+                      _showAllSourceBands
+                          ? '收起多余的源分区'
+                          : '显示全部 ${MangaSources.all().length} 个源的分区',
+                    ),
+                  ),
+                ),
               ),
+            if (_showAllSourceBands)
+              ..._sourceBandSlivers().skip(_sourceBandCap),
             // ── source management row ───────────────────────
             SliverToBoxAdapter(
               child: FadeSlideIn(
@@ -424,7 +597,7 @@ class _MangaHomeTabState extends State<MangaHomeTab> {
                     child: ListTile(
                     leading: const Icon(Icons.library_books_outlined),
                     title: const Text('漫画源管理'),
-                    subtitle: const Text('下载 Venera JS 源、切换或删除来源'),
+                    subtitle: const Text('下载 JS 源、切换或删除来源'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => context.pushNamed('/manga/sources'),
                     ),
@@ -476,6 +649,7 @@ class _MangaHomeTabState extends State<MangaHomeTab> {
 /// source never blocks the others.
 class _SourceHomeSection extends StatefulWidget {
   const _SourceHomeSection({
+    super.key,
     required this.source,
     required this.onOpen,
     this.startDelay = Duration.zero,
@@ -500,9 +674,15 @@ class _SourceHomeSectionState extends State<_SourceHomeSection> {
   bool _failed = false;
   String? _errorText;
 
+  /// Batch 104: the band's category-tags call is deferred
+  /// (see _scheduleTags).
+  Timer? _tagsTimer;
+
   @override
   void initState() {
     super.initState();
+    // Batch 97: take part in the home tab's pull-refresh.
+    mangaHomeRefreshTick.addListener(_onHomeRefresh);
     if (widget.startDelay == Duration.zero) {
       _load();
     } else {
@@ -510,6 +690,49 @@ class _SourceHomeSectionState extends State<_SourceHomeSection> {
         if (mounted) _load();
       });
     }
+  }
+
+  @override
+  void dispose() {
+    _tagsTimer?.cancel();
+    mangaHomeRefreshTick.removeListener(_onHomeRefresh);
+    super.dispose();
+  }
+
+  /// Batch 104: tags are the band's SECOND engine call and
+  /// the chips row is decoration next to the popular rail —
+  /// during a scroll through many bands they doubled the
+  /// first-touch pressure on the shared JS runtime for no
+  /// visible gain. They now load a beat after the band
+  /// settles; a band scrolled past quickly never asks.
+  void _scheduleTags() {
+    _tagsTimer?.cancel();
+    _tagsTimer = Timer(const Duration(milliseconds: 1200), () {
+      if (mounted) unawaited(_loadTags());
+    });
+  }
+
+  void _onHomeRefresh() {
+    if (!mounted) return;
+    // Batch 98 tried staggering these loads by the mount
+    // delay; batch 100 supersedes that with the shared
+    // refresh gate inside _fetchAndPaint (at most two
+    // network loads in flight, starts spaced out) — a
+    // fixed 90 ms stagger was not enough to stop sites
+    // from 403-ing the burst.
+    _load(force: true);
+  }
+
+  /// Batch 98: last-resort content when a load settles
+  /// empty — the disk snapshot, even a stale one. A
+  /// slow-site timeout is not an empty source; stale
+  /// covers beat a 「该源暂时没有内容」 wall. Callers invoke
+  /// this inside their setState.
+  bool _paintSnapshotFallback() {
+    final snap = MangaApi.popularSnapshot(widget.source, limit: 14);
+    if (snap == null || snap.items.isEmpty) return false;
+    _popular = shuffledMangaItems(snap.items);
+    return true;
   }
 
   Future<void> _load({bool force = false}) async {
@@ -524,11 +747,14 @@ class _SourceHomeSectionState extends State<_SourceHomeSection> {
       final snap = MangaApi.popularSnapshot(widget.source, limit: 14);
       if (snap != null) {
         setState(() {
-          _popular = snap.items;
+          // Batch 97: mirror the explore grid — even the
+          // instant snapshot paint is shuffled, so the home
+          // sections vary the way discovery does.
+          _popular = shuffledMangaItems(snap.items);
           _loading = false;
         });
         if (snap.fresh) {
-          unawaited(_loadTags());
+          _scheduleTags();
           return;
         }
       }
@@ -538,19 +764,59 @@ class _SourceHomeSectionState extends State<_SourceHomeSection> {
     // until the SLOWER of the two landed — a hanging tag
     // call hid content that was already there. Popular
     // paints the moment it lands; tags fill in on arrival.
-    unawaited(_loadTags());
+    // Batch 104: the tags half is now scheduled, not fired
+    // immediately — see _scheduleTags.
+    _scheduleTags();
+    final settled = await _fetchAndPaint(force: force);
+    // Batch 100: a forced refresh that settled EMPTY is
+    // the burst-403 signature — the site throttled the
+    // simultaneous burst while the same source refreshes
+    // fine alone. It earns ONE delayed retry through the
+    // gate; rate-limit windows are short, and the section
+    // has nothing to show in the meantime anyway. A source
+    // that is genuinely down still lands in its error
+    // state, one attempt later.
+    if (!settled && force && mounted) {
+      await Future<void>.delayed(const Duration(milliseconds: 2500));
+      if (mounted) await _fetchAndPaint(force: true);
+    }
+  }
+
+  /// One network attempt for this section, through the
+  /// shared refresh gate (batch 100). Paints the outcome
+  /// and returns whether the section ended with content.
+  Future<bool> _fetchAndPaint({required bool force}) async {
+    await mangaHomeRefreshGate.acquire();
     try {
-      final popular = await MangaApi.fetchPopularFor(widget.source, limit: 14);
-      if (!mounted) return;
+      if (!mounted) return false;
+      // Batch 97: a forced load (home pull-refresh) passes
+      // fresh: true — it previously still read the 10-minute
+      // memo, so even the section's own reload path could
+      // hand back the identical list.
+      final popular = await MangaApi.fetchPopularFor(
+        widget.source,
+        limit: 14,
+        fresh: force,
+      );
+      if (!mounted) return _popular.isNotEmpty;
       setState(() {
-        if (popular.isNotEmpty) _popular = popular;
+        if (popular.isNotEmpty) _popular = shuffledMangaItems(popular);
+        // Batch 98: an empty page from a (forced) load is
+        // not proof the source is empty — fall back to the
+        // snapshot before showing the empty state.
+        if (_popular.isEmpty) _paintSnapshotFallback();
         _loading = false;
         _failed = _popular.isEmpty;
         _errorText = null;
       });
+      return _popular.isNotEmpty;
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) return _popular.isNotEmpty;
       setState(() {
+        // Batch 98: same fallback on failure — a refresh
+        // that timed out must not blank a section that has
+        // a perfectly good snapshot on disk.
+        if (_popular.isEmpty) _paintSnapshotFallback();
         _loading = false;
         _failed = _popular.isEmpty;
         // The real reason shows only when there is nothing
@@ -558,6 +824,9 @@ class _SourceHomeSectionState extends State<_SourceHomeSection> {
         // content visible, a failed refresh stays silent.
         _errorText = _popular.isEmpty ? friendlyError(e) : null;
       });
+      return _popular.isNotEmpty;
+    } finally {
+      mangaHomeRefreshGate.release();
     }
   }
 
@@ -586,6 +855,17 @@ class _SourceHomeSectionState extends State<_SourceHomeSection> {
             padding: const EdgeInsets.fromLTRB(16, 20, 8, 6),
             child: Row(
               children: [
+                // Batch 92: the zone's gradient section bar,
+                // matching the explore/categories headers.
+                Container(
+                  width: 4,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    gradient: VioletGlass.gradient,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 9),
                 Text(
                   source.name,
                   style: theme.textTheme.titleMedium?.copyWith(
@@ -715,10 +995,14 @@ class _SourceHomeSectionState extends State<_SourceHomeSection> {
   }
 }
 
-/// 猜你喜欢 (batch 15, M10): takes the most recently read
-/// manga, reads its tags from its own source, and rails more
-/// manga carrying the first tag — excluding favorites and the
-/// seed manga itself. Hides silently when there is no signal.
+/// 猜你喜欢 (batch 15, M10; batch 97 rework): builds a
+/// weighted taste profile from the user's favorites and
+/// recent reads, queries the strongest non-generic tags,
+/// and rails only candidates that measurably share the
+/// profile — the batch-15 version keyed everything off ONE
+/// read and its FIRST tag (often a format/status label),
+/// which filled the rail with unrelated titles. Hides
+/// silently when there is no signal worth showing.
 class _ForYouSection extends StatefulWidget {
   const _ForYouSection({required this.onOpen});
 
@@ -731,51 +1015,137 @@ class _ForYouSection extends StatefulWidget {
 class _ForYouSectionState extends State<_ForYouSection> {
   List<MangaItem> _items = const [];
   String _seedTitle = '';
+  bool _seedFavorite = false;
 
   @override
   void initState() {
     super.initState();
+    // Batch 97: the rail takes part in home pull-refresh
+    // too — tastes change as the user reads.
+    mangaHomeRefreshTick.addListener(_onHomeRefresh);
     _load();
   }
 
+  @override
+  void dispose() {
+    mangaHomeRefreshTick.removeListener(_onHomeRefresh);
+    super.dispose();
+  }
+
+  void _onHomeRefresh() {
+    if (mounted) _load();
+  }
+
   Future<void> _load() async {
+    // Batch 100: the rail's detail + byTag calls join the
+    // same refresh gate as the sections — unthrottled, they
+    // were part of the burst that drew 403s.
+    await mangaHomeRefreshGate.acquire();
+    try {
+      await _loadInner();
+    } finally {
+      mangaHomeRefreshGate.release();
+    }
+  }
+
+  Future<void> _loadInner() async {
+    final favorites = MangaLibraryStore.loadFavorites();
     final progress = MangaLibraryStore.loadProgressList();
-    if (progress.isEmpty) return;
-    final seed = progress.first;
-    final stub = MangaItem(
-      id: seed.mangaId,
-      title: seed.mangaTitle,
-      description: '',
-      coverUrl: seed.coverUrl,
-      author: '',
-      status: '',
-      year: null,
-      tags: const [],
-      source: seed.mangaSource,
-    );
-    final details = await MangaApi.fetchDetails(stub);
-    if (!mounted || details == null || details.tags.isEmpty) return;
-    final source = MangaSources.byId(seed.mangaSource);
+    // Batch 97: seeds are the user's strongest taste
+    // signals — favorites first (a deliberate choice,
+    // weight 2), then the most recent reads (weight 1) —
+    // at most three details fetches in total.
+    final stubs = <({MangaItem item, double weight, bool favorite})>[];
+    final seenSeeds = <String>{};
+    void addSeed(MangaItem item, double weight, bool favorite) {
+      if (stubs.length >= 3) return;
+      if (seenSeeds.add(item.storageKey)) {
+        stubs.add((item: item, weight: weight, favorite: favorite));
+      }
+    }
+
+    for (final f in favorites.take(2)) {
+      addSeed(
+        MangaItem(
+          id: f.id,
+          title: f.title,
+          description: '',
+          coverUrl: f.coverUrl,
+          author: '',
+          status: '',
+          year: null,
+          tags: const [],
+          source: f.source,
+        ),
+        2,
+        true,
+      );
+    }
+    for (final p in progress.take(2)) {
+      addSeed(
+        MangaItem(
+          id: p.mangaId,
+          title: p.mangaTitle,
+          description: '',
+          coverUrl: p.coverUrl,
+          author: '',
+          status: '',
+          year: null,
+          tags: const [],
+          source: p.mangaSource,
+        ),
+        1,
+        false,
+      );
+    }
+    if (stubs.isEmpty) return;
+    final tagSets = <({List<String> tags, double weight})>[];
+    ({MangaItem item, bool favorite})? lead;
+    for (final seed in stubs) {
+      final details = await MangaApi.fetchDetails(seed.item);
+      if (!mounted) return;
+      if (details == null || details.tags.isEmpty) continue;
+      tagSets.add((tags: details.tags, weight: seed.weight));
+      lead ??= (item: seed.item, favorite: seed.favorite);
+    }
+    if (tagSets.isEmpty || lead == null) return;
+    final source = MangaSources.byId(lead.item.source);
     if (source == null) return;
-    final tag = await source.tags().then(
-      (tags) => tags.where((t) => details.tags.contains(t.name)).firstOrNull,
-    );
-    if (!mounted || tag == null) return;
-    final results = await source.byTag(tag.id, limit: 14);
-    if (!mounted) return;
-    final favoriteKeys = {
-      for (final f in MangaLibraryStore.loadFavorites()) f.key,
+    final profile = buildMangaTasteProfile(tagSets);
+    if (profile.weights.isEmpty) return;
+    final catalogue = await source.tags();
+    if (!mounted || catalogue.isEmpty) return;
+    // Strongest taste tags first; the catalogue match
+    // resolves them to byTag-able ids (batch 89's helper).
+    final byWeight = profile.weights.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final matched = matchTagsByName(
+      [for (final e in byWeight) profile.display[e.key] ?? e.key],
+      catalogue,
+    ).take(3);
+    if (matched.isEmpty) return;
+    final candidates = <MangaItem>[];
+    for (final tag in matched) {
+      candidates.addAll(await source.byTag(tag.id, limit: 14));
+      if (!mounted) return;
+    }
+    final excludeKeys = <String>{
+      for (final f in favorites) f.key,
+      for (final p in progress) '${p.mangaSource}:${p.mangaId}',
     };
+    final ranked = rankForYouCandidates(
+      profile: profile.weights,
+      candidates: candidates,
+      excludeKeys: excludeKeys,
+    );
+    // A rail of one or two shaky guesses is worse than no
+    // rail — the section already hides when there is no
+    // signal worth showing.
+    if (ranked.length < 3) return;
     setState(() {
-      _seedTitle = seed.mangaTitle;
-      _items = results
-          .where(
-            (item) =>
-                item.storageKey != stub.storageKey &&
-                !favoriteKeys.contains(item.storageKey),
-          )
-          .take(10)
-          .toList();
+      _seedTitle = lead!.item.title;
+      _seedFavorite = lead.favorite;
+      _items = ranked;
     });
   }
 
@@ -789,17 +1159,32 @@ class _ForYouSectionState extends State<_ForYouSection> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 2),
-            child: Text(
-              '猜你喜欢',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+            child: Row(
+              children: [
+                Container(
+                  width: 4,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    gradient: VioletGlass.gradient,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 9),
+                Text(
+                  '猜你喜欢',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
             ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
             child: Text(
-              '因为你在读《$_seedTitle》',
+              _seedFavorite
+                  ? '因为你收藏了《$_seedTitle》'
+                  : '因为你在读《$_seedTitle》',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -937,6 +1322,9 @@ class _FeaturedBannerState extends State<_FeaturedBanner> {
                             width: MediaQuery.sizeOf(context).width,
                             height: 196,
                             radius: 0,
+                            headers: item.coverHeaders,
+                            transformOf: item.coverTransformOf,
+                            transform: coverTransformCallback(item),
                           ),
                           ),
                         ),
@@ -952,6 +1340,9 @@ class _FeaturedBannerState extends State<_FeaturedBanner> {
                                 width: 104,
                                 height: 152,
                                 radius: 14,
+                                headers: item.coverHeaders,
+                                transformOf: item.coverTransformOf,
+                                transform: coverTransformCallback(item),
                               ),
                               const SizedBox(width: 14),
                               Expanded(

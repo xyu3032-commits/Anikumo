@@ -333,6 +333,19 @@ class MangaLibraryStore {
     if (favorites.isNotEmpty || progress.isNotEmpty) _bump();
   }
 
+  /// Batch 98: remove ONE reading-history record (the
+  /// history pages' per-row delete). Mirrors
+  /// recordProgress's persistence so memo and disk agree.
+  static Future<void> removeProgress(String key) async {
+    final map = {...loadProgressMap()};
+    if (map.remove(key) == null) return;
+    final encoded = MangaLibraryCodec.encodeProgress(map);
+    await GStorage.putSetting(SettingsKeys.mangaProgressJson, encoded);
+    _progressRaw = encoded;
+    _progressMemo = map;
+    _bump();
+  }
+
   static Future<void> clearProgress() async {
     await GStorage.putSetting(SettingsKeys.mangaProgressJson, '');
     _bump();

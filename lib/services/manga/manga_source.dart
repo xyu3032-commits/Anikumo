@@ -3,10 +3,37 @@ import 'package:anikumo/modules/manga/manga_item.dart';
 /// One page of a chapter: an image URL plus any headers the
 /// source's CDN requires to serve it.
 class MangaPage {
-  const MangaPage(this.url, {this.headers = const {}});
+  const MangaPage(
+    this.url, {
+    this.headers = const {},
+    this.transformOf,
+    this.modifyCode,
+    this.fallbackOf,
+  });
 
   final String url;
   final Map<String, String> headers;
+
+  /// Batch 102: when the source's `onImageLoad` config carried
+  /// an `onResponse` byte transform, this holds the ORIGINAL
+  /// page url the hook was called with (the registry key on
+  /// the engine side). The reader downloads [url], runs the
+  /// bytes through the transform, and displays the result;
+  /// null for the ordinary direct-display path.
+  final String? transformOf;
+
+  /// Batch 103: the config's `modifyImage` code string (the
+  /// reference runtime's image-edit hook: a snippet defining
+  /// `modifyImage(image)`, run over the decoded image to
+  /// descramble it). Applied AFTER [transformOf]'s byte
+  /// transform, mirroring the reference pipeline order.
+  final String? modifyCode;
+
+  /// Batch 103: when the config carried an `onLoadFailed`,
+  /// this holds the ORIGINAL page url the hook was called
+  /// with. When the download of [url] fails, the reader asks
+  /// the hook for a replacement config and retries with it.
+  final String? fallbackOf;
 }
 
 /// Normalizes the many status spellings sources use into the
@@ -70,6 +97,12 @@ abstract class MangaSource {
   /// Optional detail enrichment (description / tags the list
   /// endpoints don't carry). Null when the list data is complete.
   Future<MangaItem?> details(MangaItem manga) async => null;
+
+  /// Batch 103: preview page urls for the detail screen
+  /// (the reference runtime's `comic.loadThumbnails`). Only
+  /// JS sources with the hook return any; the detail screen
+  /// shows the strip only when this is non-empty.
+  Future<List<String>> loadThumbnails(MangaItem manga) async => const [];
 
   /// Batch 74: the source's account surface, or null when it
   /// has no account system. JS sources with an

@@ -4,10 +4,12 @@ import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:anikumo/modules/manga/manga_item.dart';
 import 'package:anikumo/pages/manga/manga_widgets.dart';
+import 'package:anikumo/services/manga/manga_search_utils.dart';
 import 'package:anikumo/services/manga/manga_source.dart';
 import 'package:anikumo/services/manga/manga_sources.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/utils/error_message.dart';
 
 /// 分类 tab — MangaDex tags grouped the way the source groups them
 /// （题材 / 主题 / 形式 / 内容）, Venera's Categories page shape.
@@ -230,7 +232,13 @@ class _MangaCategoryPageState extends State<MangaCategoryPage> {
   bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = true;
+  bool _loadMoreFailed = false;
   String? _errorText;
+
+  /// Batch 90: explicit next-page counter — the same
+  /// false-end fix as the explore grid (a short page is the
+  /// source's page size, not the end of the listing).
+  int _nextPage = 2;
 
   @override
   void initState() {
@@ -240,10 +248,16 @@ class _MangaCategoryPageState extends State<MangaCategoryPage> {
 
   // Batch 27: same missing-failure-path fix as the explore
   // tab — a throwing byTag left this page spinning forever.
+  // Batch 95: and a hard 30 s cap — a byTag queued behind a
+  // wedged engine call (per-source serialization; the
+  // engine's own cap starts only at the head of the queue)
+  // otherwise spins for minutes on some tags. A timeout
+  // lands in the same error state as a throw, with retry.
   Future<void> _loadFirst() async {
     try {
       final items = await widget.args.source
-          .byTag(widget.tag.id, limit: _pageSize);
+          .byTag(widget.tag.id, limit: _pageSize)
+          .timeout(const Duration(seconds: 30));
       if (!mounted) return;
       setState(() {
         _items
@@ -251,32 +265,46 @@ class _MangaCategoryPageState extends State<MangaCategoryPage> {
           ..addAll(items);
         _loading = false;
         _errorText = null;
-        _hasMore = items.length >= _pageSize;
+        _nextPage = 2;
+        _loadMoreFailed = false;
+        _hasMore = items.isNotEmpty;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        if (_items.isEmpty) _errorText = e.toString();
+        if (_items.isEmpty) _errorText = friendlyError(e);
       });
     }
   }
 
   Future<void> _loadMore() async {
-    setState(() => _loadingMore = true);
+    if (_loadingMore || !_hasMore) return;
+    setState(() {
+      _loadingMore = true;
+      _loadMoreFailed = false;
+    });
     try {
-      final items = await widget.args.source.byTag(
-        widget.tag.id,
-        limit: _pageSize,
-        page: _items.length ~/ _pageSize + 1,
-      );
+      final items = await widget.args.source
+          .byTag(
+            widget.tag.id,
+            limit: _pageSize,
+            page: _nextPage,
+          )
+          .timeout(const Duration(seconds: 30));
       if (!mounted) return;
+      final batch = nextMangaPageBatch(
+        [for (final item in _items) item.storageKey],
+        items,
+      );
       setState(() {
-        _items.addAll(items);
-        _hasMore = items.length >= _pageSize;
+        _items.addAll(batch.additions);
+        _hasMore = batch.hasMore;
+        _nextPage++;
       });
     } catch (_) {
-      // Keep what's on screen; scrolling can retry.
+      // Keep what's on screen; the footer offers the retry.
+      if (mounted) setState(() => _loadMoreFailed = true);
     } finally {
       if (mounted) setState(() => _loadingMore = false);
     }
@@ -345,16 +373,40 @@ class _MangaCategoryPageState extends State<MangaCategoryPage> {
                     crossAxisSpacing: 12,
                     childAspectRatio: 0.52,
                   ),
-                  itemCount: _items.length + (_hasMore ? 1 : 0),
+                  itemCount: _items.length +
+                      ((_hasMore ||
+                              _loadingMore ||
+                              _loadMoreFailed ||
+                              _items.length >= _pageSize)
+                          ? 1
+                          : 0),
                   itemBuilder: (context, index) {
                     if (index == _items.length) {
+                      if (_loadingMore) {
+                        return const Center(
+                          child: CircularProgressIndicator(),
+                        );
+                      }
+                      if (_loadMoreFailed) {
+                        return Center(
+                          child: OutlinedButton(
+                            onPressed: _loadMore,
+                            child: const Text('加载失败，点按重试'),
+                          ),
+                        );
+                      }
                       return Center(
-                        child: _loadingMore
-                            ? const CircularProgressIndicator()
-                            : OutlinedButton(
-                                onPressed: _loadMore,
-                                child: const Text('加载更多'),
+                        child: Text(
+                          _hasMore ? '继续下滑自动加载' : '没有更多了',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
                               ),
+                        ),
                       );
                     }
                     final item = _items[index];

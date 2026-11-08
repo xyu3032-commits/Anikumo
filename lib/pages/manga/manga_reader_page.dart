@@ -12,7 +12,9 @@ import 'package:anikumo/services/manga/manga_library.dart';
 import 'package:anikumo/services/manga/manga_downloads.dart';
 import 'package:anikumo/services/manga/manga_extras.dart';
 import 'package:anikumo/services/manga/reader_spread.dart';
+import 'package:anikumo/pages/manga/manga_widgets.dart';
 import 'package:anikumo/services/manga/manga_api.dart';
+import 'package:anikumo/services/manga/manga_image_pipeline.dart';
 import 'package:anikumo/services/manga/manga_page_cache.dart';
 import 'package:anikumo/services/manga/manga_source.dart';
 import 'package:anikumo/services/manga/reader_settings.dart';
@@ -37,32 +39,37 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
   // Batch 21: failed pages used to be dead ends (a broken
   // icon forever). Tapping one evicts its cached entry and
   // rebuilds the image under a fresh key.
-  int _pageRetryNonce = 0;
+  // Batch 90: the nonce is per page — retrying one failed
+  // page no longer re-keys (and reloads) every page on
+  // screen.
+  final Map<String, int> _pageRetryNonces = {};
+
+  int _nonceFor(String url) => _pageRetryNonces[url] ?? 0;
 
   void _retryPage(String url) {
     unawaited(CachedNetworkImage.evictFromCache(url));
-    setState(() => _pageRetryNonce++);
+    // Batch 112: the reader's images live in the page
+    // cache manager, not CachedNetworkImage's default
+    // store — evict there too, or a poisoned entry is
+    // served again and the retry can never succeed.
+    unawaited(mangaPageCacheManager.removeFile(url));
+    setState(() => _pageRetryNonces[url] = _nonceFor(url) + 1);
   }
 
-  Widget _pageErrorWidget(double? height, VoidCallback onRetry) {
-    return GestureDetector(
-      onTap: onRetry,
-      child: SizedBox(
-        height: height,
-        child: const Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.broken_image_outlined, color: Colors.white54),
-              SizedBox(height: 8),
-              Text(
-                '加载失败，点按重试',
-                style: TextStyle(color: Colors.white54, fontSize: 12),
-              ),
-            ],
-          ),
-        ),
-      ),
+  /// Batch 90: pages that already spent their one automatic
+  /// retry in this chapter (see _PageError below). Cleared
+  /// whenever a chapter's pages land.
+  final Set<String> _autoRetriedUrls = {};
+
+  Widget _pageErrorWidget(String url, double? height) {
+    return _PageError(
+      height: height,
+      canAutoRetry: !_autoRetriedUrls.contains(url),
+      onAutoRetry: () {
+        _autoRetriedUrls.add(url);
+        _retryPage(url);
+      },
+      onRetry: () => _retryPage(url),
     );
   }
 
@@ -246,6 +253,7 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
     if (!mounted) return;
     setState(() {
       _pages = pages;
+      _autoRetriedUrls.clear();
       _loading = false;
       _failed = pages.isEmpty;
       _pageNotifier.value = pages.isEmpty
@@ -265,10 +273,28 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
   /// in gallery modes don't wait on the network.
   void _precacheAround(int realPage) {
     if (_pages.isEmpty || !mounted) return;
-    for (final offset in [1, 2, -1]) {
+    // Batch 88: one more page ahead — on slow sources the
+    // third page was regularly still in flight when reached,
+    // which showed up as a loading stall mid-chapter.
+    for (final offset in [1, 2, 3, -1]) {
       final index = realPage + offset;
       if (index < 0 || index >= _pages.length) continue;
       if (_pages[index].url.startsWith('file://')) continue;
+      // Batch 102/103: pages with a load spec (transform,
+      // modifyImage, fallback) warm their cache through the
+      // pipeline instead of the image provider.
+      final aroundSpec = mangaPageLoadSpec(
+        manga: _manga,
+        chapter: _chapter,
+        page: _pages[index],
+      );
+      if (aroundSpec != null) {
+        prefetchProcessedImage(
+          cacheManager: mangaPageCacheManager,
+          spec: aroundSpec,
+        );
+        continue;
+      }
       precacheImage(
         CachedNetworkImageProvider(
           _pages[index].url,
@@ -378,6 +404,17 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
     if (!mounted) return;
     for (final page in pages.take(2)) {
       if (page.url.startsWith('file://')) continue;
+      // Batch 102/103: same spec warm-up for the next
+      // chapter's first pages.
+      final nextSpec =
+          mangaPageLoadSpec(manga: _manga, chapter: next, page: page);
+      if (nextSpec != null) {
+        prefetchProcessedImage(
+          cacheManager: mangaPageCacheManager,
+          spec: nextSpec,
+        );
+        continue;
+      }
       precacheImage(
         CachedNetworkImageProvider(
           page.url,
@@ -509,6 +546,13 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
 
   Widget _pageImage(int realIndex) {
     final page = _pages[realIndex];
+    // Batch 103: the page's load spec (transform / modify /
+    // fallback), or null for the ordinary provider path.
+    final spec = mangaPageLoadSpec(
+      manga: _manga,
+      chapter: _chapter,
+      page: page,
+    );
     Widget image;
     if (page.url.startsWith('file://')) {
       // Downloaded chapter (M1): render from disk.
@@ -516,23 +560,46 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
         File(Uri.parse(page.url).toFilePath()),
         fit: BoxFit.contain,
         cacheWidth: _decodeWidth,
+        gaplessPlayback: true,
         errorBuilder: (context, _, _) => const Center(
           child: Icon(Icons.broken_image_outlined, color: Colors.white54),
         ),
       );
+    } else if (spec != null) {
+      // Batch 102/103: pages the pipeline must process
+      // (onResponse transform, modifyImage edit) or rescue
+      // (onLoadFailed fallback) before they can display.
+      image = MangaTransformedImage(
+        key: ValueKey('${page.url}#${_nonceFor(page.url)}'),
+        url: page.url,
+        headers: page.headers,
+        cacheManager: mangaPageCacheManager,
+        spec: spec,
+        memCacheWidth: _decodeWidth,
+        fit: BoxFit.contain,
+        placeholder: const Center(
+          child: CircularProgressIndicator(color: Colors.white54),
+        ),
+        errorWidget: _pageErrorWidget(page.url, null),
+      );
     } else {
       image = CachedNetworkImage(
-        key: ValueKey('${page.url}#$_pageRetryNonce'),
+        key: ValueKey('${page.url}#${_nonceFor(page.url)}'),
         imageUrl: page.url,
         httpHeaders: page.headers,
         cacheManager: mangaPageCacheManager,
         memCacheWidth: _decodeWidth,
         fit: BoxFit.contain,
+        // Batch 88: same anti-flash settings as the
+        // continuous strip (no fade from black, keep the
+        // old frame while a re-resolution is in flight).
+        fadeInDuration: Duration.zero,
+        fadeOutDuration: Duration.zero,
+        useOldImageOnUrlChange: true,
         placeholder: (context, _) => const Center(
           child: CircularProgressIndicator(color: Colors.white54),
         ),
-        errorWidget: (context, _, _) =>
-            _pageErrorWidget(null, () => _retryPage(page.url)),
+        errorWidget: (context, _, _) => _pageErrorWidget(page.url, null),
       );
     }
     if (_isContinuous) return image;
@@ -823,7 +890,11 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
         onTap: () => setState(() => _overlayVisible = !_overlayVisible),
         child: ListView.builder(
           controller: _scrollController,
-          scrollCacheExtent: const ScrollCacheExtent.pixels(1200),
+          // Batch 88: a taller cache extent keeps pages that
+          // just scrolled off alive a little longer, so a
+          // small scroll back doesn't rebuild (and re-flash)
+          // them.
+          scrollCacheExtent: const ScrollCacheExtent.pixels(1600),
           itemCount: _pages.length + 1,
           itemBuilder: (context, index) {
             if (index == _pages.length) {
@@ -846,15 +917,60 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
             // widths are below the cap and unchanged.
             final screenWidth = MediaQuery.sizeOf(context).width;
             final width = screenWidth > 640 ? 640.0 : screenWidth;
+            final stripPage = _pages[index];
+            final stripSpec = mangaPageLoadSpec(
+              manga: _manga,
+              chapter: _chapter,
+              page: stripPage,
+            );
             return Center(
-              child: CachedNetworkImage(
-              key: ValueKey('${_pages[index].url}#$_pageRetryNonce'),
+              child: stripSpec != null
+                  // Batch 102/103: pipeline pages in the strip
+                  // (see _pageImage).
+                  ? MangaTransformedImage(
+                      key: ValueKey(
+                        '${stripPage.url}#${_nonceFor(stripPage.url)}',
+                      ),
+                      url: stripPage.url,
+                      headers: stripPage.headers,
+                      cacheManager: mangaPageCacheManager,
+                      spec: stripSpec,
+                      width: width,
+                      memCacheWidth: _decodeWidth,
+                      fit: BoxFit.fitWidth,
+                      placeholder: SizedBox(
+                        width: width,
+                        height: width * 1.4,
+                        child: const Center(
+                          child: CircularProgressIndicator(
+                              color: Colors.white54),
+                        ),
+                      ),
+                      errorWidget: _pageErrorWidget(
+                        stripPage.url,
+                        width * 1.4,
+                      ),
+                    )
+                  : CachedNetworkImage(
+              key: ValueKey(
+                '${_pages[index].url}#${_nonceFor(_pages[index].url)}',
+              ),
               imageUrl: _pages[index].url,
               httpHeaders: _pages[index].headers,
               cacheManager: mangaPageCacheManager,
               width: width,
               memCacheWidth: _decodeWidth,
               fit: BoxFit.fitWidth,
+              // Batch 88: no fade-in here. The default 500ms
+              // fade cross-fades FROM the transparent
+              // placeholder — i.e. from the black scaffold —
+              // so every page entering during a scroll flashed
+              // as a black bar that then "disappeared".
+              // Keeping the old frame on re-resolution stops
+              // the same flash when an item is rebuilt.
+              fadeInDuration: Duration.zero,
+              fadeOutDuration: Duration.zero,
+              useOldImageOnUrlChange: true,
               placeholder: (context, _) => SizedBox(
                 width: width,
                 height: width * 1.4,
@@ -863,8 +979,8 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
                 ),
               ),
               errorWidget: (context, _, _) => _pageErrorWidget(
+                _pages[index].url,
                 width * 1.4,
-                () => _retryPage(_pages[index].url),
               ),
               ),
             );
@@ -908,6 +1024,95 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
           child: _pageImage(realIndex),
         );
       },
+    );
+  }
+}
+
+/// Batch 90: a failed page's error tile. When an automatic
+/// retry is still available it shows a brief "retrying"
+/// state and fires that retry once after a short delay —
+/// transient CDN drops (a reset connection, a rate-limit
+/// blip while neighbouring pages prefetch) used to leave a
+/// dead tile until the user noticed and tapped it. Once
+/// the automatic attempt is spent, the tile is the classic
+/// tap-to-retry.
+class _PageError extends StatefulWidget {
+  const _PageError({
+    required this.height,
+    required this.canAutoRetry,
+    required this.onAutoRetry,
+    required this.onRetry,
+  });
+
+  final double? height;
+  final bool canAutoRetry;
+  final VoidCallback onAutoRetry;
+  final VoidCallback onRetry;
+
+  @override
+  State<_PageError> createState() => _PageErrorState();
+}
+
+class _PageErrorState extends State<_PageError> {
+  Timer? _timer;
+  bool _autoFired = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.canAutoRetry) {
+      _timer = Timer(const Duration(milliseconds: 1200), () {
+        if (!mounted) return;
+        setState(() => _autoFired = true);
+        widget.onAutoRetry();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.canAutoRetry && !_autoFired) {
+      return SizedBox(
+        height: widget.height,
+        child: const Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: Colors.white54),
+              SizedBox(height: 8),
+              Text(
+                '加载失败，自动重试中…',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return GestureDetector(
+      onTap: widget.onRetry,
+      child: SizedBox(
+        height: widget.height,
+        child: const Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.broken_image_outlined, color: Colors.white54),
+              SizedBox(height: 8),
+              Text(
+                '加载失败，点按重试',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

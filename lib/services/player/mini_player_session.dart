@@ -1,0 +1,256 @@
+import 'dart:async';
+
+import 'package:flutter/widgets.dart';
+
+import 'package:anikumo/pages/player/player_controller.dart';
+import 'package:anikumo/pages/video/video_controller.dart';
+import 'package:anikumo/pages/video/video_playback_args.dart';
+import 'package:anikumo/services/storage/storage.dart';
+
+/// Batch 113: in-app picture-in-picture (mini player).
+///
+/// The default PiP experience is a small floating window INSIDE the
+/// app: leaving the player lands on the anime home with the video
+/// still playing in a draggable mini window, instead of shrinking
+/// the whole app into the system PiP over the phone's home screen.
+/// The system PiP stays available as the "external" mode in the PiP
+/// settings (player settings, or long-press the PiP button).
+///
+/// Ownership model: the '/video' route still creates its controller
+/// pair per visit. When the page exits into the mini window, the
+/// pair is ADOPTED by this session instead of being disposed (the
+/// controllers' dispose() becomes a no-op while adopted); the global
+/// overlay renders the mini window from the adopted pair. Reopening
+/// the same video hands the same pair back to the page (seamless
+/// resume); opening a different video closes the session for real.
+/// While the mini window is up, entering the manga/novel zones
+/// hides it (and optionally mutes it) until the user comes back —
+/// both behaviours are user settings, not hard-coded.
+
+/// Which area of the app the current route belongs to, for the mini
+/// window's zone visibility rule.
+enum MiniPlayerZone { anime, manga, novel, video }
+
+/// Classifies a route by its Modular path. Unknown/app routes count
+/// as the anime side (the mini window stays visible there).
+MiniPlayerZone miniPlayerZoneForRoute(String? routeName) {
+  final name = routeName ?? '';
+  if (name.startsWith('/manga')) return MiniPlayerZone.manga;
+  if (name.startsWith('/novel')) return MiniPlayerZone.novel;
+  if (name.startsWith('/video')) return MiniPlayerZone.video;
+  return MiniPlayerZone.anime;
+}
+
+/// Whether the mini window should be on screen.
+bool miniPlayerVisible({
+  required bool hasSession,
+  required MiniPlayerZone zone,
+  required bool hideInOtherZones,
+}) {
+  if (!hasSession) return false;
+  // The full player page replaces the mini window while it is open;
+  // the mini never floats over the player itself.
+  if (zone == MiniPlayerZone.video) return false;
+  if (hideInOtherZones &&
+      (zone == MiniPlayerZone.manga || zone == MiniPlayerZone.novel)) {
+    return false;
+  }
+  return true;
+}
+
+/// Whether leaving the player page should park playback in the
+/// in-app mini window instead of stopping it.
+bool miniPlayerShouldExitToMini({
+  required bool isDesktopPlatform,
+  required bool inAppMode,
+  required bool hasPlayableMedia,
+}) {
+  return !isDesktopPlatform && inAppMode && hasPlayableMedia;
+}
+
+/// Whether two playback args describe the same video from the same
+/// source (the mini session's resume matching).
+bool miniPlayerArgsMatch(VideoPlaybackArgs a, VideoPlaybackArgs b) {
+  if (a.bangumiItem.id != b.bangumiItem.id) return false;
+  return switch ((a, b)) {
+    (OnlineVideoPlaybackArgs x, OnlineVideoPlaybackArgs y) =>
+      x.plugin.name == y.plugin.name,
+    (OfflineVideoPlaybackArgs x, OfflineVideoPlaybackArgs y) =>
+      x.pluginName == y.pluginName,
+    _ => false,
+  };
+}
+
+class MiniPlayerSession extends ChangeNotifier {
+  MiniPlayerSession._();
+
+  static final MiniPlayerSession instance = MiniPlayerSession._();
+
+  PlayerController? _playerController;
+  VideoPageController? _videoPageController;
+  VideoPlaybackArgs? _args;
+
+  PlayerController? get playerController => _playerController;
+  VideoPageController? get videoPageController => _videoPageController;
+  VideoPlaybackArgs? get args => _args;
+  bool get hasSession => _playerController != null;
+
+  MiniPlayerZone _zone = MiniPlayerZone.anime;
+  MiniPlayerZone get zone => _zone;
+
+  double? _volumeBeforeMute;
+  bool _mutedBySession = false;
+
+  /// True when [candidate] is the video this session is playing
+  /// (same bangumi from the same source), so the player page should
+  /// reattach to the adopted pair instead of starting over.
+  bool isActiveFor(VideoPlaybackArgs candidate) {
+    final current = _args;
+    if (current == null) return false;
+    return miniPlayerArgsMatch(current, candidate);
+  }
+
+  /// Takes ownership of the pair leaving the player page. The
+  /// controllers are flagged adopted BEFORE this runs (see
+  /// [markAdopted]) so the route scope's disposal cannot stop
+  /// playback mid-handover.
+  void adopt({
+    required PlayerController playerController,
+    required VideoPageController videoPageController,
+    required VideoPlaybackArgs args,
+  }) {
+    markAdopted(
+      playerController: playerController,
+      videoPageController: videoPageController,
+    );
+    _playerController = playerController;
+    _videoPageController = videoPageController;
+    _args = args;
+    _applyZoneAudio();
+    notifyListeners();
+  }
+
+  /// Flags a pair as adopted so its dispose() turns into a no-op.
+  /// Called synchronously when the exit-to-mini decision is made,
+  /// ahead of any route teardown.
+  static void markAdopted({
+    required PlayerController playerController,
+    required VideoPageController videoPageController,
+  }) {
+    playerController.adoptedByMiniPlayer = true;
+    videoPageController.adoptedByMiniPlayer = true;
+  }
+
+  /// The current exit decision for a pair leaving the player page,
+  /// from the user's settings and the pair's playback state.
+  static bool shouldExitToMini({
+    required bool isDesktopPlatform,
+    required PlayerController playerController,
+  }) {
+    return miniPlayerShouldExitToMini(
+      isDesktopPlatform: isDesktopPlatform,
+      inAppMode: GStorage.getSetting(SettingsKeys.pipInAppMode),
+      hasPlayableMedia: playerController.playback.videoController != null,
+    );
+  }
+
+  bool get visible => miniPlayerVisible(
+        hasSession: hasSession,
+        zone: _zone,
+        hideInOtherZones:
+            GStorage.getSetting(SettingsKeys.pipHideInOtherZones),
+      );
+
+  /// Route changes come from [MiniPlayerRouteObserver]. Zone entry
+  /// hides/shows the window and applies the mute preference.
+  void updateZone(MiniPlayerZone next) {
+    if (_zone == next) return;
+    _zone = next;
+    _applyZoneAudio();
+    notifyListeners();
+  }
+
+  /// Settings changed (mode/hide/mute) — re-evaluate audio + UI.
+  void refreshFromSettings() {
+    _applyZoneAudio();
+    notifyListeners();
+  }
+
+  void _applyZoneAudio() {
+    final player = _playerController?.playback.mediaPlayer;
+    if (player == null) return;
+    final shouldMute = hasSession &&
+        !visible &&
+        _zone != MiniPlayerZone.video &&
+        GStorage.getSetting(SettingsKeys.pipMuteWhenHidden);
+    if (shouldMute && !_mutedBySession) {
+      _volumeBeforeMute = player.state.volume;
+      _mutedBySession = true;
+      unawaited(player.setVolume(0));
+    } else if (!shouldMute && _mutedBySession) {
+      _mutedBySession = false;
+      final restore = _volumeBeforeMute;
+      _volumeBeforeMute = null;
+      if (restore != null) {
+        unawaited(player.setVolume(restore));
+      }
+    }
+  }
+
+  /// Ends the session for real: restores audio, then runs the
+  /// controllers' deferred teardown.
+  Future<void> close() async {
+    final player = _playerController;
+    final video = _videoPageController;
+    if (player == null && video == null) return;
+    _playerController = null;
+    _videoPageController = null;
+    _args = null;
+    if (_mutedBySession) {
+      _mutedBySession = false;
+      final restore = _volumeBeforeMute;
+      _volumeBeforeMute = null;
+      final mediaPlayer = player?.playback.mediaPlayer;
+      if (mediaPlayer != null && restore != null) {
+        unawaited(mediaPlayer.setVolume(restore));
+      }
+    }
+    notifyListeners();
+    player?.disposeAfterMini();
+    video?.disposeAfterMini();
+  }
+}
+
+/// Feeds the session's zone tracking from the app's navigator.
+class MiniPlayerRouteObserver extends RouteObserver<PageRoute<void>> {
+  void _report(Route<dynamic>? route) {
+    MiniPlayerSession.instance
+        .updateZone(miniPlayerZoneForRoute(route?.settings.name));
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPush(route, previousRoute);
+    _report(route);
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPop(route, previousRoute);
+    _report(previousRoute);
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+    _report(newRoute);
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didRemove(route, previousRoute);
+    _report(previousRoute);
+  }
+}
+
+final miniPlayerRouteObserver = MiniPlayerRouteObserver();

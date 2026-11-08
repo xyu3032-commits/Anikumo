@@ -85,10 +85,16 @@ void main() {
     expect(source.tagsCalls, 1);
   });
 
-  test('different limits are different cache entries', () async {
+  test('different limits share one cache entry; pages do not',
+      () async {
+    // Batch 96: no source type honours `limit` — it only
+    // fragmented the cache (home section vs explore grid
+    // fetched the same list twice). Pages stay separate.
     final source = _CountingSource();
     await MangaApi.fetchPopularFor(source, limit: 14);
     await MangaApi.fetchPopularFor(source, limit: 20);
+    expect(source.popularCalls, 1);
+    await MangaApi.fetchPopularFor(source, limit: 20, page: 2);
     expect(source.popularCalls, 2);
   });
 }

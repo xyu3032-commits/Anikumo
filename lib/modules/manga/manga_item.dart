@@ -31,6 +31,7 @@ class MangaItem {
     required this.tags,
     this.source = 'mangadex',
     this.headers = const {},
+    this.coverTransformOf,
   });
 
   final String id;
@@ -55,6 +56,14 @@ class MangaItem {
   /// (e.g. a Referer some CDNs require); empty for most sources.
   final Map<String, String> headers;
 
+  /// Batch 102: when the source's `onThumbnailLoad` config
+  /// carried an `onResponse` byte transform, the ORIGINAL
+  /// cover url the hook was called with (the engine-side
+  /// registry key); cover widgets download [coverUrl], run
+  /// the bytes through the transform, and display the result.
+  /// Persisted in snapshots so stored favorites keep working.
+  final String? coverTransformOf;
+
   /// Headers for loading the cover: the entry's own headers, or
   /// the source's well-known defaults when none were stored.
   Map<String, String> get coverHeaders {
@@ -77,6 +86,8 @@ class MangaItem {
     String? status,
     int? year,
     List<String>? tags,
+    Map<String, String>? headers,
+    String? coverTransformOf,
   }) {
     return MangaItem(
       id: id,
@@ -88,7 +99,8 @@ class MangaItem {
       year: year ?? this.year,
       tags: tags ?? this.tags,
       source: source,
-      headers: headers,
+      headers: headers ?? this.headers,
+      coverTransformOf: coverTransformOf ?? this.coverTransformOf,
     );
   }
 
@@ -106,6 +118,8 @@ class MangaItem {
         'tags': tags,
         'source': source,
         'headers': headers,
+        if (coverTransformOf != null)
+          'coverTransformOf': coverTransformOf,
       };
 
   factory MangaItem.fromSnapshot(Map<String, dynamic> json) {
@@ -124,6 +138,7 @@ class MangaItem {
             (k, v) => MapEntry(k.toString(), v.toString()),
           ) ??
           const {},
+      coverTransformOf: json['coverTransformOf'] as String?,
     );
   }
 

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:anikumo/plugins/plugins.dart';
 import 'package:anikumo/services/plugin/rule_repository.dart';
+import 'package:anikumo/services/plugin/external_config_import.dart';
 import 'package:anikumo/utils/encoding.dart';
 import 'package:anikumo/utils/error_message.dart';
 import 'package:anikumo/utils/transient_retry.dart';
@@ -222,7 +223,31 @@ class PluginImportParser {
     }
 
     if (decodedAsJson) {
-      if (jsonValue is List) {
+      if (isExternalSiteConfig(jsonValue)) {
+        // Batch 107: an external site-list config file —
+        // its JSON-API (type 1) sites convert to api-mode
+        // rules; the other site kinds are reported per
+        // site instead of failing the whole file as a bad
+        // Kazumi rule. Batch 108: messages describe the
+        // interface kind only, never the origin format.
+        final conversion = convertExternalSiteConfig(
+            jsonValue as Map<dynamic, dynamic>);
+        parsed.addAll(conversion.plugins);
+        failures.addAll(conversion.skipped);
+        if (conversion.plugins.isEmpty && conversion.skipped.isEmpty) {
+          failures.add('这份配置里没有可导入的源');
+        }
+      } else if (bookSourceShapeOf(jsonValue) case final bookSource?) {
+        // Batch 107: a book-source package is not a Kazumi
+        // rule file — say what it is in generic terms and
+        // point at the right door instead of emitting
+        // per-entry rule errors (batch 108: unnamed).
+        failures.add(
+          bookSource.isVideo
+              ? '识别为视频书源格式：动漫区暂未支持这种格式，未导入'
+              : '识别为书源格式：请到小说区或漫画区导入，动漫区未导入',
+        );
+      } else if (jsonValue is List) {
         for (var index = 0; index < jsonValue.length; index++) {
           _parseEntry(jsonValue[index], index + 1, parsed, failures);
         }

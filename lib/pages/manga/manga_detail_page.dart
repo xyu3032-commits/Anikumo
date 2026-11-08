@@ -1,4 +1,3 @@
-import 'package:anikumo/services/novel/novel_sources.dart';
 import 'package:anikumo/services/novel/novel_api.dart';
 import 'package:anikumo/pages/novel/novel_widgets.dart';
 import 'package:anikumo/models/novel_item.dart';
@@ -8,20 +7,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:anikumo/bean/card/bangumi_card.dart';
 import 'package:anikumo/bean/theme/violet_glass.dart';
-import 'package:anikumo/bean/widget/violet_components.dart';
 import 'package:anikumo/bean/dialog/dialog_helper.dart';
 import 'package:anikumo/modules/bangumi/bangumi_item.dart';
 import 'package:anikumo/modules/manga/manga_item.dart';
+import 'package:anikumo/pages/manga/manga_categories_page.dart';
+import 'package:anikumo/pages/manga/manga_search_page.dart';
 import 'package:anikumo/pages/manga/manga_widgets.dart';
 import 'package:anikumo/request/apis/bangumi_api.dart';
 import 'package:anikumo/services/manga/cross_media.dart';
+import 'package:anikumo/services/manga/local_manga_source.dart';
 import 'package:anikumo/services/manga/manga_downloads.dart';
 import 'package:anikumo/services/manga/manga_search_utils.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+
+import 'package:anikumo/services/manga/manga_image_pipeline.dart';
+import 'package:anikumo/services/manga/manga_page_cache.dart';
 import 'package:anikumo/services/manga/manga_sources.dart';
 import 'package:anikumo/services/manga/manga_extras.dart';
 import 'package:anikumo/services/manga/manga_library.dart';
 import 'package:anikumo/services/manga/manga_api.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/utils/error_message.dart';
 
 typedef MangaReaderArgs = ({
   MangaItem manga,
@@ -72,6 +78,15 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
   List<BangumiItem> _pairedAnime = const [];
   List<NovelItem> _pairedNovels = const [];
 
+  // Batch 89: same-tag recommendations （你可能还喜欢）,
+  // decided by this manga's tags on its own source.
+  List<MangaItem> _tagRecs = const [];
+  bool _tagRecsDone = false;
+
+  // Batch 103: preview page urls from sources implementing
+  // loadThumbnails; empty hides the strip.
+  List<String> _thumbnails = const [];
+
   // Batch 15: local rating (M4), chapter downloads (M1), author
   // rail (M9).
   MangaRating? _rating;
@@ -98,6 +113,17 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
     _loadDetails();
     _loadDownloads();
     _loadAuthorWorks();
+    _loadTagRecommendations();
+    _loadThumbnails();
+  }
+
+  Future<void> _loadThumbnails() async {
+    final source = MangaSources.byId(_current.source);
+    if (source == null) return;
+    final key = _current.storageKey;
+    final urls = await source.loadThumbnails(_current);
+    if (!mounted || _current.storageKey != key) return;
+    setState(() => _thumbnails = urls);
   }
 
   Future<void> _loadDownloads() async {
@@ -125,6 +151,97 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
           .take(10)
           .toList();
     });
+  }
+
+  /// Batch 89: the “你可能还喜欢” rail — manga on the SAME
+  /// source sharing this manga's tags. Tag names on the item
+  /// are display strings; the source's tag catalogue maps
+  /// them to the ids byTag needs. The first two matched
+  /// tags contribute listings; results merge and rank by
+  /// shared-tag count. Sources without a tag catalogue fall
+  /// back to searching the first tag name. Best-effort like
+  /// the other companion rails: any failure leaves the
+  /// section hidden.
+  Future<void> _loadTagRecommendations() async {
+    if (_tagRecsDone) return;
+    final source = MangaSources.byId(_current.source);
+    if (source == null) return;
+    final base = _enriched ?? _current;
+    if (base.tags.isEmpty) return;
+    final forKey = base.storageKey;
+    try {
+      var candidates = <MangaItem>[];
+      List<MangaTag> catalogue = const [];
+      try {
+        catalogue = await MangaApi.fetchTagsFor(source);
+      } catch (_) {
+        // No catalogue — the search fallback below applies.
+      }
+      final matched = matchTagsByName(base.tags, catalogue).take(2);
+      for (final tag in matched) {
+        try {
+          candidates.addAll(await source.byTag(tag.id, limit: 20));
+        } catch (_) {
+          // One bad tag must not sink the whole rail.
+        }
+      }
+      if (candidates.isEmpty) {
+        try {
+          candidates = await source.search(base.tags.first);
+        } catch (_) {}
+      }
+      if (!mounted || _current.storageKey != forKey) return;
+      final ranked = rankTagRecommendations(base, candidates);
+      if (ranked.isEmpty) return;
+      _tagRecsDone = true;
+      setState(() => _tagRecs = ranked);
+    } catch (_) {
+      // Recommendations are best-effort.
+    }
+  }
+
+  /// Batch 90: tapping a tag chip opens the tag's manga
+  /// listing on this manga's own source. The display name
+  /// resolves to a catalogue tag when the source has one;
+  /// otherwise the tap falls back to a source search for
+  /// the tag name — either way the tap now goes somewhere.
+  Future<void> _openTag(String tagName) async {
+    final source = MangaSources.byId(_current.source);
+    if (source != null) {
+      List<MangaTag> catalogue = const [];
+      try {
+        catalogue = await MangaApi.fetchTagsFor(source);
+      } catch (_) {
+        // No catalogue — the search fallback below applies.
+      }
+      final matched = matchTagsByName([tagName], catalogue);
+      if (!mounted) return;
+      if (matched.isNotEmpty) {
+        context.pushNamed(
+          '/manga/category',
+          arguments: MangaCategoryArgs(source: source, tag: matched.first),
+        );
+        return;
+      }
+    }
+    if (!mounted) return;
+    // Batch 99: this fallback used to pass the tag name as
+    // a plain keyword — source search matches titles, so
+    // most tag taps landed on an empty results page. The
+    // tag-search mode resolves the name through every
+    // source's catalogue instead.
+    context.pushNamed(
+      '/manga/search',
+      arguments: MangaSearchRouteArgs(
+        query: tagName,
+        tagSearch: true,
+        // Batch 104/105: the tag belongs to THIS manga —
+        // the tag search runs on its source alone (the
+        // search page used to present the default source
+        // and fan out to every source instead).
+        originSourceId: _current.source,
+      ),
+    );
   }
 
   Future<void> _downloadChapter(MangaChapter chapter) async {
@@ -176,6 +293,10 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
       final enriched = await MangaApi.fetchDetails(_current);
       if (!mounted || enriched == null) return;
       setState(() => _enriched = enriched);
+      // Batch 89: the enriched item carries the full tag
+      // list — if the tag rail found nothing from the
+      // list-level item, retry with the richer tags.
+      _loadTagRecommendations();
     } catch (_) {}
   }
 
@@ -244,6 +365,9 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
       _chapters = const [];
       _loadingChapters = true;
       _chaptersError = null;
+      _tagRecs = const [];
+      _tagRecsDone = false;
+      _thumbnails = const [];
     });
     AnikumoDialog.showToast(
       message: '原源无可读章节，已自动切换到 '
@@ -251,6 +375,8 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
     );
     _loadDetails();
     _loadDownloads();
+    _loadTagRecommendations();
+    _loadThumbnails();
     await _loadChapters();
     return true;
   }
@@ -267,7 +393,7 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
       if (!mounted) return;
       setState(() {
         _loadingChapters = false;
-        _chaptersError = e.toString();
+        _chaptersError = friendlyError(e);
       });
       return;
     }
@@ -372,6 +498,9 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
                     width: MediaQuery.sizeOf(context).width,
                     height: 264,
                     radius: 0,
+                    headers: manga.coverHeaders,
+                    transformOf: manga.coverTransformOf,
+                    transform: coverTransformCallback(manga),
                   ),
                   ),
                 ),
@@ -434,6 +563,9 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
                               width: 96,
                               height: 148,
                               radius: 14,
+                              headers: manga.coverHeaders,
+                              transformOf: manga.coverTransformOf,
+                              transform: coverTransformCallback(manga),
                             ),
                             const SizedBox(width: 14),
                             Expanded(
@@ -503,10 +635,14 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
               spacing: 8,
               runSpacing: 6,
               children: [
+                // Batch 90: tags are tappable — a tap opens
+                // that tag's manga on this source (previously
+                // the chips were inert labels).
                 for (final tag in manga.tags.take(10))
-                  Chip(
+                  ActionChip(
                     label: Text(tag),
                     visualDensity: VisualDensity.compact,
+                    onPressed: () => _openTag(tag),
                   ),
               ],
             ),
@@ -523,6 +659,42 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
                 overflow:
                     _expandedDescription ? null : TextOverflow.ellipsis,
                 style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+              ),
+            ),
+          ],
+          if (_thumbnails.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text(
+              '内容预览',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 150,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _thumbnails.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 8),
+                itemBuilder: (context, index) => GestureDetector(
+                  onTap: _chapters.isEmpty
+                      ? null
+                      : () => _openReader(0),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: CachedNetworkImage(
+                      imageUrl: _thumbnails[index],
+                      cacheManager: mangaPageCacheManager,
+                      width: 106,
+                      height: 150,
+                      fit: BoxFit.cover,
+                      fadeInDuration: Duration.zero,
+                      errorWidget: (context, _, _) =>
+                          const SizedBox.shrink(),
+                    ),
+                  ),
+                ),
               ),
             ),
           ],
@@ -685,27 +857,33 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
                         ),
                       )
                     else
-                      IconButton(
-                        visualDensity: VisualDensity.compact,
-                        icon: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 180),
-                          child: Icon(
-                            _downloadedKeys.contains(chapter.id)
-                                ? Icons.download_done_rounded
-                                : Icons.download_outlined,
-                            key: ValueKey(
-                              _downloadedKeys.contains(chapter.id),
+                      // Batch 104: a local (CBZ-imported) book
+                      // already lives on disk — its chapters
+                      // ARE downloaded by definition, so the
+                      // row shows the done state instead of
+                      // offering a download that could only
+                      // fail on file:// page urls.
+                      Builder(builder: (context) {
+                        final downloaded =
+                            _current.source == LocalMangaSource.sourceId ||
+                                _downloadedKeys.contains(chapter.id);
+                        return IconButton(
+                          visualDensity: VisualDensity.compact,
+                          icon: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 180),
+                            child: Icon(
+                              downloaded
+                                  ? Icons.download_done_rounded
+                                  : Icons.download_outlined,
+                              key: ValueKey(downloaded),
+                              size: 20,
                             ),
-                            size: 20,
                           ),
-                        ),
-                        tooltip: _downloadedKeys.contains(chapter.id)
-                            ? '已下载'
-                            : '下载本话（离线）',
-                        onPressed: _downloadedKeys.contains(chapter.id)
-                            ? null
-                            : () => _downloadChapter(chapter),
-                      ),
+                          tooltip: downloaded ? '已下载' : '下载本话（离线）',
+                          onPressed:
+                              downloaded ? null : () => _downloadChapter(chapter),
+                        );
+                      }),
                     const Icon(Icons.chevron_right_rounded),
                   ],
                 ),
@@ -724,11 +902,7 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
             ),
           if (_pairedAnime.isNotEmpty) ...[
             const SizedBox(height: 22),
-            Text(
-              '配套动漫',
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w800),
-            ),
+            _railTitle('配套动漫'),
             const SizedBox(height: 10),
             SizedBox(
               height: 216,
@@ -749,11 +923,7 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
           ],
           if (_pairedNovels.isNotEmpty) ...[
             const SizedBox(height: 22),
-            Text(
-              '配套小说',
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w800),
-            ),
+            _railTitle('配套小说'),
             const SizedBox(height: 10),
             SizedBox(
               height: 218,
@@ -769,11 +939,7 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
           ],
           if (_authorWorks.isNotEmpty) ...[
             const SizedBox(height: 22),
-            Text(
-              '作者的其他作品',
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w800),
-            ),
+            _railTitle('作者的其他作品'),
             const SizedBox(height: 10),
             SizedBox(
               height: 208,
@@ -792,6 +958,27 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
               ),
             ),
           ],
+          if (_tagRecs.isNotEmpty) ...[
+            const SizedBox(height: 22),
+            _railTitle('你可能还喜欢'),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 208,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _tagRecs.length,
+                separatorBuilder: (context, index) =>
+                    const SizedBox(width: 10),
+                itemBuilder: (context, index) => MangaRailCard(
+                  item: _tagRecs[index],
+                  onTap: () => context.pushNamed(
+                    '/manga/detail',
+                    arguments: _tagRecs[index],
+                  ),
+                ),
+              ),
+            ),
+          ],
               ],
             ),
           ),
@@ -799,6 +986,32 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
       ),
     );
   }
+  /// Batch 92: companion-rail titles share the zone's
+  /// section look — the violet gradient bar used by the
+  /// explore/categories tab headers and the home sections —
+  /// instead of four bare text styles.
+  Widget _railTitle(String title) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        Container(
+          width: 4,
+          height: 20,
+          decoration: BoxDecoration(
+            gradient: VioletGlass.gradient,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 9),
+        Text(
+          title,
+          style: theme.textTheme.titleMedium
+              ?.copyWith(fontWeight: FontWeight.w800),
+        ),
+      ],
+    );
+  }
+
   /// Batch 15 (M4): my rating (half-star steps) + a short note.
   Widget _ratingCard(BuildContext context) {
     final theme = Theme.of(context);

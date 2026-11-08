@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:anikumo/bean/widget/empty_state_widget.dart';
 import 'package:anikumo/bean/widget/violet_components.dart';
+import 'package:anikumo/bean/widget/search_stage.dart';
 
 import '../../models/novel_item.dart';
 import '../../services/novel/novel_api.dart';
@@ -22,6 +23,7 @@ class NovelSearchPage extends StatefulWidget {
 
 class _NovelSearchPageState extends State<NovelSearchPage> {
   final _controller = TextEditingController();
+  final _focusNode = FocusNode();
   bool _allSources = false;
   bool _loading = false;
   bool _searched = false;
@@ -43,6 +45,7 @@ class _NovelSearchPageState extends State<NovelSearchPage> {
   @override
   void dispose() {
     _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -95,9 +98,8 @@ class _NovelSearchPageState extends State<NovelSearchPage> {
                     icon: const Icon(Icons.arrow_back_rounded),
                   ),
                   Expanded(
-                    child: VioletGlassCard(
-                      radius: 999,
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: SearchHeroShell(
+                      focusNode: _focusNode,
                       child: Row(
                         children: [
                           Icon(
@@ -109,6 +111,7 @@ class _NovelSearchPageState extends State<NovelSearchPage> {
                           Expanded(
                             child: TextField(
                               controller: _controller,
+                              focusNode: _focusNode,
                               autofocus: true,
                               textInputAction: TextInputAction.search,
                               decoration: const InputDecoration(
@@ -136,14 +139,22 @@ class _NovelSearchPageState extends State<NovelSearchPage> {
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
             child: Row(
               children: [
-                SegmentedButton<bool>(
-                  segments: const [
-                    ButtonSegment(value: false, label: Text('当前源')),
-                    ButtonSegment(value: true, label: Text('全部源')),
+                PillSwitch<bool>(
+                  options: const [
+                    PillSwitchOption(
+                      value: false,
+                      label: '当前源',
+                      icon: Icons.book_rounded,
+                    ),
+                    PillSwitchOption(
+                      value: true,
+                      label: '全部源',
+                      icon: Icons.library_books_rounded,
+                    ),
                   ],
-                  selected: {_allSources},
-                  onSelectionChanged: (selection) {
-                    setState(() => _allSources = selection.first);
+                  value: _allSources,
+                  onChanged: (value) {
+                    setState(() => _allSources = value);
                     if (_lastQuery.isNotEmpty) _search();
                   },
                 ),
@@ -164,7 +175,33 @@ class _NovelSearchPageState extends State<NovelSearchPage> {
           ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? ListView.builder(
+                    itemCount: 6,
+                    itemBuilder: (context, index) => const Padding(
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Row(
+                        children: [
+                          VioletSkeleton(width: 46, height: 62, radius: 8),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                VioletSkeleton(height: 12, radius: 6),
+                                SizedBox(height: 8),
+                                VioletSkeleton(
+                                  height: 10,
+                                  width: 120,
+                                  radius: 5,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
                 : !_searched
                     ? const GeneralEmptyState(
                         icon: Icons.menu_book_outlined,

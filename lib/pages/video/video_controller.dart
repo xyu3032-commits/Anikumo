@@ -835,9 +835,23 @@ abstract class _VideoPageController with Store implements Disposable {
     );
   }
 
+  /// Batch 113: while the in-app mini player session owns this
+  /// controller, route-scope disposal must not tear it down; the
+  /// session runs the real teardown via [disposeAfterMini].
+  bool adoptedByMiniPlayer = false;
+
   /// Called by Modular when the '/video' route scope is disposed.
   @override
   void dispose() {
+    if (adoptedByMiniPlayer) {
+      return;
+    }
+    disposeAfterMini();
+  }
+
+  /// Real teardown for a controller the mini session adopted.
+  void disposeAfterMini() {
+    adoptedByMiniPlayer = false;
     unawaited(fullscreen.close());
     _playbackSessions.cancel();
     _danmakuSessions.cancel();

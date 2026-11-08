@@ -77,11 +77,33 @@ class MangaApi {
     String keyword, {
     int limit = 30,
     int page = 1,
+  }) =>
+      searchMangaFor(active, keyword, limit: limit, page: page);
+
+  /// Batch 97: search ONE chosen source (the search page's
+  /// free source switching). Same memo and hard cap as the
+  /// active-source variant — the cap used to live only on
+  /// the active path (batch 95).
+  static Future<List<MangaItem>> searchMangaFor(
+    MangaSource source,
+    String keyword, {
+    int limit = 30,
+    int page = 1,
   }) async {
-    final key = '${active.id}|$keyword|$limit|$page';
+    final key = '${source.id}|$keyword|$limit|$page';
     final cached = _searchCache.get(key);
     if (cached != null) return cached;
-    final result = await active.search(keyword, limit: limit, page: page);
+    // Batch 95: hard cap. This await used to be unbounded:
+    // a JS source serializes its engine calls, and the
+    // engine's own timeout only starts when a call reaches
+    // the head of the queue — a call queued behind a wedged
+    // one (a source whose search/category code loops
+    // internally on an unusual keyword, some tag names
+    // among them) waited forever, and the search page's
+    // spinner with it.
+    final result = await source
+        .search(keyword, limit: limit, page: page)
+        .timeout(const Duration(seconds: 30));
     if (result.isNotEmpty) _searchCache.put(key, result);
     return result;
   }
@@ -265,10 +287,26 @@ class MangaApi {
     MangaSource source, {
     int limit = 20,
     int page = 1,
+    bool fresh = false,
   }) async {
-    final key = '${source.id}|$limit|$page';
-    final cached = _popularCache.get(key);
-    if (cached != null) return cached;
+    // Batch 96: the cache/snapshot key no longer contains
+    // [limit]. No current source type honours it (JS sources
+    // return their whole feed; the Legado adapter returns
+    // the site's own page) — it only fragmented the caches:
+    // the home section (limit 20) and the explore grid
+    // (limit 24) fetched the SAME list twice through the
+    // serialized engine, and the grid's disk-snapshot lookup
+    // missed the snapshot the home section had just written.
+    // One fetch now serves every caller. (Old limit-keyed
+    // snapshots simply age out of the store.)
+    final key = '${source.id}|P|$page';
+    // Batch 90: [fresh] (manual pull-refresh) bypasses the
+    // memo — a refresh that silently returns the 10-minute
+    // cache reads as "refresh does nothing / is broken".
+    if (!fresh) {
+      final cached = _popularCache.get(key);
+      if (cached != null) return cached;
+    }
     // Batch 40: aggregate timeout — a source that chains
     // several slow requests (or a JS source whose engine is
     // wedged) previously kept grids and home sections on
@@ -276,11 +314,14 @@ class MangaApi {
     // out per-source; this bounds the whole call so callers
     // land in their error states.
     // Batch 43: one automatic retry on transient flakes.
+    // Batch 96: the 30 s cap now wraps the RETRY as a whole.
+    // It used to sit inside, and TimeoutException counts as
+    // transient — a slow source burned 30 s, retried from
+    // scratch, and burned another 30 s before the grid saw
+    // anything. The total budget is 30 s, retry included.
     final result = await retryTransient(
-      () => source
-          .popular(limit: limit, page: page)
-          .timeout(const Duration(seconds: 30)),
-    );
+      () => source.popular(limit: limit, page: page),
+    ).timeout(const Duration(seconds: 30));
     if (result.isNotEmpty) {
       _popularCache.put(key, result);
       _writePopularSnapshot(key, result);
@@ -361,7 +402,10 @@ class MangaApi {
     int page = 1,
   }) {
     try {
-      final entry = _snapshotStore()['${source.id}|$limit|$page'];
+      // Batch 96: same unified key as fetchPopularFor —
+      // [limit] is accepted for call-site compatibility but
+      // no longer fragments the store.
+      final entry = _snapshotStore()['${source.id}|P|$page'];
       if (entry is! Map) return null;
       final ts = entry['ts'] as int? ?? 0;
       final age = DateTime.now().millisecondsSinceEpoch - ts;
@@ -386,21 +430,36 @@ class MangaApi {
   static Future<List<MangaItem>> fetchRecentlyUpdated({
     int limit = 20,
     int page = 1,
+    bool fresh = false,
   }) async {
     final source = MangaSources.activeOrNull();
     if (source == null) return const [];
-    return fetchUpdatedFor(source, limit: limit, page: page);
+    return fetchUpdatedFor(source, limit: limit, page: page, fresh: fresh);
   }
 
   static Future<List<MangaItem>> fetchUpdatedFor(
     MangaSource source, {
     int limit = 20,
     int page = 1,
+    bool fresh = false,
   }) async {
-    final key = '${source.id}|$limit|$page';
-    final cached = _updatedCache.get(key);
-    if (cached != null) return cached;
-    final result = await source.updated(limit: limit, page: page);
+    // Batch 96: own key space (U) — for the Legado adapter
+    // "updated" is a different feed than "popular", so the
+    // two must not share entries — but [limit] no longer
+    // fragments this cache either (see fetchPopularFor).
+    final key = '${source.id}|U|$page';
+    if (!fresh) {
+      final cached = _updatedCache.get(key);
+      if (cached != null) return cached;
+    }
+    // Batch 96: this call had NO timeout and NO retry at
+    // all — a wedged updated() held the home page's
+    // latest-updates rail on its skeleton indefinitely. It
+    // now gets the same treatment as popular: one transient
+    // retry inside a 30 s total budget.
+    final result = await retryTransient(
+      () => source.updated(limit: limit, page: page),
+    ).timeout(const Duration(seconds: 30));
     if (result.isNotEmpty) _updatedCache.put(key, result);
     return result;
   }

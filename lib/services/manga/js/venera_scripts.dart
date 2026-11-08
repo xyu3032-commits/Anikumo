@@ -71,6 +71,17 @@ function __anikumoPersist(key) {
 function __anikumoHostOf(url) {
   try { return new URL(url).hostname; } catch (e) { return ''; }
 }
+function __anikumoPersistJar() {
+  // Batch 101: the jar used to live and die inside this
+  // runtime — every engine kill and app restart forgot all
+  // cookies. Report each mutation to the host, which
+  // persists it (debounced) and restores it at spawn.
+  try {
+    globalThis.__dartSendMessage(
+        'anikumoPersistCookies',
+        JSON.stringify(globalThis.__anikumoJar || {}));
+  } catch (e) {}
+}
 function __anikumoCookieApply(host, cookies) {
   var jar = globalThis.__anikumoJar[host] ||
       (globalThis.__anikumoJar[host] = {});
@@ -84,6 +95,7 @@ function __anikumoCookieApply(host, cookies) {
       jar[c.name] = c.value;
     }
   });
+  __anikumoPersistJar();
 }
 function __anikumoCookie(msg) {
   var host = __anikumoHostOf(msg.url || '');
@@ -99,6 +111,7 @@ function __anikumoCookie(msg) {
   }
   if (msg.function === 'delete') {
     delete globalThis.__anikumoJar[host];
+    __anikumoPersistJar();
     return true;
   }
   return null;
@@ -130,6 +143,26 @@ function __anikumoHttp(msg) {
         return res;
       });
 }
+// Batch 103: the image bridge. The bundled library's Image
+// class calls sendMessage({method: 'image', ...})
+// SYNCHRONOUSLY and expects the new image key / size back as
+// a plain value (the reference runtime answers through a
+// synchronous native call). The host backs this channel with
+// a decoded-image registry in the engine isolate (dart
+// `image` package), so it can answer synchronously too.
+// Returns the envelope {ok, v, fmt?}; lib-facing callers
+// unwrap .v, dispatcher code reads the whole envelope.
+function __anikumoImageCall(payload) {
+  try {
+    var raw = globalThis.__dartSendMessage(
+        'anikumoImage', JSON.stringify(payload));
+    var env = JSON.parse(raw);
+    return (env && typeof env === 'object') ? env : { ok: false };
+  } catch (e) {
+    return { ok: false };
+  }
+}
+
 function sendMessage(msg) {
   var kv = __anikumoKvFor(msg && msg.key);
   if (msg && typeof msg === 'object') {
@@ -180,6 +213,12 @@ function sendMessage(msg) {
               var v = c === 'x' ? r : (r & 0x3 | 0x8);
               return v.toString(16);
             });
+      case 'image': {
+        // Batch 103: synchronous image ops for the library's
+        // Image class (used inside modifyImage snippets).
+        var ienv = __anikumoImageCall(msg);
+        return ienv.ok ? ienv.v : null;
+      }
       case 'http':
         return __anikumoHttp(msg);
       case 'UI':
@@ -477,13 +516,23 @@ function __anikumoParseHtml(html) {
 }
 
 function __anikumoParseCompound(text) {
-  var compound = {tag: null, id: null, classes: [], attrs: []};
-  var re = /(\*)|([a-zA-Z][\w-]*)|\.([\w-]+)|#([\w-]+)|\[([\w:-]+)(?:([~|^$*]?=)\s*("([^"]*)"|'([^']*)'|([^\]]*)))?\]/g;
+  var compound = {tag: null, id: null, classes: [], attrs: [], pseudos: []};
+  var re = /(\*)|([a-zA-Z][\w-]*)|\.([\w-]+)|#([\w-]+)|\[([\w:-]+)(?:([~|^$*]?=)\s*("([^"]*)"|'([^']*)'|([^\]]*)))?\]|:([a-zA-Z-]+)(?:\(([^)]*)\))?/g;
   var m;
   while ((m = re.exec(text)) !== null) {
     if (m[1] || m[2]) compound.tag = (m[1] || m[2]).toLowerCase();
     else if (m[3]) compound.classes.push(m[3]);
     else if (m[4]) compound.id = m[4];
+    else if (m[11]) {
+      // Batch 103: structural pseudo-classes (:nth-child
+      // and friends). Sources build selectors with them —
+      // previously the pseudo was silently dropped and the
+      // compound matched EVERY sibling.
+      compound.pseudos.push({
+        name: m[11].toLowerCase(),
+        arg: (m[12] || '').trim().toLowerCase(),
+      });
+    }
     else if (m[5]) {
       compound.attrs.push({
         name: m[5],
@@ -517,8 +566,69 @@ function __anikumoMatchesCompound(el, compound) {
     if (a.op === '$=' &&
         v.slice(v.length - a.value.length) !== a.value) return false;
     if (a.op === '~=' && v.split(/\s+/).indexOf(a.value) < 0) return false;
+    if (a.op === '|=' && v !== a.value && v.indexOf(a.value + '-') !== 0) {
+      return false;
+    }
+  }
+  for (var p = 0; p < compound.pseudos.length; p++) {
+    if (!__anikumoMatchesPseudo(el, compound.pseudos[p])) return false;
   }
   return true;
+}
+
+// Batch 103: :nth-child / :nth-of-type expression check.
+// `pos` is the 1-based position; supports odd / even /
+// plain integers / an+b forms (2n+1, n, -n+3, ...).
+function __anikumoNthMatches(expr, pos) {
+  if (expr === 'odd') return pos % 2 === 1;
+  if (expr === 'even') return pos % 2 === 0;
+  if (/^[+-]?\d+$/.test(expr)) return pos === parseInt(expr, 10);
+  var m = /^([+-]?\d*)n([+-]\d+)?$/.exec(expr.replace(/\s+/g, ''));
+  if (!m) return false;
+  var a = m[1] === '' || m[1] === '+' ? 1
+      : (m[1] === '-' ? -1 : parseInt(m[1], 10));
+  var b = m[2] ? parseInt(m[2], 10) : 0;
+  if (a === 0) return pos === b;
+  var d = pos - b;
+  return d % a === 0 && d / a >= 0;
+}
+
+function __anikumoMatchesPseudo(el, pseudo) {
+  var name = pseudo.name;
+  if (name === 'empty') {
+    // No element children and no non-whitespace text.
+    for (var i = 0; i < el.childNodes.length; i++) {
+      var n = el.childNodes[i];
+      if (n instanceof __AnikumoHtmlElement) return false;
+      if (typeof n === 'string' && n.trim() !== '') return false;
+    }
+    return true;
+  }
+  var isChild = name === 'first-child' || name === 'last-child' ||
+      name === 'nth-child';
+  var isOfType = name === 'first-of-type' || name === 'last-of-type' ||
+      name === 'nth-of-type';
+  if (!isChild && !isOfType) {
+    // Unknown/dynamic pseudo (:hover, :not, ...) — a static
+    // document has no state for it to match against.
+    return false;
+  }
+  var siblings = [];
+  var parent = el.parentNode;
+  if (parent) {
+    parent.childNodes.forEach(function (c) {
+      if (c instanceof __AnikumoHtmlElement) {
+        if (!isOfType || c.tagName === el.tagName) siblings.push(c);
+      }
+    });
+  } else {
+    siblings = [el];
+  }
+  var pos = siblings.indexOf(el) + 1;
+  if (pos === 0) return false;
+  if (name.indexOf('first') === 0) return pos === 1;
+  if (name.indexOf('last') === 0) return pos === siblings.length;
+  return __anikumoNthMatches(pseudo.arg, pos);
 }
 
 function __anikumoQueryAll(rootEl, selector) {
@@ -963,10 +1073,94 @@ function __anikumoSha256(input) {
   });
   return out;
 }
+// Batch 103: SHA-512 (the reference runtime's Convert has
+// it; one index source needs it for request signing). BigInt
+// does the 64-bit words — QuickJS-NG supports it natively.
+var __anikumoSha512K = null;
+function __anikumoSha512(input) {
+  if (!__anikumoSha512K) {
+    __anikumoSha512K = (
+      '428a2f98d728ae22 7137449123ef65cd b5c0fbcfec4d3b2f e9b5dba58189dbbc ' +
+      '3956c25bf348b538 59f111f1b605d019 923f82a4af194f9b ab1c5ed5da6d8118 ' +
+      'd807aa98a3030242 12835b0145706fbe 243185be4ee4b28c 550c7dc3d5ffb4e2 ' +
+      '72be5d74f27b896f 80deb1fe3b1696b1 9bdc06a725c71235 c19bf174cf692694 ' +
+      'e49b69c19ef14ad2 efbe4786384f25e3 0fc19dc68b8cd5b5 240ca1cc77ac9c65 ' +
+      '2de92c6f592b0275 4a7484aa6ea6e483 5cb0a9dcbd41fbd4 76f988da831153b5 ' +
+      '983e5152ee66dfab a831c66d2db43210 b00327c898fb213f bf597fc7beef0ee4 ' +
+      'c6e00bf33da88fc2 d5a79147930aa725 06ca6351e003826f 142929670a0e6e70 ' +
+      '27b70a8546d22ffc 2e1b21385c26c926 4d2c6dfc5ac42aed 53380d139d95b3df ' +
+      '650a73548baf63de 766a0abb3c77b2a8 81c2c92e47edaee6 92722c851482353b ' +
+      'a2bfe8a14cf10364 a81a664bbc423001 c24b8b70d0f89791 c76c51a30654be30 ' +
+      'd192e819d6ef5218 d69906245565a910 f40e35855771202a 106aa07032bbd1b8 ' +
+      '19a4c116b8d2d0c8 1e376c085141ab53 2748774cdf8eeb99 34b0bcb5e19b48a8 ' +
+      '391c0cb3c5c95a63 4ed8aa4ae3418acb 5b9cca4f7763e373 682e6ff3d6b2b8a3 ' +
+      '748f82ee5defb2fc 78a5636f43172f60 84c87814a1f0ab72 8cc702081a6439ec ' +
+      '90befffa23631e28 a4506cebde82bde9 bef9a3f7b2c67915 c67178f2e372532b ' +
+      'ca273eceea26619c d186b8c721c0c207 eada7dd6cde0eb1e f57d4f7fee6ed178 ' +
+      '06f067aa72176fba 0a637dc5a2c898a6 113f9804bef90dae 1b710b35131c471b ' +
+      '28db77f523047d84 32caab7b40c72493 3c9ebe0a15c9bebc 431d67c49c100d4c ' +
+      '4cc5d4becb3e42b6 597f299cfc657e2a 5fcb6fab3ad6faec 6c44198c4a475817'
+    ).split(/\s+/).map(function (h) { return BigInt('0x' + h); });
+  }
+  var K = __anikumoSha512K;
+  var MASK = (1n << 64n) - 1n;
+  function rotr(x, n) { return ((x >> n) | (x << (64n - n))) & MASK; }
+  var H = (
+    '6a09e667f3bcc908 bb67ae8584caa73b 3c6ef372fe94f82b a54ff53a5f1d36f1 ' +
+    '510e527fade682d1 9b05688c2b3e6c1f 1f83d9abfb41bd6b 5be0cd19137e2179'
+  ).split(/\s+/).map(function (h) { return BigInt('0x' + h); });
+  var bytes = __anikumoBytes(input);
+  var bitLen = BigInt(bytes.length) * 8n;
+  var padded = new Uint8Array(((bytes.length + 17 + 127) >> 7) << 7);
+  padded.set(bytes);
+  padded[bytes.length] = 0x80;
+  for (var i = 0; i < 8; i++) {
+    padded[padded.length - 1 - i] = Number((bitLen >> BigInt(i * 8)) & 0xffn);
+  }
+  var W = new Array(80);
+  for (var block = 0; block < padded.length; block += 128) {
+    for (var t = 0; t < 16; t++) {
+      var w = 0n;
+      for (var j = 0; j < 8; j++) {
+        w = (w << 8n) | BigInt(padded[block + t * 8 + j]);
+      }
+      W[t] = w;
+    }
+    for (var t2 = 16; t2 < 80; t2++) {
+      var s0 = rotr(W[t2 - 15], 1n) ^ rotr(W[t2 - 15], 8n) ^ (W[t2 - 15] >> 7n);
+      var s1 = rotr(W[t2 - 2], 19n) ^ rotr(W[t2 - 2], 61n) ^ (W[t2 - 2] >> 6n);
+      W[t2] = (W[t2 - 16] + s0 + W[t2 - 7] + s1) & MASK;
+    }
+    var a = H[0], b = H[1], c = H[2], d = H[3];
+    var e = H[4], f = H[5], g = H[6], h = H[7];
+    for (var r = 0; r < 80; r++) {
+      var S1 = rotr(e, 14n) ^ rotr(e, 18n) ^ rotr(e, 41n);
+      var ch = (e & f) ^ ((~e & MASK) & g);
+      var temp1 = (h + S1 + ch + K[r] + W[r]) & MASK;
+      var S0 = rotr(a, 28n) ^ rotr(a, 34n) ^ rotr(a, 39n);
+      var maj = (a & b) ^ (a & c) ^ (b & c);
+      var temp2 = (S0 + maj) & MASK;
+      h = g; g = f; f = e; e = (d + temp1) & MASK;
+      d = c; c = b; b = a; a = (temp1 + temp2) & MASK;
+    }
+    H[0] = (H[0] + a) & MASK; H[1] = (H[1] + b) & MASK;
+    H[2] = (H[2] + c) & MASK; H[3] = (H[3] + d) & MASK;
+    H[4] = (H[4] + e) & MASK; H[5] = (H[5] + f) & MASK;
+    H[6] = (H[6] + g) & MASK; H[7] = (H[7] + h) & MASK;
+  }
+  var out = new Uint8Array(64);
+  H.forEach(function (w, wi) {
+    for (var j = 0; j < 8; j++) {
+      out[wi * 8 + j] = Number((w >> BigInt((7 - j) * 8)) & 0xffn);
+    }
+  });
+  return out;
+}
 function __anikumoHash(name, value) {
   if (name === 'md5') return __anikumoMd5(value);
   if (name === 'sha1') return __anikumoSha1(value);
   if (name === 'sha256') return __anikumoSha256(value);
+  if (name === 'sha512') return __anikumoSha512(value);
   throw new Error('anikumo: 不支持的哈希 ' + name);
 }
 function __anikumoHmac(key, value, hash) {
@@ -1000,6 +1194,7 @@ Convert.hexEncode = function (bytes) { return __anikumoHex(__anikumoBytes(bytes)
 Convert.md5 = function (value) { return __anikumoMd5(value).buffer; };
 Convert.sha1 = function (value) { return __anikumoSha1(value).buffer; };
 Convert.sha256 = function (value) { return __anikumoSha256(value).buffer; };
+Convert.sha512 = function (value) { return __anikumoSha512(value).buffer; };
 Convert.hmac = function (key, value, hash) {
   return __anikumoHmac(key, value, hash).buffer;
 };
@@ -1358,6 +1553,61 @@ globalThis.__anikumoRegisterInstance = function (sourceKey, instance) {
     }
   }
 };
+// Batch 102: onResponse byte transforms. A config whose
+// onResponse is a function cannot cross the bridge (functions
+// are not data), so the function stays here in a registry
+// keyed by source + kind + the ORIGINAL url the hook was
+// called with; the config that crosses carries only
+// `transform: true`, and the host sends the downloaded bytes
+// back through the 'transformImage' call kind. The registry
+// is capped (oldest registrations drop out) — a missing entry
+// is re-registered lazily by re-running the hook, which also
+// covers a host restart wiping this runtime.
+globalThis.__anikumoTx = globalThis.__anikumoTx || {};
+function __anikumoTxKey(sourceKey, mode, url) {
+  return sourceKey + '|' + mode + '|' + url;
+}
+function __anikumoTxRegister(sourceKey, mode, url, fn) {
+  var key = __anikumoTxKey(sourceKey, mode, url);
+  var reg = globalThis.__anikumoTx;
+  if (!(key in reg)) {
+    var keys = Object.keys(reg);
+    if (keys.length >= 512) delete reg[keys[0]];
+  }
+  reg[key] = fn;
+}
+// Normalizes one hook config for the trip to the host:
+// function fields cannot cross the isolate boundary, so
+// they are registered here under (mode, original url) and
+// the copy is flagged instead.
+//   onResponse   -> registered ('image'/'thumb'), `transform`
+//   onLoadFailed -> registered ('fallback'), `fallback`
+//                   (page images only — the reference runtime
+//                   ignores it for thumbnails)
+//   modifyImage  -> a code STRING in the reference runtime's
+//                   contract; strings cross as-is under the
+//                   `modify` key (page images only).
+function __anikumoNormalizeCfg(sourceKey, mode, url, cfg) {
+  var copy = {};
+  for (var k in cfg) copy[k] = cfg[k];
+  if (typeof cfg.onResponse === 'function') {
+    __anikumoTxRegister(sourceKey, mode, url, cfg.onResponse);
+    copy.transform = true;
+  }
+  if (mode === 'image') {
+    if (typeof cfg.onLoadFailed === 'function') {
+      __anikumoTxRegister(sourceKey, 'fallback', url, cfg.onLoadFailed);
+      copy.fallback = true;
+    }
+    if (typeof cfg.modifyImage === 'string' && cfg.modifyImage) {
+      copy.modify = cfg.modifyImage;
+    }
+  }
+  delete copy.onResponse;
+  delete copy.onLoadFailed;
+  delete copy.modifyImage;
+  return copy;
+}
 globalThis.__anikumoCall = async function (sourceKey, kind, args) {
   var src = globalThis.__anikumoSources[sourceKey];
   if (!src) throw new Error('source not initialized: ' + sourceKey);
@@ -1403,6 +1653,194 @@ globalThis.__anikumoCall = async function (sourceKey, kind, args) {
     r = await src.comic.loadInfo(args.id);
   } else if (kind === 'loadEp') {
     r = await src.comic.loadEp(args.id, args.ep);
+  } else if (kind === 'imageConfigs') {
+    // Batch 88: comic.onImageLoad was never invoked — sources
+    // that sign page URLs, exchange an image key, or attach
+    // per-image headers (18 of the 33 index sources define it)
+    // served pages this app could not load. Resolve every URL
+    // in ONE call, in parallel on the JS side; a per-image
+    // failure or a missing hook yields null for that slot and
+    // the host keeps the original page.
+    var ihook = src.comic && src.comic.onImageLoad;
+    if (typeof ihook !== 'function') return null;
+    var iurls = Array.isArray(args.urls) ? args.urls : [];
+    r = await Promise.all(iurls.map(async function (u) {
+      try {
+        var cfg = await ihook.call(src.comic, u, args.id, args.ep);
+        if (!cfg || typeof cfg !== 'object') return null;
+        // Batch 102/103: function-bearing configs are
+        // normalized — onResponse (byte transform),
+        // onLoadFailed (fallback config) and modifyImage
+        // (image-edit code) become registry entries + flags.
+        return __anikumoNormalizeCfg(sourceKey, 'image', u, cfg);
+      } catch (e) {
+        return null;
+      }
+    }));
+  } else if (kind === 'thumbnailConfigs') {
+    // Batch 88: comic.onThumbnailLoad, same story for covers
+    // (15 of 33 sources): host/CDN rewrites and Referer headers
+    // that list and detail covers need to load at all.
+    var thook = src.comic && src.comic.onThumbnailLoad;
+    if (typeof thook !== 'function') return null;
+    var turls = Array.isArray(args.urls) ? args.urls : [];
+    r = await Promise.all(turls.map(async function (u) {
+      try {
+        var cfg = await thook.call(src.comic, u);
+        if (!cfg || typeof cfg !== 'object') return null;
+        // Batch 102/103: same normalization as page images,
+        // under the 'thumb' mode (fallback/modify are
+        // page-only in the reference runtime).
+        return __anikumoNormalizeCfg(sourceKey, 'thumb', u, cfg);
+      } catch (e) {
+        return null;
+      }
+    }));
+  } else if (kind === 'transformImage') {
+    // Batch 102: run a registered onResponse over downloaded
+    // bytes. A registry miss (host restart, cap eviction)
+    // re-runs the hook for this one url to re-register.
+    var tmode = args.mode === 'thumb' ? 'thumb' : 'image';
+    var tkey = __anikumoTxKey(sourceKey, tmode, args.url);
+    var tfn = globalThis.__anikumoTx[tkey];
+    if (typeof tfn !== 'function') {
+      var thook2 = tmode === 'thumb'
+          ? (src.comic && src.comic.onThumbnailLoad)
+          : (src.comic && src.comic.onImageLoad);
+      if (typeof thook2 === 'function') {
+        var tcfg = tmode === 'thumb'
+            ? await thook2.call(src.comic, args.url)
+            : await thook2.call(
+                  src.comic, args.url, args.id || '', args.ep || '');
+        if (tcfg && typeof tcfg === 'object') {
+          // Batch 103: normalize on the re-run too, so the
+          // sibling registrations (fallback / modify) are
+          // refreshed alongside the transform.
+          __anikumoNormalizeCfg(sourceKey, tmode, args.url, tcfg);
+          tfn = globalThis.__anikumoTx[tkey];
+        }
+      }
+    }
+    if (typeof tfn !== 'function') {
+      r = { ok: false };
+    } else {
+      var traw = __anikumoB64Decode(args.dataB64 || '');
+      var tresp = { data: traw, status: 200, headers: {} };
+      var tout = await tfn(tresp);
+      var tbytes = null;
+      if (tout && tout.data !== undefined && tout.data !== null) {
+        tbytes = tout.data;
+      } else if (tout instanceof Uint8Array ||
+          tout instanceof ArrayBuffer) {
+        tbytes = tout;
+      } else if (tout === undefined || tout === null) {
+        // In-place mutation style: the source edited
+        // resp.data and returned nothing.
+        tbytes = tresp.data;
+      }
+      if (tbytes instanceof ArrayBuffer) {
+        tbytes = new Uint8Array(tbytes);
+      }
+      if (tbytes && typeof tbytes.length === 'number') {
+        r = { ok: true, dataB64: __anikumoB64Encode(tbytes) };
+      } else {
+        r = { ok: false };
+      }
+    }
+  } else if (kind === 'loadFailed') {
+    // Batch 103: a page download failed and the config for
+    // the original url carried onLoadFailed — ask it for a
+    // replacement config (mirror host, alternate CDN). The
+    // replacement is normalized like any hook config, so a
+    // fallback may itself carry transform/modify/fallback.
+    var fkey = __anikumoTxKey(sourceKey, 'fallback', args.url);
+    var ffn = globalThis.__anikumoTx[fkey];
+    if (typeof ffn !== 'function') {
+      var fhook = src.comic && src.comic.onImageLoad;
+      if (typeof fhook === 'function') {
+        var fcfg0 = await fhook.call(
+            src.comic, args.url, args.id || '', args.ep || '');
+        if (fcfg0 && typeof fcfg0 === 'object') {
+          __anikumoNormalizeCfg(sourceKey, 'image', args.url, fcfg0);
+          ffn = globalThis.__anikumoTx[fkey];
+        }
+      }
+    }
+    if (typeof ffn !== 'function') {
+      r = null;
+    } else {
+      var fcfg = await ffn.call(src.comic);
+      if (!fcfg || typeof fcfg !== 'object') {
+        r = null;
+      } else {
+        r = __anikumoNormalizeCfg(
+            sourceKey, 'image', fcfg.url || args.url, fcfg);
+      }
+    }
+  } else if (kind === 'modifyImage') {
+    // Batch 103: run a config's modifyImage code string over
+    // downloaded bytes. The snippet defines a function named
+    // `modifyImage` (the reference runtime's contract); it
+    // receives an Image backed by the host's synchronous
+    // image registry and returns the edited Image. Output is
+    // re-encoded in the input's format family (jpeg stays
+    // jpeg) so reassembled pages don't balloon as PNGs.
+    var mcreated = __anikumoImageCall({
+      method: 'image', 'function': 'createFromBytes',
+      dataB64: args.dataB64 || '',
+    });
+    if (!mcreated.ok) {
+      r = { ok: false };
+    } else {
+      var mfn = null;
+      try {
+        mfn = (0, eval)(String(args.code || '') + '\n;modifyImage;');
+      } catch (e) {
+        mfn = null;
+      }
+      if (typeof mfn !== 'function') {
+        try {
+          var malt = (0, eval)(String(args.code || ''));
+          if (typeof malt === 'function') mfn = malt;
+        } catch (e) {}
+      }
+      if (typeof mfn !== 'function') {
+        r = { ok: false };
+      } else {
+        try {
+          var mimg = new Image(mcreated.v);
+          var mout = mfn(mimg);
+          if (mout && typeof mout.then === 'function') {
+            mout = await mout;
+          }
+          var mkey = (mout && typeof mout.key === 'number')
+              ? mout.key
+              : mcreated.v;
+          var menc = __anikumoImageCall({
+            method: 'image', 'function': 'encode',
+            key: mkey, fmt: mcreated.fmt || '',
+          });
+          r = menc.ok
+              ? { ok: true, dataB64: menc.v }
+              : { ok: false };
+        } catch (e) {
+          r = { ok: false };
+        }
+      }
+      __anikumoImageCall({ method: 'image', 'function': 'releaseAll' });
+    }
+  } else if (kind === 'loadThumbnails') {
+    // Batch 103: comic.loadThumbnails(id) — preview page
+    // urls for the detail screen. Null when the source has
+    // no such hook (distinct from an empty list).
+    if (src.comic && typeof src.comic.loadThumbnails === 'function') {
+      var tlist = await src.comic.loadThumbnails(args.id);
+      r = Array.isArray(tlist)
+          ? tlist.filter(function (u) { return typeof u === 'string'; })
+          : [];
+    } else {
+      r = null;
+    }
   } else if (kind === 'account') {
     // Batch 74: account surface (picacg/jm/kavita shape):
     // {login(account, pwd), logout(), registerWebsite}.

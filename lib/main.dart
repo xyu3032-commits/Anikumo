@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:anikumo/app_module.dart';
 import 'package:anikumo/app_widget.dart';
+import 'package:anikumo/splash_gate.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:anikumo/bean/settings/theme_provider.dart';
 import 'package:path_provider/path_provider.dart';
@@ -23,6 +24,7 @@ import 'package:anikumo/services/platform/desktop_window_config.dart';
 import 'package:anikumo/services/platform/webview_feature_service.dart';
 import 'package:anikumo/bean/dialog/dialog_helper.dart';
 import 'package:anikumo/navigation.dart';
+import 'package:anikumo/services/player/mini_player_session.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -115,12 +117,18 @@ void main() async {
     ModularApp(
       module: appModule,
       navigatorKey: rootNavigatorKey,
-      navigatorObservers: [AnikumoDialog.observer, rootRouteObserver],
+      navigatorObservers: [
+        AnikumoDialog.observer,
+        rootRouteObserver,
+        miniPlayerRouteObserver,
+      ],
       defaultTransition: TransitionType.material,
       provide: (scoped) {
         scoped.addChangeNotifier<ThemeProvider>(ThemeProvider.new);
       },
-      child: const AppWidget(),
+      // Batch 93: the animated launch intro overlays the
+      // real app (which builds underneath it) on cold start.
+      child: const SplashGate(child: AppWidget()),
     ),
   );
 }

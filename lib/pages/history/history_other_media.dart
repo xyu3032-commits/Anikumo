@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:anikumo/bean/card/network_img_layer.dart';
+import 'package:anikumo/bean/dialog/dialog_helper.dart';
 import 'package:anikumo/modules/history/history_module.dart';
 import 'package:anikumo/modules/manga/manga_item.dart';
 import 'package:anikumo/services/library/user_library.dart';
@@ -158,12 +159,46 @@ class _CrossHistoryListView extends StatelessWidget {
     required this.emptyText,
     required this.showKindTag,
     required this.onReturn,
+    this.onDeleteEntry,
   });
 
   final List<CrossHistoryEntry> entries;
   final String emptyText;
   final bool showKindTag;
   final VoidCallback onReturn;
+
+  /// Batch 98: per-row browsing-history deletion for the
+  /// manga / novel entries (anime entries keep the anime
+  /// mode's own delete flow). Null hides the affordance.
+  final Future<void> Function(CrossHistoryEntry entry)? onDeleteEntry;
+
+  Future<void> _confirmAndDelete(
+    BuildContext context,
+    CrossHistoryEntry entry,
+  ) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除这条记录？'),
+        content: Text('将移除《${entry.title}》的阅读进度，此操作无法撤销。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await onDeleteEntry!(entry);
+    if (context.mounted) {
+      AnikumoDialog.showToast(context: context, message: '已删除');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -238,6 +273,14 @@ class _CrossHistoryListView extends StatelessWidget {
                     ),
                   ),
                 ],
+                if (onDeleteEntry != null &&
+                    (entry.mangaProgress != null ||
+                        entry.novelProgress != null))
+                  IconButton(
+                    tooltip: '删除记录',
+                    icon: const Icon(Icons.delete_outline_rounded),
+                    onPressed: () => _confirmAndDelete(context, entry),
+                  ),
               ],
             ),
           ),
@@ -265,6 +308,12 @@ class _MangaHistoryListState extends State<MangaHistoryList> {
       emptyText: '还没有漫画阅读记录',
       showKindTag: false,
       onReturn: () => setState(() {}),
+      onDeleteEntry: (entry) async {
+        final progress = entry.mangaProgress;
+        if (progress == null) return;
+        await MangaLibraryStore.removeProgress(progress.key);
+        if (mounted) setState(() {});
+      },
     );
   }
 }
@@ -285,6 +334,12 @@ class _NovelHistoryListState extends State<NovelHistoryList> {
       emptyText: '还没有小说阅读记录',
       showKindTag: false,
       onReturn: () => setState(() {}),
+      onDeleteEntry: (entry) async {
+        final progress = entry.novelProgress;
+        if (progress == null) return;
+        await NovelLibraryStore.removeProgress(progress.item.storageKey);
+        if (mounted) setState(() {});
+      },
     );
   }
 }
@@ -314,6 +369,20 @@ class _AllHistoryListState extends State<AllHistoryList> {
       emptyText: '还没有任何记录',
       showKindTag: true,
       onReturn: () => setState(() {}),
+      onDeleteEntry: (entry) async {
+        // Only manga / novel rows carry the button; anime
+        // records stay owned by the anime mode's flow.
+        if (entry.mangaProgress != null) {
+          await MangaLibraryStore.removeProgress(entry.mangaProgress!.key);
+        } else if (entry.novelProgress != null) {
+          await NovelLibraryStore.removeProgress(
+            entry.novelProgress!.item.storageKey,
+          );
+        } else {
+          return;
+        }
+        if (mounted) setState(() {});
+      },
     );
   }
 }

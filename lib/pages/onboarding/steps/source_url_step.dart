@@ -53,9 +53,9 @@ class MangaSourceUrlStep extends StatelessWidget {
         icon: Icons.menu_book_rounded,
         shape: OnboardingIconShape.cookie,
         title: '添加漫画来源',
-        subtitle: '粘贴你自己的 Venera JS 漫画源文件 URL。',
+        subtitle: '粘贴你自己的 JS 漫画源文件 URL。',
         fieldLabel: '漫画源 URL',
-        hint: 'https://…/source.js（Venera JS 源文件直链）',
+        hint: 'https://…/source.js（JS 源文件直链）',
         importer: (text) async {
           if (!isBareRuleUrl(text)) {
             throw const FormatException('请粘贴以 http 开头的源文件链接');
@@ -98,7 +98,7 @@ class NovelSourceUrlStep extends StatelessWidget {
         icon: Icons.auto_stories_rounded,
         shape: OnboardingIconShape.flower,
         title: '添加小说来源',
-        subtitle: '粘贴你自己的 Legado 书源 URL（JSON 或合集链接）。',
+        subtitle: '粘贴你自己的书源 URL（JSON 或合集链接）。',
         fieldLabel: '小说书源 URL',
         hint: 'https://…/sources.json',
         importer: (text) async {

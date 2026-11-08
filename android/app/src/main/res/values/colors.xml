@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#2B1854</color>
+    <!-- Batch 93: launch splash field (deep violet night). -->
+    <color name="splash_bg">#170F2A</color>
 </resources>

@@ -5,6 +5,7 @@ import 'dart:isolate';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_qjs/flutter_qjs.dart';
+import 'package:image/image.dart' as img;
 import 'package:anikumo/services/manga/js/gbk_table.dart';
 import 'package:anikumo/services/manga/js/manga_ui_gateway.dart';
 import 'package:anikumo/services/manga/js/venera_bridge.dart';
@@ -74,11 +75,23 @@ class VeneraEngine {
     return match?.group(1);
   }
 
-  // ---- per-source call serialization (kept from batch 31) --
-  // Calls into one source run strictly one at a time: sources
-  // keep conversational state (tokens, device ids, page
-  // cursors) that interleaved calls from the same source can
-  // corrupt. Different sources still run concurrently.
+  // ---- call concurrency (batch 101, reworking batch 31) --
+  // Batch 31 serialized EVERY call into one source: sources
+  // keep conversational state that interleaved calls could
+  // corrupt. But the strict queue also meant a slow search
+  // blocked the same source's detail/chapter/image calls
+  // behind its full round trip — a standing "half the taps
+  // feel stuck" tax, and not how the reference runtime
+  // behaves: Venera dispatches concurrently, and sources
+  // are written for it (the shared runtime already
+  // interleaves different sources' calls at every bridge
+  // await). Batch 101 keeps serialization ONLY for the
+  // kinds that mutate conversational state — login/logout
+  // (auth tokens, UI-driven captcha flows). All read kinds
+  // (search, explore, categories, categoryComics, loadInfo,
+  // loadEp, imageConfigs, thumbnailConfigs, account) go
+  // straight through and interleave at await points.
+  static const _serialKinds = {'login', 'logout'};
   Future<void> _callTail = Future<void>.value();
   int _activeCalls = 0;
 
@@ -91,6 +104,10 @@ class VeneraEngine {
       );
     }
     _activeCalls++;
+    if (!_serialKinds.contains(kind)) {
+      return _callInner(kind, args)
+          .whenComplete(() => _activeCalls--);
+    }
     final run = _callTail.then((_) => _callInner(kind, args));
     _callTail = run.then<void>((_) {}, onError: (_) {});
     return run.whenComplete(() => _activeCalls--);
@@ -100,17 +117,41 @@ class VeneraEngine {
     // Batch 74: login gets a longer leash — the source may
     // pop a captcha input dialog (UI channel) and wait for
     // the user to read and type the code.
+    // Batch 90: content calls get 60 s, matching the facade
+    // budgets (fetchChapters / fetchChapterPages allow
+    // 60 s). At 40 s a merely SLOW source — multi-request
+    // loadInfo on a long series, a sleepy site — was killed
+    // as "wedged" and, the host being shared, took every
+    // other source's in-flight calls down with it: one
+    // concrete shape of "sometimes readable, sometimes
+    // not". A truly wedged call still dies at the cap.
     final timeout =
-        kind == 'login' ? const Duration(seconds: 180) : const Duration(seconds: 40);
+        kind == 'login' ? const Duration(seconds: 180) : const Duration(seconds: 60);
     return _callInnerBody(kind, args).timeout(
       timeout,
-      onTimeout: () {
-        // A call that outlives 40s is wedged. Kill the whole
-        // isolate (the runtime may be poisoned) — it respawns
-        // lazily and sources re-register from their stored
-        // code, so the next call starts from a clean engine.
-        QjsEngineHost.instance.kill();
-        throw TimeoutException('JS 源调用超时（$kind），已重置引擎');
+      onTimeout: () async {
+        // Batch 101: a timeout is no longer an automatic
+        // death sentence for the whole engine. The old rule
+        // killed the shared isolate on ANY 60 s call, so one
+        // slow source reset every other source's in-flight
+        // work (the batch-43 self-repair then had to redo
+        // them all on a cold engine). Most timeouts are a
+        // call merely suspended on a slow network await —
+        // the runtime's event loop is perfectly alive. So:
+        // probe the host first. Only a host that cannot
+        // answer a ping (its thread is truly wedged, e.g. a
+        // synchronous JS infinite loop) gets killed; a live
+        // host keeps everyone's work and only THIS call
+        // fails. (A user slowly typing a login captcha also
+        // stops being an engine-kill offence: the loop is
+        // free while the call waits on the UI channel.)
+        final reset =
+            await QjsEngineHost.instance.probeAndKillIfWedged();
+        throw TimeoutException(
+          reset
+              ? 'JS 源调用超时（$kind），引擎卡死已重置'
+              : 'JS 源调用超时（$kind）',
+        );
       },
     );
   }
@@ -222,6 +263,44 @@ class VeneraEngine {
       debugPrint('[venera:$key] kv persist failed: $e');
     }
   }
+
+  // ---- persisted cookie jar (batch 101) -------------------
+  // The jar itself lives in the JS runtime (host → name →
+  // value); until this batch it died with the isolate, so
+  // every engine kill and every app restart forgot all
+  // anti-bot/session cookies and sources had to re-earn
+  // them (a quiet source of first-load 403s). The runtime
+  // now reports jar changes over the 'cookies' message and
+  // the host restores the jar at spawn.
+
+  static String cookiesJson() {
+    final raw = GStorage.getSetting(SettingsKeys.mangaJsCookiesJson);
+    if (raw.isEmpty || raw.length > 256 * 1024) return '{}';
+    try {
+      return jsonDecode(raw) is Map ? raw : '{}';
+    } catch (_) {
+      return '{}';
+    }
+  }
+
+  static String? _pendingCookies;
+  static Timer? _cookiesTimer;
+
+  static void persistCookies(String jarJson) {
+    if (jarJson.length > 256 * 1024) return;
+    _pendingCookies = jarJson;
+    // Jar updates ride along with responses (every
+    // set-cookie); coalesce the disk writes.
+    _cookiesTimer?.cancel();
+    _cookiesTimer = Timer(const Duration(milliseconds: 800), () {
+      final pending = _pendingCookies;
+      _pendingCookies = null;
+      if (pending == null) return;
+      unawaited(
+        GStorage.putSetting(SettingsKeys.mangaJsCookiesJson, pending),
+      );
+    });
+  }
 }
 
 /// The UI-isolate side of the shared engine: owns the isolate,
@@ -275,7 +354,11 @@ class QjsEngineHost {
     receive.listen(_onMessage);
     _isolate = await Isolate.spawn(
       _qjsIsolateMain,
-      _QjsInit(receive.sendPort, _libraryCache!),
+      _QjsInit(
+        receive.sendPort,
+        _libraryCache!,
+        cookiesJson: VeneraEngine.cookiesJson(),
+      ),
       debugName: 'anikumo-qjs-engine',
     );
     await ready.future.timeout(
@@ -308,6 +391,10 @@ class QjsEngineHost {
         final libKey = message[1]?.toString() ?? '';
         final jsKey = _libToJsKey[libKey] ?? libKey;
         VeneraEngine.persistKv(jsKey, message[2]?.toString() ?? '{}');
+      case 'cookies':
+        // Batch 101: the JS cookie jar changed; persist it
+        // (debounced) so it survives engine/app restarts.
+        VeneraEngine.persistCookies(message[1]?.toString() ?? '{}');
       case 'ui':
         // Batch 74: a source asked for UI (dialog / input /
         // toast). Render it here on the UI isolate and send
@@ -352,6 +439,36 @@ class QjsEngineHost {
     _failAll(StateError('JS 引擎已重置'));
     _isolate?.kill(priority: Isolate.immediate);
     _teardown();
+  }
+
+  Future<bool>? _probeFuture;
+
+  /// Batch 101: liveness probe used by call timeouts.
+  /// Sends a no-op ping task: a host whose JS thread is
+  /// merely busy-or-waiting answers immediately (its event
+  /// loop is free); a host wedged in a synchronous JS loop
+  /// can never take the message, so the ping times out and
+  /// the host is killed. Returns true when a reset happened
+  /// (or was already in flight). Concurrent probes join the
+  /// same future — a burst of timeouts probes once.
+  Future<bool> probeAndKillIfWedged() {
+    return _probeFuture ??= _probe().whenComplete(() {
+      _probeFuture = null;
+    });
+  }
+
+  Future<bool> _probe() async {
+    final gen = generation;
+    try {
+      await _task(['ping']).timeout(const Duration(seconds: 3));
+      return false;
+    } catch (_) {
+      // No answer (or the host is down): kill only the
+      // generation we probed — a fresher host that replaced
+      // it in the meantime is healthy by construction.
+      if (generation == gen) kill();
+      return true;
+    }
   }
 
   Future<String> _task(List<dynamic> message) async {
@@ -415,7 +532,7 @@ class QjsEngineHost {
 }
 
 class _QjsInit {
-  const _QjsInit(this.uiPort, this.library);
+  const _QjsInit(this.uiPort, this.library, {this.cookiesJson = '{}'});
 
   final SendPort uiPort;
 
@@ -423,11 +540,145 @@ class _QjsInit {
   /// console downgrade already applied on the UI side, where
   /// rootBundle lives).
   final String library;
+
+  /// Batch 101: the persisted cookie jar JSON, restored
+  /// into the fresh runtime at spawn.
+  final String cookiesJson;
 }
 
 /// The isolate entry: owns the FlutterQjs runtime, injects
 /// the bridge as a real Dart function, evaluates the shared
 /// scripts once, then serves register/call tasks.
+/// Batch 103: decoded-image registry backing the library's
+/// synchronous Image API (used by modifyImage snippets to
+/// descramble pages). Lives in the engine isolate; JS only
+/// ever holds integer keys, exactly like the reference
+/// runtime. Entries are released wholesale after each
+/// modifyImage run, and the map self-caps as a backstop.
+final Map<int, img.Image> _anikumoImageRegistry = <int, img.Image>{};
+int _anikumoImageSeq = 0;
+
+String _anikumoImageReply({required bool ok, Object? v, String? fmt}) {
+  return jsonEncode(<String, Object?>{
+    'ok': ok,
+    'v': v,
+    'fmt': ?fmt,
+  });
+}
+
+String _sniffImageFormat(List<int> bytes) {
+  if (bytes.length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xD8) {
+    return 'jpeg';
+  }
+  if (bytes.length >= 4 && bytes[0] == 0x89 && bytes[1] == 0x50) {
+    return 'png';
+  }
+  if (bytes.length >= 3 && bytes[0] == 0x47 && bytes[1] == 0x49) {
+    return 'gif';
+  }
+  if (bytes.length >= 12 && bytes[8] == 0x57 && bytes[9] == 0x45) {
+    return 'webp';
+  }
+  return 'other';
+}
+
+/// Handles one `anikumoImage` channel message SYNCHRONOUSLY
+/// (all ops are CPU work in the `image` package) and returns
+/// the JSON envelope string the JS shim unwraps.
+String _anikumoImageOpSync(String payload) {
+  try {
+    final decoded = jsonDecode(payload);
+    if (decoded is! Map) return _anikumoImageReply(ok: false);
+    final msg = decoded.cast<String, dynamic>();
+    final fn = msg['function']?.toString() ?? '';
+    int intOf(String name) => (msg[name] as num?)?.toInt() ?? 0;
+    img.Image? imageOf(String name) =>
+        _anikumoImageRegistry[(msg[name] as num?)?.toInt()];
+    int register(img.Image image) {
+      if (_anikumoImageRegistry.length >= 32) {
+        _anikumoImageRegistry.clear();
+      }
+      final key = ++_anikumoImageSeq;
+      _anikumoImageRegistry[key] = image;
+      return key;
+    }
+
+    switch (fn) {
+      case 'createFromBytes':
+        final bytes = base64Decode(msg['dataB64']?.toString() ?? '');
+        final image = img.decodeImage(bytes);
+        if (image == null) return _anikumoImageReply(ok: false);
+        return _anikumoImageReply(
+          ok: true,
+          v: register(image),
+          fmt: _sniffImageFormat(bytes),
+        );
+      case 'encode':
+        final image = imageOf('key');
+        if (image == null) return _anikumoImageReply(ok: false);
+        final bytes = msg['fmt']?.toString() == 'jpeg'
+            ? img.encodeJpg(image, quality: 96)
+            : img.encodePng(image);
+        return _anikumoImageReply(ok: true, v: base64Encode(bytes));
+      case 'copyRange':
+        final image = imageOf('key');
+        if (image == null) return _anikumoImageReply(ok: true);
+        final copy = img.copyCrop(
+          image,
+          x: intOf('x'),
+          y: intOf('y'),
+          width: intOf('width'),
+          height: intOf('height'),
+        );
+        return _anikumoImageReply(ok: true, v: register(copy));
+      case 'copyAndRotate90':
+        final image = imageOf('key');
+        if (image == null) return _anikumoImageReply(ok: true);
+        return _anikumoImageReply(
+          ok: true,
+          v: register(img.copyRotate(image, angle: 90)),
+        );
+      case 'fillImageAt':
+        final dst = imageOf('key');
+        final src = imageOf('image');
+        if (dst == null || src == null) return _anikumoImageReply(ok: true);
+        img.compositeImage(dst, src, dstX: intOf('x'), dstY: intOf('y'));
+        return _anikumoImageReply(ok: true);
+      case 'fillImageRangeAt':
+        final dst = imageOf('key');
+        final src = imageOf('image');
+        if (dst == null || src == null) return _anikumoImageReply(ok: true);
+        img.compositeImage(
+          dst,
+          src,
+          dstX: intOf('x'),
+          dstY: intOf('y'),
+          srcX: intOf('srcX'),
+          srcY: intOf('srcY'),
+          srcW: intOf('width'),
+          srcH: intOf('height'),
+        );
+        return _anikumoImageReply(ok: true);
+      case 'getWidth':
+        return _anikumoImageReply(ok: true, v: imageOf('key')?.width);
+      case 'getHeight':
+        return _anikumoImageReply(ok: true, v: imageOf('key')?.height);
+      case 'emptyImage':
+        return _anikumoImageReply(
+          ok: true,
+          v: register(img.Image(width: intOf('width'), height: intOf('height'))),
+        );
+      case 'releaseAll':
+        _anikumoImageRegistry.clear();
+        return _anikumoImageReply(ok: true);
+      default:
+        return _anikumoImageReply(ok: false);
+    }
+  } catch (_) {
+    return _anikumoImageReply(ok: false);
+  }
+}
+
 void _qjsIsolateMain(_QjsInit init) async {
   final uiPort = init.uiPort;
   final receive = ReceivePort();
@@ -465,6 +716,19 @@ void _qjsIsolateMain(_QjsInit init) async {
           } catch (_) {}
           return null;
         }
+        if (channel == 'anikumoPersistCookies') {
+          // Batch 101: forward the jar snapshot to the UI
+          // isolate, which owns storage.
+          uiPort.send(['cookies', payload?.toString() ?? '{}']);
+          return null;
+        }
+        if (channel == 'anikumoImage') {
+          // Batch 103: synchronous image ops — the closure
+          // returns a plain String here, which reaches JS as
+          // a plain value (not a Promise), matching the
+          // reference runtime's synchronous Image API.
+          return _anikumoImageOpSync(payload?.toString() ?? '');
+        }
         if (channel == 'anikumoUi') {
           final id = ++uiSeq;
           final completer = Completer<String>();
@@ -486,6 +750,11 @@ void _qjsIsolateMain(_QjsInit init) async {
     // Convert.encodeGbk/decodeGbk and uses __anikumoBytes).
     qjs.evaluate(veneraGbkScript);
     qjs.evaluate(veneraDispatcherScript);
+    // Batch 101: restore the persisted cookie jar (the
+    // scripts just reset it to an empty object).
+    try {
+      qjs.evaluate('globalThis.__anikumoJar = ${init.cookiesJson};');
+    } catch (_) {}
   } catch (e) {
     uiPort.send(['fatal', '引擎脚本初始化失败：$e']);
     return;
@@ -522,7 +791,14 @@ Future<void> _qjsHandleTask(
   }
   final id = message[1] as int;
   try {
-    if (kind == 'register') {
+    if (kind == 'ping') {
+      // Batch 101: liveness probe — deliberately evaluates
+      // NOTHING. If this handler can run at all, the
+      // isolate's event loop is turning; a wedged JS thread
+      // blocks the loop itself, so the probe's absence is
+      // the signal.
+      uiPort.send(['result', id, true, 'pong']);
+    } else if (kind == 'register') {
       final jsKey = message[2] as String;
       final code = message[3] as String;
       final kvJson = message[4] as String;

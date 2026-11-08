@@ -37,7 +37,28 @@ String friendlyError(Object error) {
   // StateError.toString(), and the JS dispatcher's nested
   // "JS 源调用失败：Error: " / "Error: " repeats.
   if (s.startsWith('Bad state: ')) s = s.substring('Bad state: '.length);
+  // Batch 104: Exception('...').toString() carries the same
+  // kind of Dart noise as "Bad state: " — strip it too.
+  if (s.startsWith('Exception: ')) {
+    s = s.substring('Exception: '.length);
+  }
   s = s.replaceFirst('JS 源调用失败：Error: ', 'JS 源调用失败：');
   s = s.replaceFirst('JS 源调用失败：Error：', 'JS 源调用失败：');
+  // Batch 104: JS engine dumps reached several screens raw
+  // (the home sections' 「更多」 page above all): a QuickJS
+  // exception stringifies with its stack — "TypeError:
+  // cannot read property 'x' of undefined\n    at load
+  // (source.js:12)\n    at ..." — which reads as gibberish
+  // and can run to many lines. Collapse anything JS-shaped
+  // to one human line; drop stack tails from everything
+  // else; bound the length of what a screen will show.
+  final firstLine = s.split('\n').first.trim();
+  if (firstLine.isNotEmpty) s = firstLine;
+  if (RegExp(
+    r'(TypeError|ReferenceError|SyntaxError|RangeError|EvalError|URIError|AggregateError)',
+  ).hasMatch(s)) {
+    return '源脚本运行出错，请重试或换一个源';
+  }
+  if (s.length > 120) s = '${s.substring(0, 120)}…';
   return s;
 }

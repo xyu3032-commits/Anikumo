@@ -389,8 +389,22 @@ class PlayerController implements Disposable {
     }
   }
 
+  /// Batch 113: while the in-app mini player session owns this
+  /// controller, route-scope disposal must not stop playback; the
+  /// session runs the real teardown via [disposeAfterMini].
+  bool adoptedByMiniPlayer = false;
+
   @override
   void dispose() {
+    if (adoptedByMiniPlayer) {
+      return;
+    }
+    beginShutdown();
+  }
+
+  /// Real teardown for a controller the mini session adopted.
+  void disposeAfterMini() {
+    adoptedByMiniPlayer = false;
     beginShutdown();
   }
 

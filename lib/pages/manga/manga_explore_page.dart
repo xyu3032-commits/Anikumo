@@ -7,10 +7,12 @@ import 'package:anikumo/bean/theme/violet_glass.dart';
 import 'package:anikumo/bean/widget/empty_state_widget.dart';
 import 'package:anikumo/pages/manga/manga_widgets.dart';
 import 'package:anikumo/services/manga/manga_api.dart';
+import 'package:anikumo/services/manga/manga_search_utils.dart';
 import 'package:anikumo/services/manga/manga_source.dart';
 import 'package:anikumo/services/manga/manga_sources.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/utils/error_message.dart';
 
 void _noop() {}
 
@@ -97,7 +99,7 @@ class _MangaExploreTabState extends State<MangaExploreTab> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '用你自己的 URL 链接导入 Venera JS 源后即可探索。',
+                  '用你自己的 URL 链接导入 JS 源后即可探索。',
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
@@ -256,46 +258,82 @@ class MangaSourceGrid extends StatefulWidget {
 class _MangaSourceGridState extends State<MangaSourceGrid> {
   static const _pageSize = 24;
   final List<MangaItem> _items = [];
+  final ScrollController _scrollController = ScrollController();
   bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = true;
+  bool _loadMoreFailed = false;
   String? _errorText;
+
+  /// Batch 90: the next page to fetch, tracked explicitly.
+  /// Deriving it from the item count broke whenever a
+  /// source's own page size differed from ours (a 20-per-page
+  /// source landed back on page 1 and repeated itself).
+  int _nextPage = 2;
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     final snap = MangaApi.popularSnapshot(
       widget.source,
       limit: _pageSize,
     );
     if (snap != null) {
-      _items.addAll(snap.items);
+      // Batch 90: even the instant snapshot paint is
+      // shuffled — every entry into explore looks fresh.
+      _items.addAll(shuffledMangaItems(snap.items));
       _loading = false;
     }
     _loadFirst();
   }
 
-  Future<void> _loadFirst() async {
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// Batch 90: approaching the bottom loads the next page
+  /// automatically — no manual 「加载更多」 tap.
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 800) {
+      _loadMore();
+    }
+  }
+
+  Future<void> _loadFirst({bool fresh = false}) async {
     try {
       final items = await MangaApi.fetchPopularFor(
         widget.source,
         limit: _pageSize,
+        fresh: fresh,
       );
       if (!mounted) return;
       setState(() {
+        // Batch 90: shuffled on entry and on every manual
+        // refresh — the catalogue order is the site's, the
+        // discovery order is ours.
         _items
           ..clear()
-          ..addAll(items);
+          ..addAll(shuffledMangaItems(items));
         _loading = false;
         _errorText = null;
-        _hasMore = items.length >= _pageSize;
+        _nextPage = 2;
+        _loadMoreFailed = false;
+        // Only an EMPTY first page proves there is nothing
+        // more; a short page is just the source's page size.
+        _hasMore = items.isNotEmpty;
       });
       widget.onAvailability?.call(widget.source.id, true);
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        if (_items.isEmpty) _errorText = e.toString();
+        if (_items.isEmpty) _errorText = friendlyError(e);
       });
       if (_items.isEmpty) {
         widget.onAvailability?.call(widget.source.id, false);
@@ -304,23 +342,54 @@ class _MangaSourceGridState extends State<MangaSourceGrid> {
   }
 
   Future<void> _loadMore() async {
-    setState(() => _loadingMore = true);
+    if (_loading || _loadingMore || !_hasMore) return;
+    setState(() {
+      _loadingMore = true;
+      _loadMoreFailed = false;
+    });
     try {
       final items = await MangaApi.fetchPopularFor(
         widget.source,
         limit: _pageSize,
-        page: _items.length ~/ _pageSize + 1,
+        page: _nextPage,
       );
       if (!mounted) return;
+      final batch = nextMangaPageBatch(
+        [for (final item in _items) item.storageKey],
+        items,
+      );
       setState(() {
-        _items.addAll(items);
-        _hasMore = items.length >= _pageSize;
+        _items.addAll(shuffledMangaItems(batch.additions));
+        _hasMore = batch.hasMore;
+        _nextPage++;
       });
     } catch (_) {
-      // Keep what's on screen; scrolling can retry.
+      // Keep what's on screen; the footer offers the retry
+      // and scrolling away/back re-triggers the auto-load.
+      if (mounted) setState(() => _loadMoreFailed = true);
     } finally {
       if (mounted) setState(() => _loadingMore = false);
     }
+  }
+
+  bool get _footerVisible =>
+      _hasMore ||
+      _loadingMore ||
+      _loadMoreFailed ||
+      _items.length >= _pageSize;
+
+  Widget _footer(ThemeData theme) {
+    if (_loadingMore) return const CircularProgressIndicator();
+    if (_loadMoreFailed) {
+      return OutlinedButton(
+        onPressed: _loadMore,
+        child: const Text('加载失败，点按重试'),
+      );
+    }
+    final style = theme.textTheme.bodySmall
+        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    if (!_hasMore) return Text('没有更多了', style: style);
+    return Text('继续下滑自动加载', style: style);
   }
 
   @override
@@ -362,37 +431,60 @@ class _MangaSourceGridState extends State<MangaSourceGrid> {
       );
     }
     if (_items.isEmpty) {
-      return GeneralEmptyState(
-        icon: Icons.cloud_off_rounded,
-        title: _errorText != null ? '加载失败' : '这个源暂时没有内容',
-        actions: [
-          if (_errorText != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(32, 0, 32, 4),
-              child: Text(
-                _errorText!,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
+      // Batch 97: the empty/failed state joins the refresh
+      // system too — it used to be the one part of this page
+      // a pull could not reach (no scrollable at all), and
+      // its retry button did not bypass the TTL memo.
+      return LayoutBuilder(
+        builder: (context, constraints) => RefreshIndicator(
+          onRefresh: () => _loadFirst(fresh: true),
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: SizedBox(
+              height: constraints.maxHeight,
+              child: GeneralEmptyState(
+                icon: Icons.cloud_off_rounded,
+                title: _errorText != null ? '加载失败' : '这个源暂时没有内容',
+                actions: [
+                  if (_errorText != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(32, 0, 32, 4),
+                      child: Text(
+                        _errorText!,
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.error,
+                        ),
+                      ),
+                    ),
+                  FilledButton.tonal(
+                    onPressed: () {
+                      setState(() {
+                        _loading = true;
+                        _errorText = null;
+                      });
+                      _loadFirst(fresh: true);
+                    },
+                    child: const Text('重试'),
+                  ),
+                ],
               ),
             ),
-          FilledButton.tonal(
-            onPressed: () {
-              setState(() {
-                _loading = true;
-                _errorText = null;
-              });
-              _loadFirst();
-            },
-            child: const Text('重试'),
           ),
-        ],
+        ),
       );
     }
     return RefreshIndicator(
-      onRefresh: _loadFirst,
+      // Batch 90: a manual refresh bypasses the TTL memo,
+      // so it is a real refresh (and reshuffles on arrival).
+      onRefresh: () => _loadFirst(fresh: true),
       child: GridView.builder(
+        controller: _scrollController,
+        // Batch 97: with fewer items than a screenful the
+        // grid is not scrollable under the default physics,
+        // and the pull gesture silently does nothing — one
+        // of the "部分不刷新" cases.
+        physics: const AlwaysScrollableScrollPhysics(),
         scrollCacheExtent: const ScrollCacheExtent.pixels(700),
         padding: const EdgeInsets.fromLTRB(
           StyleString.pagePadding,
@@ -406,17 +498,10 @@ class _MangaSourceGridState extends State<MangaSourceGrid> {
           crossAxisSpacing: 12,
           childAspectRatio: 0.52,
         ),
-        itemCount: _items.length + (_hasMore ? 1 : 0),
+        itemCount: _items.length + (_footerVisible ? 1 : 0),
         itemBuilder: (context, index) {
           if (index == _items.length) {
-            return Center(
-              child: _loadingMore
-                  ? const CircularProgressIndicator()
-                  : OutlinedButton(
-                      onPressed: _loadMore,
-                      child: const Text('加载更多'),
-                    ),
-            );
+            return Center(child: _footer(theme));
           }
           final item = _items[index];
           return MangaRailCard(

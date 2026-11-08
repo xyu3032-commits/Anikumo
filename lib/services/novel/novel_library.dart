@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 import '../../models/novel_item.dart';
 import '../storage/storage.dart';
 
@@ -7,6 +9,15 @@ import '../storage/storage.dart';
 /// JSON in settings, source-scoped like the manga library.
 class NovelLibraryStore {
   NovelLibraryStore._();
+
+  /// Batch 106: change tick for progress mutations — the
+  /// manga store has had one since its own staleness fix;
+  /// the novel store lacked it, so history displays that
+  /// read novel progress never learned about deletions
+  /// made on other pages. Mirrors MangaLibraryStore.revision.
+  static final ValueNotifier<int> revision = ValueNotifier<int>(0);
+
+  static void _bump() => revision.value++;
 
   // ----------------------------------------------------------
   // Favorites
@@ -90,6 +101,29 @@ class NovelLibraryStore {
         for (final e in map.entries) e.key: e.value.toJson(),
       }),
     );
+    _bump();
+  }
+
+  /// Batch 98: remove ONE reading-history record (the
+  /// history lists' per-row delete).
+  static Future<void> removeProgress(String key) async {
+    final map = loadProgressMap();
+    if (map.remove(key) == null) return;
+    await GStorage.putSetting(
+      SettingsKeys.novelProgressJson,
+      jsonEncode({
+        for (final e in map.entries) e.key: e.value.toJson(),
+      }),
+    );
+    _bump();
+  }
+
+  /// Batch 98: clear the whole reading history — the
+  /// manga store has had this for its settings page; the
+  /// novel store was missing the counterpart.
+  static Future<void> clearProgress() async {
+    await GStorage.putSetting(SettingsKeys.novelProgressJson, '');
+    _bump();
   }
 
   /// Batch 83: backup restore merge — backup records win
@@ -118,6 +152,7 @@ class NovelLibraryStore {
           for (final e in map.entries) e.key: e.value.toJson(),
         }),
       );
+      _bump();
     }
   }
 }

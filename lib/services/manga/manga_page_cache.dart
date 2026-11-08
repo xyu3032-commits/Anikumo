@@ -13,7 +13,11 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 final CacheManager mangaPageCacheManager = CacheManager(
   Config(
     'anikumoMangaPages',
-    stalePeriod: const Duration(days: 14),
-    maxNrOfCacheObjects: 1500,
+    // Batch 87: cap the on-disk page cache tighter (1500 -> 800
+    // objects, 14 -> 10 days). 800 pages still covers several
+    // chapters of resume-reading headroom, while the worst-case
+    // storage footprint roughly halves.
+    stalePeriod: const Duration(days: 10),
+    maxNrOfCacheObjects: 800,
   ),
 );

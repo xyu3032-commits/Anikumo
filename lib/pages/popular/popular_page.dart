@@ -183,6 +183,11 @@ class _PopularPageState extends State<PopularPage> {
               rank: i + 1,
               item: top[i],
               showDivider: i != top.length - 1,
+              // Batch 115: rank rows fly their cover into the
+              // detail page like every other cover entry; the
+              // grid below disables its own hero for these five
+              // so each tag stays unique on this page.
+              enableHero: true,
               onTap: () => context.pushNamed(
                 '/info/',
                 arguments: top[i],
@@ -201,6 +206,12 @@ class _PopularPageState extends State<PopularPage> {
 
   Widget contentGrid(List<BangumiItem> rawList) {
     final bangumiList = _filtered(rawList);
+    // Batch 115: the spotlight rank rows above carry the hero
+    // for the top five; the same items reappear in this grid and
+    // must not duplicate the hero tag.
+    final heroTakenIds = <int>{
+      for (final item in bangumiList.take(5)) item.id,
+    };
     int crossCount = 3;
     if (MediaQuery.sizeOf(context).width > LayoutBreakpoint.compact['width']!) {
       crossCount = 5;
@@ -225,7 +236,11 @@ class _PopularPageState extends State<PopularPage> {
         delegate: SliverChildBuilderDelegate(
           (BuildContext context, int index) {
             return bangumiList.isNotEmpty
-                ? BangumiCardV(bangumiItem: bangumiList[index])
+                ? BangumiCardV(
+                    bangumiItem: bangumiList[index],
+                    enableHero:
+                        !heroTakenIds.contains(bangumiList[index].id),
+                  )
                 : null;
           },
           childCount: bangumiList.isNotEmpty ? bangumiList.length : 10,

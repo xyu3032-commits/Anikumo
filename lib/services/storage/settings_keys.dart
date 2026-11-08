@@ -568,6 +568,17 @@ class SettingsKeys {
     group: SettingGroup.misc,
   );
 
+  /// Batch 101: the JS sources' cookie jar (host → name →
+  /// value), persisted so anti-bot / session cookies survive
+  /// engine restarts and app restarts. Until this batch the
+  /// jar lived only in the JS runtime's memory and every
+  /// engine kill (or app exit) forgot every cookie.
+  static const mangaJsCookiesJson = SettingKey<String>(
+    'mangaJsCookiesJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
   /// Batch 25: disk snapshots of per-source popular lists so
   /// the manga home paints instantly on entry (SWR): a JSON
   /// object mapping cache key → {ts, items}.
@@ -912,6 +923,26 @@ class SettingsKeys {
     false,
     group: SettingGroup.player,
   );
+  // Batch 113: in-app mini player (PiP) preferences. Default mode is
+  // the in-app floating window over the app's own pages; the external
+  // mode is the system picture-in-picture. Entering the manga/novel
+  // zones hides the mini window (and optionally mutes it) until the
+  // user comes back.
+  static const pipInAppMode = SettingKey<bool>(
+    _SettingBoxKey.pipInAppMode,
+    true,
+    group: SettingGroup.player,
+  );
+  static const pipHideInOtherZones = SettingKey<bool>(
+    _SettingBoxKey.pipHideInOtherZones,
+    true,
+    group: SettingGroup.player,
+  );
+  static const pipMuteWhenHidden = SettingKey<bool>(
+    _SettingBoxKey.pipMuteWhenHidden,
+    false,
+    group: SettingGroup.player,
+  );
   static const defaultSuperResolutionMode = SettingKey<int>(
     _SettingBoxKey.defaultSuperResolutionMode,
     1,
@@ -1155,6 +1186,9 @@ class SettingsKeys {
     androidEnableOpenSLES,
     androidVideoRenderer,
     androidAutoEnterPIP,
+    pipInAppMode,
+    pipHideInOtherZones,
+    pipMuteWhenHidden,
     defaultSuperResolutionMode,
     disableSuperResolutionWarning,
     playerDisableAnimations,
@@ -1265,6 +1299,9 @@ class _SettingBoxKey {
       androidEnableOpenSLES = 'androidEnableOpenSLES',
       androidVideoRenderer = 'androidVideoRenderer',
       androidAutoEnterPIP = 'androidAutoEnterPIP',
+      pipInAppMode = 'pipInAppMode',
+      pipHideInOtherZones = 'pipHideInOtherZones',
+      pipMuteWhenHidden = 'pipMuteWhenHidden',
       defaultSuperResolutionMode = 'defaultSuperResolutionType',
       disableSuperResolutionWarning = 'superResolutionWarn',
       playerDisableAnimations = 'playerDisableAnimations',

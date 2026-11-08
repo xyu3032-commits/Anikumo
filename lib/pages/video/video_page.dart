@@ -27,6 +27,7 @@ import 'package:anikumo/pages/video/video_playback_args.dart';
 import 'package:anikumo/pages/video/video_page_layout.dart';
 import 'package:anikumo/pages/video/video_side_panel.dart';
 import 'package:anikumo/pages/video/video_system_bars.dart';
+import 'package:anikumo/services/player/mini_player_session.dart';
 import 'package:anikumo/services/player/pip_utils.dart';
 import 'package:anikumo/services/player/timed_shutdown_service.dart';
 import 'package:anikumo/services/storage/storage.dart';
@@ -40,6 +41,7 @@ class VideoPage extends StatefulWidget {
     required this.videoPageController,
     required this.historyController,
     required this.downloadController,
+    this.resumeFromMini = false,
   });
 
   final VideoPlaybackArgs args;
@@ -47,6 +49,11 @@ class VideoPage extends StatefulWidget {
   final VideoPageController videoPageController;
   final HistoryController historyController;
   final DownloadController downloadController;
+
+  /// Batch 113: this visit reattaches to the pair the in-app mini
+  /// player kept alive — playback is already running, so the page
+  /// must not resolve or restart the episode.
+  final bool resumeFromMini;
 
   @override
   State<VideoPage> createState() => _VideoPageState();
@@ -58,6 +65,9 @@ class _VideoPageState extends State<VideoPage>
   VideoPageController get videoPageController => widget.videoPageController;
   bool _didInitializePlayback = false;
   bool _isExiting = false;
+  // Batch 113: exit handover to the in-app mini player.
+  bool _exitSettled = false;
+  bool _exitToMini = false;
   HistoryController get historyController => widget.historyController;
   DownloadController get downloadController => widget.downloadController;
   late bool playResume;
@@ -115,7 +125,11 @@ class _VideoPageState extends State<VideoPage>
   }
 
   void _initializePlayback() {
-    if (videoPageController.isOfflineMode) {
+    if (widget.resumeFromMini) {
+      // Reattached from the mini window: the episode is already
+      // loaded and playing on this pair — only the UI comes back.
+      _revealCurrentEpisode();
+    } else if (videoPageController.isOfflineMode) {
       _initOfflineMode();
     } else {
       _initOnlineMode();
@@ -209,6 +223,7 @@ class _VideoPageState extends State<VideoPage>
 
   @override
   void dispose() {
+    _settleExit();
     clearExternalNavigationMark(_route);
     try {
       windowManager.removeListener(this);
@@ -300,6 +315,38 @@ class _VideoPageState extends State<VideoPage>
     unawaited(Navigator.of(context).maybePop());
   }
 
+  /// Batch 113: decides once, synchronously, what happens to the
+  /// controller pair as this page goes away — park it in the in-app
+  /// mini window (the mobile default), end an adopted session for
+  /// real, or fall through to the normal shutdown. Runs from the
+  /// PopScope callback (ahead of route teardown) and again from
+  /// dispose as a fallback for non-pop removals.
+  void _settleExit() {
+    if (_exitSettled) {
+      return;
+    }
+    _exitSettled = true;
+    final session = MiniPlayerSession.instance;
+    final isSessionPair =
+        identical(playerController, session.playerController);
+    final canMini = MiniPlayerSession.shouldExitToMini(
+          isDesktopPlatform: isDesktop(),
+          playerController: playerController,
+        ) &&
+        videoPageController.errorMessage == null &&
+        !videoPageController.loading;
+    if (canMini) {
+      _exitToMini = true;
+      session.adopt(
+        playerController: playerController,
+        videoPageController: videoPageController,
+        args: widget.args,
+      );
+    } else if (isSessionPair) {
+      unawaited(session.close());
+    }
+  }
+
   void pauseForTimedShutdown() {
     if (playerController.playback.playing) {
       playerController.pause();
@@ -312,7 +359,10 @@ class _VideoPageState extends State<VideoPage>
       onPopInvokedWithResult: (bool didPop, Object? result) {
         if (didPop) {
           setState(() => _isExiting = true);
-          playerController.beginShutdown();
+          _settleExit();
+          if (!_exitToMini) {
+            playerController.beginShutdown();
+          }
         }
       },
       child: Observer(builder: (context) {

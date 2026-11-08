@@ -71,7 +71,7 @@ class _NovelSourcesTabState extends State<NovelSourcesTab> {
           '${probe.encrypted > 0 ? '（其中 ${probe.encrypted} 个含加密规则，可能无法完整使用）' : ''}';
     }
     if (probe.entries == 0) {
-      return '无法识别这个格式（支持 Legado / 阅读书源 JSON，含 base16、base64 压缩格式）';
+      return '无法识别这个格式（支持书源 JSON，含 base16、base64 压缩格式）';
     }
     if (probe.recognized == 0) {
       return '识别到 ${probe.entries} 条内容，但都缺少书源名或地址，未能导入';
@@ -166,7 +166,7 @@ class _NovelSourcesTabState extends State<NovelSourcesTab> {
           maxLines: paste ? 8 : 1,
           decoration: InputDecoration(
             hintText: paste
-                ? '粘贴 Legado 书源 JSON（数组或单个对象，base16 也可以）'
+                ? '粘贴书源 JSON（数组或单个对象，base16 也可以）'
                 : 'https://…/sources.json，或 GitHub 仓库/文件链接',
           ),
         ),

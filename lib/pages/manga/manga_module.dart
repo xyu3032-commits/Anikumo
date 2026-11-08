@@ -48,9 +48,17 @@ final mangaModule = createModule(
         '/search',
         child: (context, state) => VioletZone(
           child: MangaSearchPage(
-            initialQuery: state.arguments is String
-                ? state.arguments as String
-                : '',
+            initialQuery: switch (state.arguments) {
+              final MangaSearchRouteArgs args => args.query,
+              final String query => query,
+              _ => '',
+            },
+            initialTagSearch: state.arguments is MangaSearchRouteArgs &&
+                (state.arguments as MangaSearchRouteArgs).tagSearch,
+            initialOriginSourceId:
+                state.arguments is MangaSearchRouteArgs
+                    ? (state.arguments as MangaSearchRouteArgs).originSourceId
+                    : null,
           ),
         ),
         transition: _mangaTransition,

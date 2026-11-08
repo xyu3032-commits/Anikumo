@@ -378,9 +378,8 @@ abstract class _PlayerPlaybackController with Store {
         return await _discardIfNotCurrent(candidate);
       }
       // Batch 16: the user's playback enhancement profile
-      // (24 optimizations + 12 features) applies after the
-      // built-in property sequence so it wins where they
-      // overlap.
+      // applies after the built-in property sequence so it
+      // wins where they overlap.
       await PlayerEnhance.applyTo(player);
       if (!isCurrentPlayer(player)) {
         return await _discardIfNotCurrent(candidate);

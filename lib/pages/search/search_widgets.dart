@@ -210,16 +210,39 @@ class _SearchLoadingState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Batch 110: skeleton cover blocks in the result
+    // geometry instead of a lone spinner.
     return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
+        padding: const EdgeInsets.symmetric(vertical: 24),
         child: Column(children: [
-          const LoadingIndicator(size: 40),
-          const SizedBox(height: 20),
           Semantics(
               liveRegion: true,
               child: Text('正在搜索番剧',
                   textAlign: TextAlign.center,
-                  style: theme.textTheme.titleMedium)),
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700))),
+          const SizedBox(height: 20),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              mainAxisSpacing: 16,
+              crossAxisSpacing: 12,
+              childAspectRatio: 0.52,
+            ),
+            itemCount: 9,
+            itemBuilder: (context, index) => const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: VioletSkeleton(radius: 14)),
+                SizedBox(height: 6),
+                VioletSkeleton(height: 10, radius: 5),
+                SizedBox(height: 4),
+                VioletSkeleton(height: 10, width: 44, radius: 5),
+              ],
+            ),
+          ),
         ]));
   }
 }

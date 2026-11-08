@@ -32,7 +32,7 @@ class JsMangaSource extends MangaSource {
   String get name => displayName;
 
   @override
-  String get description => 'JS 源（Venera 格式）· v$version';
+  String get description => 'JS 源 · v$version';
 
   @override
   bool get supportsTags => true;
@@ -47,14 +47,16 @@ class JsMangaSource extends MangaSource {
       'keyword': keyword,
       'page': page,
     });
-    return mapJsComicList(result, sourceId: id);
+    return _withThumbnailConfigs(mapJsComicList(result, sourceId: id));
   }
 
   @override
   Future<List<MangaItem>> popular({int limit = 20, int page = 1}) async {
     final result = await engine.call('explore', {'page': page});
     final items = mapJsComicList(result, sourceId: id);
-    if (items.isNotEmpty || page > 1) return items;
+    if (items.isNotEmpty || page > 1) {
+      return _withThumbnailConfigs(items);
+    }
     // Sources without an explore section: fall back to a
     // blank-keyword search, which several sources treat as
     // their browse feed.
@@ -89,7 +91,7 @@ class JsMangaSource extends MangaSource {
       'category': tagId,
       'page': page,
     });
-    return mapJsComicList(result, sourceId: id);
+    return _withThumbnailConfigs(mapJsComicList(result, sourceId: id));
   }
 
   @override
@@ -137,17 +139,169 @@ class JsMangaSource extends MangaSource {
     if (result is! Map) {
       throw StateError('$displayName 返回了无法识别的章节数据');
     }
-    return mapJsPages(result.cast<String, dynamic>());
+    final pages = mapJsPages(result.cast<String, dynamic>());
+    return _withImageConfigs(pages, manga, chapter);
   }
 
   @override
   Future<MangaItem?> details(MangaItem manga) async {
     final result = await engine.call('loadInfo', {'id': manga.id});
     if (result is! Map) return null;
-    return mapJsDetails(
+    final item = mapJsDetails(
       unwrapJsDetails(result.cast<String, dynamic>()),
       manga,
     );
+    final configured = await _withThumbnailConfigs([item]);
+    return configured.first;
+  }
+
+  /// Batch 88: run the source's `comic.onImageLoad` hook over
+  /// a chapter's pages (one batched engine call; the hook may
+  /// be async and may do its own requests). Best-effort: any
+  /// failure keeps the pages exactly as loadEp mapped them.
+  Future<List<MangaPage>> _withImageConfigs(
+    List<MangaPage> pages,
+    MangaItem manga,
+    MangaChapter chapter,
+  ) async {
+    if (pages.isEmpty) return pages;
+    try {
+      final configs = await engine.call('imageConfigs', {
+        'urls': [for (final page in pages) page.url],
+        'id': manga.id,
+        'ep': chapter.id,
+      });
+      return applyImageConfigs(pages, configs);
+    } catch (_) {
+      return pages;
+    }
+  }
+
+  /// Batch 102: run the registered `onResponse` byte
+  /// transform (see the dispatcher's transform registry) over
+  /// [raw] — the bytes downloaded from the config's url.
+  /// [mode] is 'image' for chapter pages or 'thumb' for
+  /// covers; [originalUrl] is the url the hook was originally
+  /// called with; [id]/[ep] let a cold registry re-run the
+  /// image hook. Returns null when no transform applies or
+  /// the transform produced nothing usable — callers fall
+  /// back to the raw bytes, which is never worse than the
+  /// pre-batch-102 behavior.
+  Future<List<int>?> transformImageBytes({
+    required String mode,
+    required String originalUrl,
+    String id = '',
+    String ep = '',
+    required List<int> raw,
+  }) async {
+    try {
+      final result = await engine.call('transformImage', {
+        'mode': mode,
+        'url': originalUrl,
+        'id': id,
+        'ep': ep,
+        'dataB64': base64Encode(raw),
+      });
+      if (result is Map && result['ok'] == true) {
+        final b64 = result['dataB64']?.toString() ?? '';
+        if (b64.isNotEmpty) return base64Decode(b64);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Batch 103: runs a config's `modifyImage` code string
+  /// over downloaded page bytes (image descramble). Null on
+  /// any failure — the caller displays the raw bytes.
+  Future<List<int>?> modifyImageBytes({
+    required String code,
+    required List<int> raw,
+  }) async {
+    try {
+      final result = await engine.call('modifyImage', {
+        'code': code,
+        'dataB64': base64Encode(raw),
+      });
+      if (result is Map && result['ok'] == true) {
+        final b64 = result['dataB64']?.toString() ?? '';
+        if (b64.isNotEmpty) return base64Decode(b64);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Batch 103: asks the page's registered `onLoadFailed`
+  /// for a replacement config after a failed download.
+  /// Returns the normalized config map, or null when the
+  /// source offered none.
+  Future<Map<String, dynamic>?> loadFailedConfig({
+    required String originalUrl,
+    String id = '',
+    String ep = '',
+  }) async {
+    try {
+      final result = await engine.call('loadFailed', {
+        'url': originalUrl,
+        'id': id,
+        'ep': ep,
+      });
+      if (result is Map) return result.cast<String, dynamic>();
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Batch 103: `comic.loadThumbnails` — detail-screen
+  /// preview page urls. Sources without the hook answer
+  /// null in the engine, which maps to an empty list here.
+  @override
+  Future<List<String>> loadThumbnails(MangaItem manga) async {
+    try {
+      final result = await engine.call('loadThumbnails', {
+        'id': manga.id,
+      });
+      if (result is List) {
+        return [
+          for (final url in result)
+            if (url is String && url.isNotEmpty) url,
+        ];
+      }
+      return const [];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Batch 88: run `comic.onThumbnailLoad` over list/detail
+  /// covers the same way. Sources without the hook answer
+  /// null and the items pass through untouched.
+  Future<List<MangaItem>> _withThumbnailConfigs(
+    List<MangaItem> items,
+  ) async {
+    if (items.isEmpty) return items;
+    try {
+      // Batch 96: a 6 s cap on the cover-hook pass. A
+      // homepage-sized result (100-300 covers) whose
+      // onThumbnailLoad does per-cover work used to gate
+      // the WHOLE list behind it — the explore grid showed
+      // a skeleton while covers were still being signed.
+      // On timeout the catch below returns the list
+      // untouched (covers load from their raw URLs), which
+      // is the same degradation as a failing hook.
+      final configs = await engine
+          .call('thumbnailConfigs', {
+            'urls': [for (final item in items) item.coverUrl],
+          })
+          .timeout(const Duration(seconds: 6));
+      return applyThumbnailConfigs(items, configs);
+    } catch (_) {
+      return items;
+    }
   }
 
   @override
@@ -451,6 +605,102 @@ List<MangaPage> mapJsPages(Map<String, dynamic> result) {
           },
         ),
   ];
+}
+
+/// Batch 88: applies `comic.onImageLoad` results (a list
+/// parallel to [pages]; null entries mean "no change") to a
+/// chapter's pages. A config may replace the URL and add or
+/// override headers. Configs asking for a non-GET request are
+/// not honored — the reader loads pages with GET only — and
+/// local (downloaded) pages are never rewritten.
+List<MangaPage> applyImageConfigs(List<MangaPage> pages, dynamic configs) {
+  if (configs is! List) return pages;
+  return [
+    for (var i = 0; i < pages.length; i++)
+      _applyImageConfig(pages[i], i < configs.length ? configs[i] : null),
+  ];
+}
+
+/// Batch 103: applies ONE normalized hook config to a page —
+/// also the entry point for `onLoadFailed` replacement
+/// configs, which arrive one at a time after a failed load.
+MangaPage applyImageConfigToPage(MangaPage page, dynamic config) =>
+    _applyImageConfig(page, config, fromFallback: true);
+
+MangaPage _applyImageConfig(
+  MangaPage page,
+  dynamic config, {
+  bool fromFallback = false,
+}) {
+  if (config is! Map || page.url.startsWith('file://')) return page;
+  final method = config['method']?.toString().toUpperCase();
+  if (method != null && method.isNotEmpty && method != 'GET') return page;
+  final url = config['url']?.toString() ?? '';
+  final modify = config['modify']?.toString() ?? '';
+  final effectiveUrl = url.isNotEmpty ? url : page.url;
+  // Registration keying differs by pass: the initial pass
+  // registered the hook functions under the page's ORIGINAL
+  // url (the one the hook was called with — batch 102),
+  // while an onLoadFailed replacement was registered under
+  // its own url by the dispatcher.
+  final markerKey = fromFallback ? effectiveUrl : page.url;
+  return MangaPage(
+    effectiveUrl,
+    headers: {
+      ...page.headers,
+      ..._configHeaders(config['headers']),
+    },
+    // Batch 102: the dispatcher flags configs whose hook
+    // carried an onResponse; the transform is keyed by the
+    // page's ORIGINAL url.
+    transformOf: config['transform'] == true ? markerKey : page.transformOf,
+    // Batch 103: modifyImage code string and onLoadFailed
+    // presence, same keying. A replacement config without
+    // its own markers keeps the originals (the fallback hook
+    // speaks for the same logical page).
+    modifyCode: modify.isNotEmpty ? modify : page.modifyCode,
+    fallbackOf: config['fallback'] == true ? markerKey : page.fallbackOf,
+  );
+}
+
+/// Batch 88: applies `comic.onThumbnailLoad` results to
+/// items' covers the same way (URL replacement + headers,
+/// which the cover widgets pass as `item.coverHeaders`).
+List<MangaItem> applyThumbnailConfigs(
+  List<MangaItem> items,
+  dynamic configs,
+) {
+  if (configs is! List) return items;
+  return [
+    for (var i = 0; i < items.length; i++)
+      _applyThumbnailConfig(items[i], i < configs.length ? configs[i] : null),
+  ];
+}
+
+MangaItem _applyThumbnailConfig(MangaItem item, dynamic config) {
+  if (config is! Map || item.coverUrl.isEmpty) return item;
+  final method = config['method']?.toString().toUpperCase();
+  if (method != null && method.isNotEmpty && method != 'GET') return item;
+  final url = config['url']?.toString() ?? '';
+  final headers = _configHeaders(config['headers']);
+  // Batch 102: a transform-only config (same url, no extra
+  // headers) is still a change — the cover bytes must go
+  // through the registered onResponse.
+  final transform = config['transform'] == true;
+  if (url.isEmpty && headers.isEmpty && !transform) return item;
+  return item.copyWith(
+    coverUrl: url.isNotEmpty ? url : item.coverUrl,
+    headers: {...item.headers, ...headers},
+    coverTransformOf: transform ? item.coverUrl : null,
+  );
+}
+
+Map<String, String> _configHeaders(dynamic raw) {
+  if (raw is! Map) return const {};
+  return {
+    for (final entry in raw.entries)
+      entry.key.toString(): entry.value.toString(),
+  };
 }
 
 /// Merges a ComicDetails payload into the list-level item.

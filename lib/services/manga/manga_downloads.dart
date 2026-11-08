@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:anikumo/modules/manga/manga_item.dart';
 import 'package:anikumo/services/manga/manga_api.dart';
+import 'package:anikumo/services/manga/manga_image_pipeline.dart';
 import 'package:anikumo/services/manga/manga_source.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -91,17 +92,26 @@ class MangaDownloadStore {
   }
 
   static Future<List<MangaDownloadEntry>> loadIndex() async {
+    // Batch 104: never return a const list. On a fresh
+    // install (no index file yet) the empty cases used to
+    // hand back `const []`, and downloadChapter's in-place
+    // removeWhere on it threw UnsupportedError AFTER the
+    // pages were fetched — so the first-ever download on
+    // any install failed, the index was never created, and
+    // every later download failed the same way. (The batch
+    // 82 lesson, learned for reading progress, applied here
+    // at the source: always return a writable list.)
     try {
       final file = await _indexFile();
-      if (!await file.exists()) return const [];
+      if (!await file.exists()) return <MangaDownloadEntry>[];
       final decoded = jsonDecode(await file.readAsString());
-      if (decoded is! List) return const [];
+      if (decoded is! List) return <MangaDownloadEntry>[];
       return [
         for (final entry in decoded)
           if (entry is Map) ?MangaDownloadEntry.fromJson(entry),
       ];
     } catch (_) {
-      return const [];
+      return <MangaDownloadEntry>[];
     }
   }
 
@@ -216,13 +226,34 @@ class MangaDownloadStore {
           onProgress?.call(done, pages.length);
           return;
         }
-        final part = File('${dir.path}/$name.img.part');
-        await dio.download(
-          pages[i].url,
-          part.path,
-          options: Options(headers: pages[i].headers),
+        final page = pages[i];
+        final spec = mangaPageLoadSpec(
+          manga: manga,
+          chapter: chapter,
+          page: page,
         );
-        await part.rename(target.path);
+        if (spec != null) {
+          // Batch 104: pages that need processing
+          // (an `onResponse` transform, a `modifyImage`
+          // descramble, an `onLoadFailed` fallback) must be
+          // stored as their DISPLAYABLE bytes. Downloading
+          // the raw wire bytes saved the scrambled form —
+          // the "download" succeeded but the chapter read as
+          // garbage offline.
+          final bytes = await loadProcessedImageBytes(
+            cacheManager: null,
+            spec: spec,
+          );
+          await target.writeAsBytes(bytes, flush: true);
+        } else {
+          final part = File('${dir.path}/$name.img.part');
+          await dio.download(
+            page.url,
+            part.path,
+            options: Options(headers: page.headers),
+          );
+          await part.rename(target.path);
+        }
         done++;
         onProgress?.call(done, pages.length);
       }
@@ -235,21 +266,25 @@ class MangaDownloadStore {
     } catch (_) {
       return null;
     }
-    final entries = [
-      ...await loadIndex()
-        ..removeWhere((e) => e.key == entry.key),
+    // Batch 104: build the next index instead of mutating
+    // the loaded one in place (see loadIndex).
+    final current = await loadIndex();
+    await _saveIndex([
+      for (final e in current)
+        if (e.key != entry.key) e,
       entry,
-    ];
-    await _saveIndex(entries);
+    ]);
     return entry;
   }
 
   static Future<void> deleteEntry(MangaDownloadEntry entry) async {
     final dir = await chapterDir(entry);
     if (await dir.exists()) await dir.delete(recursive: true);
-    final entries = await loadIndex()
-      ..removeWhere((e) => e.key == entry.key);
-    await _saveIndex(entries);
+    final current = await loadIndex();
+    await _saveIndex([
+      for (final e in current)
+        if (e.key != entry.key) e,
+    ]);
   }
 
   /// Total size of the downloads folder in bytes.

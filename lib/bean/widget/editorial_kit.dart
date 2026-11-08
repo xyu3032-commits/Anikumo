@@ -403,12 +403,19 @@ class EditorialRankRow extends StatelessWidget {
     required this.item,
     required this.onTap,
     this.showDivider = true,
+    this.enableHero = false,
   });
 
   final int rank;
   final BangumiItem item;
   final VoidCallback onTap;
   final bool showDivider;
+
+  /// Batch 115: opt-in shared-element cover transition into the
+  /// detail page, matching the grid cards. Off by default: the
+  /// caller must guarantee no other hero with the same tag is on
+  /// screen (the same item often also appears in a grid below).
+  final bool enableHero;
 
   @override
   Widget build(BuildContext context) {
@@ -442,12 +449,29 @@ class EditorialRankRow extends StatelessWidget {
                 ),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: NetworkImgLayer(
-                    src: item.images['medium'] ?? item.images['large'] ?? '',
-                    fallbackSrc: item.images['common'],
-                    width: 46,
-                    height: 62,
-                  ),
+                  child: enableHero
+                      ? Hero(
+                          transitionOnUserGestures: true,
+                          flightShuttleBuilder:
+                              NetworkImgLayer.heroFlightShuttleBuilder,
+                          tag: item.id,
+                          child: NetworkImgLayer(
+                            src: item.images['medium'] ??
+                                item.images['large'] ??
+                                '',
+                            fallbackSrc: item.images['common'],
+                            width: 46,
+                            height: 62,
+                          ),
+                        )
+                      : NetworkImgLayer(
+                          src: item.images['medium'] ??
+                              item.images['large'] ??
+                              '',
+                          fallbackSrc: item.images['common'],
+                          width: 46,
+                          height: 62,
+                        ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(

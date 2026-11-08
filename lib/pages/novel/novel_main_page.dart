@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 
+import 'package:anikumo/bean/dialog/dialog_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:anikumo/utils/error_message.dart';
@@ -658,6 +659,55 @@ class NovelFavoritesTab extends StatefulWidget {
 }
 
 class _NovelFavoritesTabState extends State<NovelFavoritesTab> {
+  /// Batch 98: browsing-history deletion for the novel
+  /// zone — per-row delete and clear-all, both confirmed.
+  Future<bool> _confirm(String title, String message) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    return ok ?? false;
+  }
+
+  Future<void> _deleteHistory(NovelProgress entry) async {
+    if (!await _confirm(
+      '删除这条记录？',
+      '将移除《${entry.item.title}》的阅读进度，此操作无法撤销。',
+    )) {
+      return;
+    }
+    await NovelLibraryStore.removeProgress(entry.item.storageKey);
+    if (!mounted) return;
+    setState(() {});
+    AnikumoDialog.showToast(message: '已删除');
+  }
+
+  Future<void> _clearHistory(int count) async {
+    if (!await _confirm(
+      '清空全部阅读历史？',
+      '将删除全部 $count 条小说阅读记录，此操作无法撤销。',
+    )) {
+      return;
+    }
+    await NovelLibraryStore.clearProgress();
+    if (!mounted) return;
+    setState(() {});
+    AnikumoDialog.showToast(message: '阅读历史已清空');
+  }
+
   @override
   Widget build(BuildContext context) {
     final favorites = NovelLibraryStore.loadFavorites();
@@ -677,7 +727,15 @@ class _NovelFavoritesTabState extends State<NovelFavoritesTab> {
             )
           else
             for (final item in favorites) NovelBookTile(item: item),
-          const NovelSectionHeader(title: '阅读历史'),
+          NovelSectionHeader(
+            title: '阅读历史',
+            trailing: progress.isEmpty
+                ? null
+                : TextButton(
+                    onPressed: () => _clearHistory(progress.length),
+                    child: const Text('清空'),
+                  ),
+          ),
           if (progress.isEmpty)
             const GeneralEmptyState(
               icon: Icons.history_rounded,
@@ -689,6 +747,11 @@ class _NovelFavoritesTabState extends State<NovelFavoritesTab> {
               NovelBookTile(
                 item: entry.item,
                 subtitle: '读到 ${entry.chapterTitle}',
+                trailing: IconButton(
+                  tooltip: '删除记录',
+                  icon: const Icon(Icons.delete_outline_rounded),
+                  onPressed: () => _deleteHistory(entry),
+                ),
               ),
         ],
       ),
@@ -742,7 +805,7 @@ class _NovelSettingsTabState extends State<NovelSettingsTab> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
-              '按 Legado 书源规则运行（与 read-cat 同一原理）：CSS 选择器、'
+              '按书源规则运行：CSS 选择器、'
               'JSONPath、##替换、<js> 脚本与 java 桥（getElements/ajax/post/'
               'md5/base64 等）均已支持。标记为 webView 的图片章节会在阅读器里'
               '以网页模式打开（站点自己的页面出图）。暂不支持：XPath 规则、'

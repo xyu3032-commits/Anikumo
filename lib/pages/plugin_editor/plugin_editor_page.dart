@@ -34,7 +34,7 @@ abstract final class _RuleEditorText {
   static const adBlocker = '广告过滤';
   static const adBlockerDesc = '启用 HLS 广告过滤';
 
-  static const antiCrawlerEnable = '启用反反爬虫';
+  static const antiCrawlerEnable = '启用验证处理';
   static const antiCrawlerEnableDesc = '检索失败时显示验证码验证按钮而非重试';
   static const captchaTypeLabel = '验证类型';
   static const captchaTypeImage = '图片验证码';
@@ -64,10 +64,10 @@ abstract final class _RuleEditorText {
   static const sectionChapter = '选集规则';
   static const sectionChapterDesc = '定义如何获取播放线路与剧集列表';
   static const advancedOptions = '高级选项';
-  static const advancedOptionsDesc = '行为、网络与反反爬虫配置';
+  static const advancedOptionsDesc = '行为、网络与验证处理配置';
   static const groupBehavior = '行为设置';
   static const groupNetwork = '网络设置';
-  static const groupAntiCrawler = '反反爬虫';
+  static const groupAntiCrawler = '验证处理';
 
   static const ruleName = '规则名称';
   static const ruleVersion = '规则版本';

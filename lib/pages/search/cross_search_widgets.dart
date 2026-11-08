@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:anikumo/bean/theme/signature.dart';
+import 'package:anikumo/bean/widget/search_stage.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:anikumo/bean/card/bangumi_card.dart';
 import 'package:anikumo/modules/bangumi/bangumi_item.dart';
@@ -24,47 +25,28 @@ class CrossSearchModeSwitch extends StatelessWidget {
   final CrossSearchMode mode;
   final ValueChanged<CrossSearchMode> onChanged;
 
+  static const _icons = {
+    CrossSearchMode.all: Icons.dashboard_rounded,
+    CrossSearchMode.anime: Icons.smart_display_rounded,
+    CrossSearchMode.manga: Icons.menu_book_rounded,
+    CrossSearchMode.novel: Icons.import_contacts_rounded,
+  };
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final option in CrossSearchMode.values)
-            InkWell(
-              borderRadius: BorderRadius.circular(20),
-              onTap: () => onChanged(option),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOut,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-                decoration: BoxDecoration(
-                  color: option == mode
-                      ? theme.colorScheme.primary
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  option.label,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: option == mode
-                        ? theme.colorScheme.onPrimary
-                        : theme.colorScheme.onSurfaceVariant,
-                    fontWeight:
-                        option == mode ? FontWeight.w700 : FontWeight.w500,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
+    // Batch 110: the shared PillSwitch — gradient capsule,
+    // icons, animated selection. Same API as before.
+    return PillSwitch<CrossSearchMode>(
+      value: mode,
+      onChanged: onChanged,
+      options: [
+        for (final option in CrossSearchMode.values)
+          PillSwitchOption(
+            value: option,
+            label: option.label,
+            icon: _icons[option],
+          ),
+      ],
     );
   }
 }
@@ -99,13 +81,13 @@ class MangaResultsSliver extends StatelessWidget {
       itemBuilder: (context, index) {
         final item = items[index];
         return MangaRailCard(
-          item: item,
-          badge: showSourceBadge
-              ? (sourceNames[item.source] ?? item.source)
-              : null,
-          width: double.infinity,
-          onTap: () =>
-              context.pushNamed('/manga/detail', arguments: item),
+            item: item,
+            badge: showSourceBadge
+                ? (sourceNames[item.source] ?? item.source)
+                : null,
+            width: double.infinity,
+            onTap: () =>
+                context.pushNamed('/manga/detail', arguments: item),
         );
       },
     );
@@ -149,13 +131,13 @@ class MangaResultsGrid extends StatelessWidget {
       itemBuilder: (context, index) {
         final item = items[index];
         return MangaRailCard(
-          item: item,
-          badge: showSourceBadge
-              ? (sourceNames[item.source] ?? item.source)
-              : null,
-          width: double.infinity,
-          onTap: () =>
-              context.pushNamed('/manga/detail', arguments: item),
+            item: item,
+            badge: showSourceBadge
+                ? (sourceNames[item.source] ?? item.source)
+                : null,
+            width: double.infinity,
+            onTap: () =>
+                context.pushNamed('/manga/detail', arguments: item),
         );
       },
     );
@@ -235,37 +217,58 @@ class CrossSectionHeader extends StatelessWidget {
     super.key,
     required this.title,
     required this.count,
+    this.busy = false,
+    this.trailing,
   });
 
   final String title;
   final int count;
 
+  /// Batch 110: while this section's sources are still
+  /// answering, a small spinner rides the header.
+  final bool busy;
+  final Widget? trailing;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.only(top: 20, bottom: 10),
+      padding: const EdgeInsets.only(top: 22, bottom: 12),
       child: Row(
         children: [
-          const SectionAccentBar(height: 18),
-          const SizedBox(width: 8),
+          const SectionAccentBar(height: 20),
+          const SizedBox(width: 9),
           Text(
             title,
             style: theme.textTheme.titleMedium
-                ?.copyWith(fontWeight: FontWeight.w800),
+                ?.copyWith(fontWeight: FontWeight.w800, fontSize: 17),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 9),
           Text(
             '$count',
             style: theme.textTheme.bodyMedium
                 ?.copyWith(color: theme.colorScheme.outline),
           ),
+          if (busy) ...[
+            const SizedBox(width: 10),
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+          ],
+          if (trailing != null) ...[
+            const Spacer(),
+            trailing!,
+          ],
         ],
       ),
     );
   }
 }
-
 
 /// Batch 48: novel results as a sliver of rows (cover,
 /// title, author · source), shared by both cross-search

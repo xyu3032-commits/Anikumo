@@ -6,7 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:anikumo/bean/dialog/dialog.dart';
 import 'package:anikumo/bean/widget/github_file_picker.dart';
+import 'package:anikumo/pages/manga/manga_widgets.dart';
 import 'package:anikumo/services/manga/js/js_manga_source.dart';
+import 'package:anikumo/services/manga/local_manga_source.dart';
 import 'package:anikumo/services/manga/manga_sources.dart';
 import 'package:anikumo/utils/constants.dart';
 import 'package:anikumo/utils/error_message.dart';
@@ -26,12 +28,82 @@ class MangaSourcesPage extends StatefulWidget {
 class _MangaSourcesPageState extends State<MangaSourcesPage> {
   bool _importing = false;
 
+  @override
+  void initState() {
+    super.initState();
+    // Batch 102: the local book list backs the 本地漫画
+    // section below; load it once per process.
+    LocalMangaLibrary.ensureLoaded().then((changed) {
+      if (!mounted) return;
+      if (changed) MangaSources.notifyRegistryChanged();
+      setState(() {});
+    });
+  }
+
+  /// Batch 102: import one CBZ / ZIP book into the local
+  /// library (pages are extracted to app storage, so the
+  /// book reads fully offline afterwards).
+  Future<void> _importLocalBook() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['cbz', 'zip'],
+    );
+    final path = result?.files.single.path;
+    if (path == null) return;
+    setState(() => _importing = true);
+    try {
+      final book = await LocalMangaLibrary.importArchive(path);
+      MangaSources.notifyRegistryChanged();
+      AnikumoDialog.showToast(message: '已导入《${book.title}》（${book.pages} 页）');
+    } on FormatException catch (e) {
+      AnikumoDialog.showToast(message: e.message);
+    } catch (_) {
+      AnikumoDialog.showToast(message: '导入失败，文件可能已损坏');
+    } finally {
+      if (mounted) setState(() => _importing = false);
+    }
+  }
+
+  Future<void> _deleteLocalBook(LocalBook book) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('删除本地漫画'),
+        content: Text('确定要删除《${book.title}》吗？本地文件会被删掉；收藏与进度会保留，但无法再打开这本书。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await LocalMangaLibrary.deleteBook(book.id);
+    MangaSources.notifyRegistryChanged();
+    AnikumoDialog.showToast(message: '已删除《${book.title}》');
+    if (mounted) setState(() {});
+  }
+
   /// Batch 45: the three custom-import channels all end in
   /// MangaSources.installCustomJs — only the way the code
   /// text is obtained differs.
   Future<void> _installCode(String code, {String fileName = ''}) async {
     setState(() => _importing = true);
     try {
+      // Batch 88: a pasted/opened payload may be a source
+      // *index* — it holds links, not source code, so it can
+      // only be imported by URL. Say so instead of failing
+      // with the single-source parser's error.
+      if (MangaSources.parseVeneraIndex(code) != null) {
+        throw const FormatException(
+          '这是源索引文件（内含多个源的链接），请改用「从 URL 导入」粘贴它的链接导入',
+        );
+      }
       // Batch 67: the payload may be a Legado book-source
       // pack (its manga entries are type-2 sources) rather
       // than a Venera JS source — route it to the Legado
@@ -60,7 +132,7 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
       AnikumoDialog.showToast(message: '导入失败：${e.message}');
     } catch (e) {
       if (!mounted) return;
-      AnikumoDialog.showToast(message: '导入失败：$e');
+      AnikumoDialog.showToast(message: '导入失败：${friendlyError(e)}');
     } finally {
       if (mounted) setState(() => _importing = false);
     }
@@ -119,6 +191,15 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
       if (code.trim().isEmpty) {
         throw const FormatException('下载到的文件是空的');
       }
+      // Batch 88: the URL may point at a source *index* (a
+      // JSON list of .js files, e.g. a CDN mirror of the
+      // community configs repo) rather than at one source
+      // file — resolve and install every entry it lists.
+      final index = MangaSources.parseVeneraIndex(code);
+      if (index != null) {
+        await _importFromVeneraIndex(url, index);
+        return;
+      }
       await _installCode(code, fileName: url.split('/').last);
     } on FormatException catch (e) {
       if (mounted) {
@@ -131,6 +212,54 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
     } finally {
       if (mounted) setState(() => _importing = false);
     }
+  }
+
+  /// Batch 88: install every source a Venera index lists.
+  /// Each entry's fileName resolves against the index URL
+  /// (an entry may also be an absolute URL). Downloads run
+  /// four at a time; each file goes through the same
+  /// validated installer as a single-source import, and
+  /// the toast reports the real success/failure counts.
+  Future<void> _importFromVeneraIndex(
+    String indexUrl,
+    List<VeneraIndexEntry> entries,
+  ) async {
+    final base = Uri.parse(indexUrl);
+    var installed = 0;
+    var failed = 0;
+    for (var start = 0; start < entries.length; start += 4) {
+      final chunk = entries.skip(start).take(4).toList();
+      await Future.wait(chunk.map((entry) async {
+        try {
+          final fileUrl = base.resolve(entry.fileName).toString();
+          final response = await Dio().get<String>(
+            fileUrl,
+            options: Options(
+              responseType: ResponseType.plain,
+              connectTimeout: const Duration(seconds: 15),
+              receiveTimeout: const Duration(seconds: 30),
+            ),
+          );
+          final code = response.data ?? '';
+          if (code.trim().isEmpty) {
+            throw const FormatException('下载到的文件是空的');
+          }
+          await MangaSources.installCustomJs(
+            code,
+            fileName: entry.fileName.split('/').last,
+          );
+          installed++;
+        } catch (_) {
+          failed++;
+        }
+      }));
+    }
+    if (!mounted) return;
+    setState(() {});
+    AnikumoDialog.showToast(
+      message: '已从索引导入 $installed 个漫画源'
+          '${failed > 0 ? '，$failed 个导入失败' : ''}',
+    );
   }
 
   /// Batch 63: list the repo directory's .js files and
@@ -207,7 +336,7 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
             controller: controller,
             maxLines: 12,
             decoration: const InputDecoration(
-              hintText: '粘贴完整的 Venera JS 源代码（class … extends ComicSource）',
+              hintText: '粘贴完整的 JS 源代码（class … extends ComicSource）',
             ),
           ),
         ),
@@ -413,7 +542,7 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
                   ),
                   if (source.id == activeId)
                     const Chip(label: Text('使用中'))
-                  else
+                  else if (source.id != LocalMangaSource.sourceId)
                     IconButton(
                       icon: const Icon(Icons.delete_outline),
                       tooltip: '删除',
@@ -437,6 +566,45 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
                 : const Icon(Icons.chevron_right),
             onTap: _importing ? null : _showImportSheet,
           ),
+          const Divider(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Text(
+              '本地漫画',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.folder_zip_outlined),
+            title: const Text('导入本地漫画'),
+            subtitle: const Text('从 CBZ / ZIP 文件导入，导入后离线可读'),
+            trailing: _importing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.chevron_right),
+            onTap: _importing ? null : _importLocalBook,
+          ),
+          for (final book in LocalMangaLibrary.cachedBooks)
+            ListTile(
+              leading: MangaCover(
+                url: Uri.file(book.coverPath).toString(),
+                width: 40,
+                height: 56,
+                radius: 6,
+              ),
+              title: Text(book.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+              subtitle: Text('${book.pages} 页'),
+              trailing: IconButton(
+                icon: const Icon(Icons.delete_outline),
+                tooltip: '删除这本书',
+                onPressed: () => _deleteLocalBook(book),
+              ),
+            ),
         ],
       ),
     );

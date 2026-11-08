@@ -61,7 +61,7 @@ class LegadoJsHost {
     final runtime = getJavascriptRuntime();
     final preludeResult = runtime.evaluate(legadoJsPrelude);
     if (preludeResult.isError) {
-      _initError = 'Legado 桥初始化失败：${preludeResult.stringResult}';
+      _initError = '书源脚本桥初始化失败：${preludeResult.stringResult}';
       throw StateError(_initError!);
     }
     final lib = _jsLib;

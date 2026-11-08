@@ -14,6 +14,9 @@ import 'package:anikumo/bean/widget/anikumo_menu.dart';
 import 'package:anikumo/bean/widget/loading_indicator.dart';
 import 'package:anikumo/bean/widget/empty_state_widget.dart';
 import 'package:anikumo/bean/widget/state_presentation.dart';
+import 'package:anikumo/bean/theme/signature.dart';
+import 'package:anikumo/bean/widget/violet_components.dart';
+
 import 'package:anikumo/modules/bangumi/bangumi_item.dart';
 import 'package:anikumo/modules/manga/manga_item.dart';
 import 'package:anikumo/pages/search/cross_search_widgets.dart';
@@ -293,10 +296,19 @@ class _SearchPageState extends State<SearchPage> {
   // failed-check-stays-visible rule) so it stops competing
   // with cover loads for the bridge and the network.
   void _checkMangaAvailability(List<MangaItem> items, int generation) {
+    // Batch 91: same stop-when-covered rule as the manga
+    // search page — the probe must not keep fetching
+    // chapters (and hiding results) after the user has
+    // opened a manga or left search.
+    bool active() =>
+        mounted &&
+        generation == _mangaGeneration &&
+        (ModalRoute.of(context)?.isCurrent ?? true);
     MangaAvailabilityChecker.checkAll(
       items.take(12).toList(),
+      shouldContinue: active,
       onResult: (item, readable) {
-        if (!mounted || generation != _mangaGeneration || readable) return;
+        if (!active() || readable) return;
         setState(() => _hiddenMangaKeys.add(item.storageKey));
       },
     );
@@ -824,6 +836,29 @@ class _SearchPageState extends State<SearchPage> {
     );
   }
 
+  /// Batch 110: discovery section label — signature
+  /// accent bar + bold title, the same voice as the
+  /// result section bars.
+  Widget _sectionLabel(String text) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(left: 16, bottom: 8),
+      child: Row(
+        children: [
+          const SectionAccentBar(height: 15),
+          const SizedBox(width: 8),
+          Text(
+            text,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Batch 15 (G8): saved search keywords, one tap to re-run,
   /// long-press to remove.
   Widget _savedSearchesSection(ThemeData theme) {
@@ -832,15 +867,7 @@ class _SearchPageState extends State<SearchPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 16, bottom: 8),
-          child: Text(
-            '我保存的搜索',
-            style: theme.textTheme.titleSmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
+        _sectionLabel('我保存的搜索'),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Wrap(
@@ -908,14 +935,17 @@ class _SearchPageState extends State<SearchPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
-                  padding: const EdgeInsets.only(left: 16, right: 4),
+                  padding: const EdgeInsets.only(left: 16, right: 4, bottom: 4),
                   child: Row(
                     children: [
+                      const SectionAccentBar(height: 15),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           '最近搜索',
                           style: theme.textTheme.titleSmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w800,
+                            color: theme.colorScheme.onSurface,
                           ),
                         ),
                       ),
@@ -938,42 +968,37 @@ class _SearchPageState extends State<SearchPage> {
                     ],
                   ),
                 ),
-                for (final history in histories.take(10))
-                  Material(
-                    type: MaterialType.transparency,
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 4,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      leading: Icon(
-                        Icons.history_rounded,
-                        color: theme.colorScheme.onSurfaceVariant,
-                        size: 22,
-                      ),
-                      title: Text(
-                        _readableQuery(history.keyword),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      trailing: _managingHistory
-                          ? IconButton(
-                              tooltip: '删除这条搜索记录',
-                              onPressed: () =>
-                                  _controller.deleteSearchHistory(history),
-                              icon: const Icon(Icons.close_rounded, size: 20),
-                            )
-                          : Icon(
-                              Icons.north_west_rounded,
-                              size: 18,
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                      onTap: () => _submit(history.keyword),
-                    ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final history in histories.take(10))
+                        InputChip(
+                          avatar: const Icon(Icons.history_rounded, size: 16),
+                          label: Text(
+                            _readableQuery(history.keyword),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          shape: const StadiumBorder(),
+                          side: BorderSide(
+                            color: theme.colorScheme.outlineVariant
+                                .withValues(alpha: 0.5),
+                          ),
+                          backgroundColor:
+                              theme.colorScheme.surfaceContainerHigh,
+                          onPressed: () => _submit(history.keyword),
+                          onDeleted: _managingHistory
+                              ? () =>
+                                  _controller.deleteSearchHistory(history)
+                              : null,
+                          deleteIcon: const Icon(Icons.close_rounded, size: 16),
+                        ),
+                    ],
                   ),
+                ),
               ],
             );
           },

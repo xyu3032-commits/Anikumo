@@ -41,6 +41,18 @@ class CreditsPage extends StatelessWidget {
                   url: 'https://flutter.dev',
                 ),
                 AboutLinkTile(
+                  icon: Icons.javascript_rounded,
+                  title: 'QuickJS-NG',
+                  subtitle: 'JavaScript 引擎',
+                  url: 'https://github.com/quickjs-ng/quickjs-ng',
+                ),
+                AboutLinkTile(
+                  icon: Icons.code_rounded,
+                  title: 'QuickJS',
+                  subtitle: 'JavaScript 引擎',
+                  url: 'https://github.com/bellard/quickjs',
+                ),
+                AboutLinkTile(
                   icon: Icons.play_circle_outline_rounded,
                   title: 'media-kit',
                   subtitle: '视频播放',

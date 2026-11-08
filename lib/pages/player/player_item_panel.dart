@@ -13,6 +13,7 @@ import 'package:anikumo/pages/player/controller/player_aspect_ratio.dart';
 import 'package:anikumo/pages/player/controller/player_super_resolution.dart';
 import 'package:anikumo/bean/widget/embedded_native_control_area.dart';
 import 'package:anikumo/pages/player/player_panel_hold.dart';
+import 'package:anikumo/pages/player/pip_settings_sheet.dart';
 import 'package:anikumo/services/player/pip_utils.dart';
 import 'package:anikumo/services/player/skip_settings.dart';
 import 'package:anikumo/services/storage/storage.dart';
@@ -879,26 +880,38 @@ class _PlayerItemPanelState extends State<PlayerItemPanel> {
               if ((isDesktop() &&
                       (compact || !videoPageController.isFullscreen)) ||
                   Platform.isAndroid)
-                IconButton(
-                  onPressed: () async {
-                    if (isDesktop()) {
-                      if (videoPageController.isPip) {
-                        await PipUtils.exitDesktopPIPWindow();
-                      } else {
-                        await PipUtils.enterDesktopPIPWindow(
-                          width: playerController.debug.playerWidth,
-                          height: playerController.debug.playerHeight,
-                        );
+                // Batch 113: long-press opens the PiP settings (mode,
+                // zone hiding, mute) without leaving the player.
+                GestureDetector(
+                  onLongPress: () => showPipSettingsSheet(context),
+                  child: IconButton(
+                    onPressed: () async {
+                      if (isDesktop()) {
+                        if (videoPageController.isPip) {
+                          await PipUtils.exitDesktopPIPWindow();
+                        } else {
+                          await PipUtils.enterDesktopPIPWindow(
+                            width: playerController.debug.playerWidth,
+                            height: playerController.debug.playerHeight,
+                          );
+                        }
+                        videoPageController.isPip = !videoPageController.isPip;
+                        return;
                       }
-                      videoPageController.isPip = !videoPageController.isPip;
-                      return;
-                    }
-                    await widget.enterAndroidPictureInPicture();
-                  },
-                  tooltip: '画中画',
-                  icon: const Icon(
-                    Icons.picture_in_picture,
-                    color: Colors.white,
+                      if (GStorage.getSetting(SettingsKeys.pipInAppMode)) {
+                        // In-app mini player: leaving the page parks
+                        // playback in the floating window (the page's
+                        // exit path performs the handover).
+                        widget.onBackPressed();
+                        return;
+                      }
+                      await widget.enterAndroidPictureInPicture();
+                    },
+                    tooltip: '画中画',
+                    icon: const Icon(
+                      Icons.picture_in_picture,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               if (compact) _buildDanmakuToggleButton(context),

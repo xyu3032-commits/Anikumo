@@ -4,6 +4,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:anikumo/bean/dialog/dialog_helper.dart';
 import 'package:anikumo/pages/manga/manga_downloads_page.dart';
 import 'package:anikumo/pages/manga/manga_sources_page.dart';
+import 'package:anikumo/services/manga/manga_image_pipeline.dart';
 import 'package:anikumo/services/manga/manga_library.dart';
 import 'package:anikumo/services/manga/manga_page_cache.dart';
 import 'package:anikumo/services/manga/reader_settings.dart';
@@ -518,6 +519,8 @@ class _NetworkSettingsPageState extends State<_NetworkSettingsPage> {
             // Batch 51: the reader's dedicated page cache
             // is a separate store — clear it too.
             await mangaPageCacheManager.emptyCache();
+            // Batch 102: and the covers' own gated store.
+            await mangaCoverCacheManager.emptyCache();
             AnikumoDialog.showToast(message: '图片缓存已清除');
           },
         ),
@@ -538,12 +541,12 @@ class _AboutSettingsPage extends StatelessWidget {
       children: [
         ListTile(
           title: Text('漫画源'),
-          subtitle: Text('MangaDex（api.mangadex.org）· 免费公共 API'),
+          subtitle: Text('免费公共 API'),
         ),
         ListTile(
           title: Text('界面与设置结构'),
           subtitle: Text(
-            '参考开源项目 Venera（GPL-3.0）的四页签导航、首页卡片流与'
+            '参考开源项目（GPL-3.0）的四页签导航、首页卡片流与'
             '分类设置结构；本实现为独立编写，未使用其代码。',
           ),
         ),

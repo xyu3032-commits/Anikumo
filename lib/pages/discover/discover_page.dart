@@ -192,7 +192,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                 index: '02',
                 label: 'NOVEL ZONE',
                 title: '小说专区',
-                subtitle: 'Legado 书源 · 与动漫漫画互为配套',
+                subtitle: '书源 · 与动漫漫画互为配套',
               ),
             ),
           ),

@@ -6,6 +6,7 @@ import 'package:anikumo/bean/dialog/dialog_helper.dart';
 import 'package:anikumo/bean/settings/settings_detail_scaffold.dart';
 import 'package:anikumo/bean/settings/settings_dropdown_tile.dart';
 import 'package:anikumo/pages/player/controller/player_aspect_ratio.dart';
+import 'package:anikumo/pages/player/pip_settings_sheet.dart';
 import 'package:anikumo/pages/settings/low_memory_mode_settings.dart';
 import 'package:anikumo/utils/constants.dart';
 import 'package:anikumo/services/storage/storage.dart';
@@ -366,6 +367,16 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                   title: Text('自动进入画中画'),
                   description: Text('切到后台时，自动进入画中画'),
                   initialValue: androidAutoEnterPIP,
+                ),
+              if (!isDesktop())
+                SettingsTile(
+                  leading: Icons.picture_in_picture_rounded,
+                  onPressed: (_) async {
+                    await showPipSettingsSheet(context);
+                    setState(() {});
+                  },
+                  title: Text('画中画设置'),
+                  description: Text('应用内小窗、进入漫画/小说时隐藏与静音'),
                 ),
               SettingsTile.switchTile(
                 leading: Icons.block_rounded,

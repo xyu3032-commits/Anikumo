@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:anikumo/bean/widget/empty_state_widget.dart';
+import 'package:anikumo/bean/widget/search_stage.dart';
 import 'package:anikumo/bean/widget/violet_components.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:anikumo/modules/bangumi/bangumi_item.dart';
@@ -12,38 +13,111 @@ import 'package:anikumo/models/novel_item.dart';
 import 'package:anikumo/services/novel/novel_api.dart';
 import 'package:anikumo/services/manga/manga_extras.dart';
 import 'package:anikumo/services/manga/manga_search_utils.dart';
+import 'package:anikumo/services/manga/manga_source.dart';
 import 'package:anikumo/services/manga/manga_sources.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/navigation.dart';
 
 /// Manga-zone search, unified with the anime search page: the
 /// 全部 / 动漫 / 漫画 switch defaults to 全部， both kinds are
 /// queried on submit, and switching panes is animated.
 ///
 /// Batch 12 search pass: results are deduplicated and ranked by
-/// title relevance; the manga side can search the active source
-/// (with scroll pagination) or ALL sources at once; and entries
+/// title relevance; the manga side can search ONE chosen source
+/// (with scroll pagination — batch 97 made the pick free, it
+/// used to be the active source or nothing) or ALL sources at
+/// once; and entries
 /// a source lists but cannot actually serve — no information, or
 /// no readable chapters — are verified in the background and
 /// auto-hidden (with a toggle to reveal them).
+/// Batch 99: route arguments for the search page. A plain
+/// String still works (a keyword/title query); this form
+/// additionally marks the query as a TAG name, which the
+/// page resolves through source catalogues instead of
+/// title keyword search.
+class MangaSearchRouteArgs {
+  const MangaSearchRouteArgs({
+    required this.query,
+    this.tagSearch = false,
+    this.originSourceId,
+  });
+
+  final String query;
+  final bool tagSearch;
+
+  /// Batch 104/105: for a tag search, the source of the
+  /// manga whose tag was tapped — the tag search runs on
+  /// that source alone.
+  final String? originSourceId;
+}
+
 class MangaSearchPage extends StatefulWidget {
-  const MangaSearchPage({super.key, this.initialQuery = ''});
+  const MangaSearchPage({
+    super.key,
+    this.initialQuery = '',
+    this.initialTagSearch = false,
+    this.initialOriginSourceId,
+  });
 
   /// Batch 32: companion sections in the other zones deep-link
   /// here with a title to search for.
   final String initialQuery;
 
+  /// Batch 99: the initial query is a tag name, not a title
+  /// keyword (set when arriving from a detail-page tag tap
+  /// whose tag is not in its own source's catalogue).
+  final bool initialTagSearch;
+
+  /// Batch 104: for a tag search, the source of the manga
+  /// the tag came from (see MangaSearchRouteArgs).
+  final String? initialOriginSourceId;
+
   @override
   State<MangaSearchPage> createState() => _MangaSearchPageState();
 }
 
-class _MangaSearchPageState extends State<MangaSearchPage> {
+class _MangaSearchPageState extends State<MangaSearchPage>
+    with RouteAware {
   static const _pageSize = 30;
 
   final _controller = TextEditingController();
 
+  /// Batch 94: the field gets an explicit focus node so
+  /// leaving for a result (and coming back) can drop focus
+  /// deterministically — see didPushNext/didPopNext.
+  final _searchFocus = FocusNode();
+
+  /// Batch 99: tag-search mode — the query is a tag name
+  /// and the manga side resolves it through source
+  /// catalogues (fetchMangaByTagName) instead of title
+  /// keyword search. Only the initial auto-search from a
+  /// tag tap runs in this mode; any manual submit or scope
+  /// switch returns to keyword semantics.
+  bool _tagMode = false;
+
+  /// Batch 104: the source of the manga whose tag opened
+  /// this page (tag searches only) — its results lead.
+  String? _tagOriginSourceId;
+
   @override
   void initState() {
     super.initState();
+    _tagMode = widget.initialTagSearch;
+    _tagOriginSourceId = widget.initialOriginSourceId;
+    // Batch 97: the default scope is the active source, as
+    // before — it is now a pick the user can change freely.
+    _scopeId = MangaApi.activeOrNull?.id ?? '';
+    if (_tagMode) {
+      // Batch 105 (user correction of batch 104's reading):
+      // a tag search searches the tagged manga's OWN
+      // source — not every source, and not the default
+      // source either (presenting the default as the scope
+      // was the original bug). The origin source becomes
+      // the selected scope; with no origin recorded the
+      // page keeps the all-source scope as a fallback.
+      final origin = _tagOriginSourceId;
+      _scopeId = (origin != null && origin.isNotEmpty) ? origin : '';
+    }
     if (widget.initialQuery.isNotEmpty) {
       _controller.text = widget.initialQuery;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -68,8 +142,20 @@ class _MangaSearchPageState extends State<MangaSearchPage> {
   bool _searched = false;
   int _generation = 0;
 
-  // Search scope for the manga side: active source or all sources.
-  bool _allSources = false;
+  // Search scope for the manga side (batch 97): '' means
+  // all sources aggregated; otherwise the id of ONE chosen
+  // source. The old toggle only offered the active source
+  // or everything — now any installed source can be picked
+  // and switched freely without leaving the page. Defaults
+  // to the active source (see initState).
+  String _scopeId = '';
+  bool get _allSources => _scopeId.isEmpty;
+
+  /// The single source the current scope searches, falling
+  /// back to the active source when the pick is stale (its
+  /// source was removed) — null only with no sources at all.
+  MangaSource? get _scopeSource =>
+      MangaSources.byId(_scopeId) ?? MangaApi.activeOrNull;
   // Auto-hide bookkeeping.
   final Set<String> _hiddenKeys = {};
   bool _showHidden = false;
@@ -79,28 +165,152 @@ class _MangaSearchPageState extends State<MangaSearchPage> {
   bool _loadingMore = false;
   String _lastQuery = '';
 
-  List<MangaItem> get _visibleManga => [
-        for (final item in _mangaResults)
-          if (_showHidden || !_hiddenKeys.contains(item.storageKey)) item,
-      ];
+  // Batch 112: the visible list and hidden count are
+  // memoized — the panes read them several times per
+  // build, and the availability checker rebuilds this
+  // page per verified item while results stream in;
+  // re-filtering the whole result set on every read was
+  // pure churn. The stamp covers every input: the
+  // results list identity, the hidden set's size and
+  // mutation counter, and the show-hidden flag.
+  int _hiddenStamp = 0;
+  List<MangaItem>? _visibleCache;
+  int _visibleCacheStamp = -1;
+  int _hiddenCountCache = 0;
 
-  int get _hiddenCount =>
-      _mangaResults.where((i) => _hiddenKeys.contains(i.storageKey)).length;
+  void _touchHidden() => _hiddenStamp++;
+
+  List<MangaItem> get _visibleManga {
+    final stamp =
+        Object.hash(_mangaResults, _hiddenStamp, _showHidden);
+    if (_visibleCache != null && _visibleCacheStamp == stamp) {
+      return _visibleCache!;
+    }
+    final visible = [
+      for (final item in _mangaResults)
+        if (_showHidden || !_hiddenKeys.contains(item.storageKey)) item,
+    ];
+    _visibleCache = visible;
+    _visibleCacheStamp = stamp;
+    _hiddenCountCache = _mangaResults
+        .where((i) => _hiddenKeys.contains(i.storageKey))
+        .length;
+    return visible;
+  }
+
+  int get _hiddenCount {
+    _visibleManga; // ensure the cache pair is current
+    return _hiddenCountCache;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute<void>) {
+      rootRouteObserver.subscribe(this, route);
+    }
+  }
+
+  /// Batch 94: opening a result pushes the detail route
+  /// over this page. The search field (autofocus, no
+  /// explicit node before this batch) kept its focus
+  /// membership while covered, so on return the platform
+  /// reconnected the IME — the keyboard popped back up over
+  /// the results and the page looked like it was searching
+  /// again. Drop the field's focus as soon as anything is
+  /// pushed over us, and again when we resurface, so a
+  /// return always lands on a quiet results list. Nothing
+  /// here re-runs the search: the results are state, they
+  /// simply stay.
+  @override
+  void didPushNext() {
+    _searchFocus.unfocus();
+  }
+
+  @override
+  void didPopNext() {
+    _searchFocus.unfocus();
+  }
 
   @override
   void dispose() {
+    rootRouteObserver.unsubscribe(this);
     _controller.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
-  /// Batch 78: the 当前源 toggle label — the active source's
-  /// name, truncated so a long-named source cannot stretch
-  /// the toggle past the screen edge.
-  String _scopeSourceLabel() {
-    final source = MangaApi.activeOrNull;
-    if (source == null) return '当前源';
-    final name = source.name;
-    return '当前源·${name.length > 8 ? '${name.substring(0, 8)}…' : name}';
+  /// Batch 78: long source names are truncated so a chip
+  /// cannot stretch off the screen edge.
+  static String _shortSourceName(String name) =>
+      name.length > 8 ? '${name.substring(0, 8)}…' : name;
+
+  /// Batch 97: the scope picker — 全部源 plus one chip per
+  /// installed source, freely switchable. Picking a chip
+  /// re-runs the current search in the new scope at once.
+  Widget _buildScopeChips() {
+    final sources = MangaSources.sortForDisplay(MangaSources.all());
+    final activeId = MangaApi.activeOrNull?.id;
+    final effectiveId = _allSources ? '' : (_scopeSource?.id ?? '');
+    Widget chip(String id, String label) {
+      // Batch 110: pill chips — gradient-tinted selection
+      // matching the mode capsule above.
+      final selected = effectiveId == id;
+      final colors = Theme.of(context).colorScheme;
+      return ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        showCheckmark: false,
+        onSelected: (_) {
+          if (_scopeId == id) return;
+          setState(() => _scopeId = id);
+          if (_searched) _searchFromUser();
+        },
+        visualDensity: VisualDensity.compact,
+        shape: const StadiumBorder(),
+        side: BorderSide(
+          color: colors.outlineVariant.withValues(alpha: 0.5),
+        ),
+        backgroundColor: colors.surfaceContainerHigh,
+        selectedColor: colors.primary,
+        labelStyle: TextStyle(
+          fontSize: 12,
+          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+          color: selected ? colors.onPrimary : null,
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 40,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        scrollCacheExtent: const ScrollCacheExtent.pixels(700),
+        children: [
+          chip('', '全部源'),
+          for (final source in sources)
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: chip(
+                source.id,
+                source.id == activeId
+                    ? '${_shortSourceName(source.name)}·当前源'
+                    : _shortSourceName(source.name),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Batch 99: a search the user explicitly runs (submit
+  /// button, keyboard enter, scope chip) is a KEYWORD
+  /// search — tag mode belongs to the initial landing from
+  /// a tag tap only.
+  Future<void> _searchFromUser() {
+    _tagMode = false;
+    return _search();
   }
 
   Future<void> _search() async {
@@ -114,6 +324,7 @@ class _MangaSearchPageState extends State<MangaSearchPage> {
       _mangaLoading = true;
       _animeLoading = true;
       _hiddenKeys.clear();
+      _touchHidden();
       _showHidden = false;
       _mangaPage = 1;
       _mangaHasMore = false;
@@ -149,19 +360,80 @@ class _MangaSearchPageState extends State<MangaSearchPage> {
   }
 
   Future<void> _fetchManga(String query, int generation) async {
+    // Batch 95: this future used to have NO failure path —
+    // if the manga search threw (a source rejecting an
+    // unusual keyword, a timeout, an engine reset), the
+    // error escaped into _search's Future.wait and
+    // _mangaLoading stayed true forever: the page spun
+    // indefinitely, which is exactly what some tag searches
+    // (the detail page's tag fallback lands here) hit. Any
+    // failure now resolves the spinner into the empty state.
+    try {
+      await _fetchMangaInner(query, generation);
+    } catch (_) {
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        _mangaResults = const [];
+        _mangaLoading = false;
+      });
+    }
+  }
+
+  Future<void> _fetchMangaInner(String query, int generation) async {
     List<MangaItem> results;
-    if (_allSources) {
-      final perSource = await Future.wait([
+    if (_tagMode) {
+      // Batch 99: resolve the tag name through source
+      // catalogues and merge byTag results — a keyword
+      // search here returned nothing, because source
+      // search matches titles, not tags.
+      // Batch 105: restricted to the tagged manga's own
+      // source (the batch 99/104 all-source fan-out was
+      // the user's complaint — a tag belongs to its
+      // manga's source). A stale origin (source removed)
+      // falls back to the unscoped resolution.
+      final origin = _tagOriginSourceId;
+      final originSource =
+          origin == null ? null : MangaSources.byId(origin);
+      results = await fetchMangaByTagName(
+        query,
+        limit: _pageSize,
+        sources: originSource == null ? null : [originSource],
+      );
+    } else if (_allSources) {
+      // Batch 104: the default (active) source is searched
+      // and merged FIRST — under the stable relevance
+      // ranking its results lead their score tier, and its
+      // copy wins the cross-source title dedupe. (User's
+      // rule: 普通搜索默认在前。)
+      final activeId = MangaApi.activeOrNull?.id;
+      final orderedSources = [
         for (final source in MangaSources.all())
+          if (source.id == activeId) source,
+        for (final source in MangaSources.all())
+          if (source.id != activeId) source,
+      ];
+      final perSource = await Future.wait([
+        for (final source in orderedSources)
           source
               .search(query, limit: _pageSize)
+              // Batch 95: one slow or wedged source must
+              // not hold the aggregated search hostage.
+              .timeout(
+                const Duration(seconds: 25),
+                onTimeout: () => const <MangaItem>[],
+              )
               .catchError((_) => const <MangaItem>[]),
       ]);
       results = dedupeMangaItems([
         for (final list in perSource) ...list,
       ]);
     } else {
-      results = await MangaApi.searchManga(query, limit: _pageSize);
+      // Batch 97: the picked source, not always the active
+      // one.
+      final scope = _scopeSource;
+      results = scope == null
+          ? const []
+          : await MangaApi.searchMangaFor(scope, query, limit: _pageSize);
       _mangaHasMore = results.length >= _pageSize;
     }
     if (!mounted || generation != _generation) return;
@@ -172,15 +444,26 @@ class _MangaSearchPageState extends State<MangaSearchPage> {
           withInfo.add(item);
         } else {
           _hiddenKeys.add(item.storageKey);
+          _touchHidden();
         }
       }
       // Batch 26: drop the unrelated tail, and in
       // all-source mode collapse the same manga arriving
       // from several sources into one entry.
-      var ranked = filterRelevantMangaResults(
-        rankMangaResults(withInfo, query),
-        query,
-      );
+      // Batch 99: tag-mode results are relevant by
+      // construction (they arrived via byTag); the title
+      // relevance machinery would bury or drop them —
+      // titles rarely contain the tag word — so they only
+      // get the cross-source title dedupe.
+      // Batch 105: tag results come from ONE source now
+      // (the tagged manga's own), so there is no cross-
+      // source ordering to apply — just the title dedupe.
+      var ranked = _tagMode
+          ? dedupeMangaByTitle(withInfo)
+          : filterRelevantMangaResults(
+              rankMangaResults(withInfo, query),
+              query,
+            );
       if (_allSources) ranked = dedupeMangaByTitle(ranked);
       _mangaResults = ranked;
       _mangaLoading = false;
@@ -190,28 +473,75 @@ class _MangaSearchPageState extends State<MangaSearchPage> {
 
   /// Background pass: entries with no readable chapters from
   /// their source get hidden as the verdicts land.
+  ///
+  /// Batch 91: the pass is capped (batch 72's rule on the
+  /// cross-zone page) and, more importantly, STOPS as soon
+  /// as this page is no longer the visible one. Each verdict
+  /// costs a full chapter fetch on the shared JS engine;
+  /// the pass used to grind through every result long after
+  /// the user opened a manga — competing with that manga's
+  /// own chapter/page loads — and kept hiding entries under
+  /// the user when they came back ("退出了还在继续搜索").
+  /// Verdicts that land while the page is covered are
+  /// dropped, not applied (unproven stays visible, batch
+  /// 26's rule); items never reached simply stay visible.
   void _verifyAvailability(List<MangaItem> items, int generation) {
     MangaAvailabilityChecker.checkAll(
-      items,
+      items.take(12).toList(),
+      shouldContinue: () => _checksActive(generation),
       onResult: (item, readable) {
-        if (!mounted || generation != _generation || readable) return;
-        setState(() => _hiddenKeys.add(item.storageKey));
+        if (!_checksActive(generation) || readable) return;
+        setState(() {
+          _hiddenKeys.add(item.storageKey);
+          _touchHidden();
+        });
       },
     );
   }
 
+  bool _checksActive(int generation) =>
+      mounted &&
+      generation == _generation &&
+      (ModalRoute.of(context)?.isCurrent ?? true);
+
   Future<void> _loadMoreManga() async {
-    if (_allSources || !_mangaHasMore || _loadingMore || _mangaLoading) {
+    if (_allSources ||
+        _tagMode ||
+        !_mangaHasMore ||
+        _loadingMore ||
+        _mangaLoading) {
       return;
     }
     final generation = _generation;
     setState(() => _loadingMore = true);
     final nextPage = _mangaPage + 1;
-    final results = await MangaApi.searchManga(
-      _lastQuery,
-      limit: _pageSize,
-      page: nextPage,
-    );
+    // Batch 97: pagination follows the picked scope too.
+    final scope = _scopeSource;
+    if (scope == null) {
+      setState(() {
+        _loadingMore = false;
+        _mangaHasMore = false;
+      });
+      return;
+    }
+    // Batch 95: same missing failure path as _fetchManga —
+    // a throwing page fetch left _loadingMore true forever.
+    final List<MangaItem> results;
+    try {
+      results = await MangaApi.searchMangaFor(
+        scope,
+        _lastQuery,
+        limit: _pageSize,
+        page: nextPage,
+      );
+    } catch (_) {
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        _loadingMore = false;
+        _mangaHasMore = false;
+      });
+      return;
+    }
     if (!mounted || generation != _generation) return;
     setState(() {
       _mangaPage = nextPage;
@@ -222,6 +552,7 @@ class _MangaSearchPageState extends State<MangaSearchPage> {
       for (final item in results) {
         if (!mangaHasInfo(item)) {
           _hiddenKeys.add(item.storageKey);
+          _touchHidden();
         } else if (!known.contains(item.storageKey)) {
           fresh.add(item);
         }
@@ -262,9 +593,8 @@ class _MangaSearchPageState extends State<MangaSearchPage> {
                     icon: const Icon(Icons.arrow_back_rounded),
                   ),
                   Expanded(
-                    child: VioletGlassCard(
-                      radius: 999,
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: SearchHeroShell(
+                      focusNode: _searchFocus,
                       child: Row(
                         children: [
                           Icon(
@@ -276,13 +606,14 @@ class _MangaSearchPageState extends State<MangaSearchPage> {
                           Expanded(
                             child: TextField(
                               controller: _controller,
+                              focusNode: _searchFocus,
                               autofocus: true,
                               textInputAction: TextInputAction.search,
                               decoration: const InputDecoration(
                                 hintText: '搜索动漫 / 漫画',
                                 border: InputBorder.none,
                               ),
-                              onSubmitted: (_) => _search(),
+                              onSubmitted: (_) => _searchFromUser(),
                             ),
                           ),
                         ],
@@ -291,7 +622,7 @@ class _MangaSearchPageState extends State<MangaSearchPage> {
                   ),
                   const SizedBox(width: 4),
                   IconButton(
-                    onPressed: _search,
+                    onPressed: _searchFromUser,
                     icon: const Icon(Icons.search_rounded),
                     tooltip: '搜索',
                   ),
@@ -314,48 +645,20 @@ class _MangaSearchPageState extends State<MangaSearchPage> {
                     child: modeSwitch,
                   );
                 }
-                final scopeToggle = SegmentedButton<bool>(
-                  segments: [
-                    ButtonSegment(
-                      value: false,
-                      // Batch 62: activeOrNull — with zero
-                      // sources this label used to throw in
-                      // build() (grey screen). Batch 78: long
-                      // source names are truncated so the
-                      // toggle cannot stretch off-screen.
-                      label: Text(_scopeSourceLabel()),
-                    ),
-                    const ButtonSegment(value: true, label: Text('全部源')),
+                // Batch 97: the old two-way toggle （当前源 /
+                // 全部源） is now a horizontally scrolling
+                // chip row — every installed source is
+                // directly pickable. It always stacks under
+                // the mode switch: the chips need the full
+                // width (the batch-78 side-by-side layout
+                // clipped even the two-segment toggle).
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    modeSwitch,
+                    const SizedBox(height: 8),
+                    _buildScopeChips(),
                   ],
-                  selected: {_allSources},
-                  onSelectionChanged: (selection) {
-                    setState(() => _allSources = selection.first);
-                    if (_searched) _search();
-                  },
-                  style: const ButtonStyle(
-                    visualDensity: VisualDensity.compact,
-                    textStyle: WidgetStatePropertyAll(
-                      TextStyle(fontSize: 12),
-                    ),
-                  ),
-                );
-                // Batch 78: the switch (~272dp) and the toggle
-                // (~200dp) side by side need ~480dp; portrait
-                // phones give ~360-410, which clipped the
-                // toggle at the right edge (device report).
-                // Stack them on narrow widths instead.
-                if (constraints.maxWidth < 560) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      modeSwitch,
-                      const SizedBox(height: 8),
-                      scopeToggle,
-                    ],
-                  );
-                }
-                return Row(
-                  children: [modeSwitch, const Spacer(), scopeToggle],
                 );
               },
             ),
@@ -375,7 +678,7 @@ class _MangaSearchPageState extends State<MangaSearchPage> {
                 ),
               ),
               child: KeyedSubtree(
-                key: ValueKey('$_mode|$_allSources|$_searched'),
+                key: ValueKey('$_mode|$_scopeId|$_searched'),
                 child: _buildPane(),
               ),
             ),
@@ -455,10 +758,12 @@ class _MangaSearchPageState extends State<MangaSearchPage> {
           children: [
             for (final keyword in history)
               ActionChip(
+                avatar: const Icon(Icons.history_rounded, size: 16),
                 label: Text(keyword),
+                shape: const StadiumBorder(),
                 onPressed: () {
                   _controller.text = keyword;
-                  _search();
+                  _searchFromUser();
                 },
               ),
           ],
