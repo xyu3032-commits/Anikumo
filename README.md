@@ -24,7 +24,7 @@
 
 <p align="center">
   开源免费 · 无广告 · 无内置片库<br>
-  当前版本 2.4.3 ｜ 主平台 Android（另有 Windows / macOS / Linux / iOS）｜ 许可证 GPL-3.0
+  当前版本 1.0.2 ｜ 主平台 Android（另有 Windows / macOS / Linux / iOS）｜ 许可证 GPL-3.0
 </p>
 
 ---
