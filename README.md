@@ -172,6 +172,7 @@ A：记下设备型号、系统版本、App 版本和复现步骤，到 [Issues]
 - **特别感谢 Legado**：本项目小说区使用了 Legado 的书源格式。
 - **特别感谢 XpathSelector**：其项目是这款软件最重要的组成部分。
 - **特别感谢 Bangumi**：本项目使用了 Bangumi 开放 API 以提供番剧元数据。
+- **特别感谢 TMDB**：本项目使用 TMDB API 提供剧集图片与分集资料。
 - **特别感谢 Anime4K**：本项目使用 Anime4K 进行实时超分。
 - **特别感谢 SyncPlay**：本项目使用 SyncPlay 协议并通过 SyncPlay 公共服务器实现一起看功能。
 - **特别感谢 弹弹play**：本项目弹幕功能使用弹弹play 的弹幕服务。
