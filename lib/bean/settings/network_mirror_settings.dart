@@ -5,6 +5,7 @@ import 'package:anikumo/services/network/acceleration_mode.dart';
 import 'package:anikumo/services/network/bangumi_acceleration.dart';
 import 'package:anikumo/services/network/image_acceleration.dart';
 import 'package:anikumo/services/storage/storage.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class NetworkMirrorSettings extends StatefulWidget {
   const NetworkMirrorSettings({super.key, this.margin});
@@ -22,7 +23,7 @@ class _NetworkMirrorSettingsState extends State<NetworkMirrorSettings> {
     margin: widget.margin,
     tiles: [
       _tile(
-        icon: Icons.travel_explore_rounded,
+        icon: AnikumoIcons.travel_explore_rounded,
         title: '番剧条目加速',
         description: '番剧信息与评论',
         current: BangumiAcceleration.current,
@@ -30,7 +31,7 @@ class _NetworkMirrorSettingsState extends State<NetworkMirrorSettings> {
         setting: SettingsKeys.bangumiAcceleration,
       ),
       _tile(
-        icon: Icons.image_rounded,
+        icon: AnikumoIcons.image_rounded,
         title: '图片加速',
         description: '封面与头像',
         current: ImageAcceleration.current,

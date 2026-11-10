@@ -7,6 +7,7 @@ import 'package:anikumo/services/stats/report_stats.dart';
 import 'package:anikumo/services/stats/watch_stats.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 const _weekdayNames = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 const _goalOptions = [3, 5, 7, 10, 15, 20, 30];
@@ -97,7 +98,7 @@ class _ReportPageState extends State<ReportPage> {
             children: [
               IconButton(
                 onPressed: () => _shiftMonth(-1),
-                icon: const Icon(Icons.chevron_left_rounded),
+                icon: const Icon(AnikumoIcons.chevron_left_rounded),
               ),
               Text(
                 '$_year 年 $_month 月',
@@ -106,7 +107,7 @@ class _ReportPageState extends State<ReportPage> {
               ),
               IconButton(
                 onPressed: () => _shiftMonth(1),
-                icon: const Icon(Icons.chevron_right_rounded),
+                icon: const Icon(AnikumoIcons.chevron_right_rounded),
               ),
             ],
           ),
@@ -164,7 +165,7 @@ class _ReportPageState extends State<ReportPage> {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.flag_rounded,
+                    Icon(AnikumoIcons.flag_rounded,
                         size: 18, color: theme.colorScheme.primary),
                     const SizedBox(width: 8),
                     Text(

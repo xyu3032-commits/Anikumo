@@ -127,6 +127,75 @@ class JsMangaSource extends MangaSource {
     ];
   }
 
+  // ---- Batch 191: in-app source settings ---------------
+  // The source's declared settings (schema from the
+  // runtime, values in the persisted KV) rendered and
+  // edited by the app's own UI — no trip to the source's
+  // website.
+
+  /// The declared settings schema, in declaration order.
+  Future<List<MangaSettingDef>> settingsSchema() async {
+    final result = await engine.call('settingsSchema', const {});
+    if (result is! Map) return const [];
+    return [
+      for (final entry in result.entries)
+        if (entry.value is Map)
+          MangaSettingDef.fromJson(
+            entry.key.toString(),
+            (entry.value as Map).cast<String, dynamic>(),
+          ),
+    ];
+  }
+
+  /// Current setting values (schema defaults seeded at
+  /// registration, user edits on top).
+  Map<String, dynamic> settingValues() {
+    try {
+      final kv = jsonDecode(VeneraEngine.kvJsonFor(jsKey));
+      if (kv is Map && kv['settings'] is Map) {
+        return (kv['settings'] as Map).cast<String, dynamic>();
+      }
+    } catch (_) {}
+    return const {};
+  }
+
+  /// Writes one setting value to the persisted KV and
+  /// re-registers the source so the runtime picks it up.
+  Future<void> writeSetting(String key, Object? value) async {
+    Map<String, dynamic> kv;
+    try {
+      final decoded = jsonDecode(VeneraEngine.kvJsonFor(jsKey));
+      kv = decoded is Map
+          ? decoded.cast<String, dynamic>()
+          : <String, dynamic>{};
+    } catch (_) {
+      kv = <String, dynamic>{};
+    }
+    final settings = kv['settings'] is Map
+        ? (kv['settings'] as Map).cast<String, dynamic>()
+        : <String, dynamic>{};
+    settings[key] = value;
+    kv['settings'] = settings;
+    kv['data'] = kv['data'] is Map ? kv['data'] : <String, dynamic>{};
+    VeneraEngine.persistKv(jsKey, jsonEncode(kv));
+    await engine.refreshRegistration();
+  }
+
+  /// Runs a callback-type setting inside the runtime.
+  Future<void> invokeSettingCallback(String key) async {
+    await engine.call('settingCallback', {'settingKey': key});
+  }
+
+  /// The source's own declared site URL, when its class
+  /// declares one (`url = "..."`), for the info panel.
+  String? get declaredUrl {
+    final match = RegExp(
+      r'''^\s*url\s*=\s*["']([^"']+)["']''',
+      multiLine: true,
+    ).firstMatch(engine.code);
+    return match?.group(1)?.trim();
+  }
+
   @override
   Future<List<MangaPage>> pages(
     MangaItem manga,
@@ -474,6 +543,22 @@ List<MangaItem> mapJsComicList(dynamic result, {required String sourceId}) {
   for (final entry in raw) {
     addEntry(entry);
   }
+  // Batch 185: an entry whose id never materialized cannot
+  // be opened (every detail call keys on the id) — the
+  // cross-source merge filters these, but single-source
+  // lists reached the UI with them and died on tap.
+  final beforeFilter = items.length;
+  items.removeWhere((item) => item.id.trim().isEmpty);
+  // Batch 188: a page whose entries ALL dropped is not
+  // an empty page — the source answered with a shape
+  // this build cannot read. Returning [] made the UI
+  // latch "no more content" mid-list; throwing lands
+  // the call on the retry path instead, where it
+  // belongs. (A genuinely empty page has no entries
+  // at all and still returns [].)
+  if (beforeFilter > 0 && items.isEmpty) {
+    throw StateError('这一页的条目都缺少可用标识，无法打开');
+  }
   return items;
 }
 
@@ -519,8 +604,16 @@ List<MangaTag> mapJsCategories(dynamic result) {
 List<MangaChapter> mapJsChapters(Map<String, dynamic> details) {
   final raw = details['chapters'];
   final chapters = <MangaChapter>[];
+  final seenIds = <String>{};
   void add(String id, String title) {
     if (id.isEmpty) return;
+    // Batch 185: duplicate episode ids (a group map that
+    // repeats an id, a list with the same chapter twice)
+    // collide in the download index and confuse reader
+    // chapter lookup. First occurrence wins, order kept.
+    // (No reordering: the contract is the source's order —
+    // both oldest-first and newest-first sources exist.)
+    if (!seenIds.add(id)) return;
     chapters.add(
       MangaChapter(
         id: id,
@@ -590,21 +683,44 @@ List<MangaPage> mapJsPages(Map<String, dynamic> result) {
       fallbackHeaders[entry.key.toString()] = entry.value.toString();
     }
   }
-  return [
-    for (final image in images)
-      if (image is String && image.isNotEmpty)
-        MangaPage(image, headers: fallbackHeaders)
-      else if (image is Map && image['url'] != null)
-        MangaPage(
-          image['url'].toString(),
-          headers: {
-            ...fallbackHeaders,
-            if (image['headers'] is Map)
-              for (final entry in (image['headers'] as Map).entries)
-                entry.key.toString(): entry.value.toString(),
-          },
-        ),
-  ];
+  // Batch 185: page URLs are validated and deduplicated
+  // here, at the one exit every JS source's page list
+  // passes through. Empty strings (a map entry whose url
+  // stringified to ''), non-URL junk and non-http(s)/file
+  // schemes used to become pages verbatim — each one a
+  // guaranteed broken page in the reader and a phantom
+  // entry in the progress denominator; duplicates rendered
+  // twice and counted twice. Order is preserved.
+  final pages = <MangaPage>[];
+  final seen = <String>{};
+  void addPage(String url, Map<String, String> headers) {
+    final cleaned = url.trim();
+    if (cleaned.isEmpty) return;
+    if (!cleaned.startsWith('http://') &&
+        !cleaned.startsWith('https://') &&
+        !cleaned.startsWith('file://')) {
+      return;
+    }
+    if (!seen.add(cleaned)) return;
+    pages.add(MangaPage(cleaned, headers: headers));
+  }
+
+  for (final image in images) {
+    if (image is String) {
+      addPage(image, fallbackHeaders);
+    } else if (image is Map && image['url'] != null) {
+      addPage(
+        image['url'].toString(),
+        {
+          ...fallbackHeaders,
+          if (image['headers'] is Map)
+            for (final entry in (image['headers'] as Map).entries)
+              entry.key.toString(): entry.value.toString(),
+        },
+      );
+    }
+  }
+  return pages;
 }
 
 /// Batch 88: applies `comic.onImageLoad` results (a list
@@ -718,4 +834,60 @@ MangaItem mapJsDetails(Map<String, dynamic> details, MangaItem base) {
     sourceId: base.source,
   );
   return merged;
+}
+
+
+/// Batch 191: one entry of a JS source's declared
+/// settings schema, as reported by the runtime.
+class MangaSettingDef {
+  const MangaSettingDef({
+    required this.key,
+    required this.title,
+    required this.type,
+    required this.options,
+    required this.defaultValue,
+    required this.validator,
+    required this.buttonText,
+    required this.hasCallback,
+  });
+
+  factory MangaSettingDef.fromJson(
+    String key,
+    Map<String, dynamic> json,
+  ) {
+    return MangaSettingDef(
+      key: key,
+      title: (json['title'] as String?) ?? key,
+      type: (json['type'] as String?) ?? 'input',
+      options: [
+        if (json['options'] is List)
+          for (final option in json['options'] as List)
+            if (option is Map)
+              (
+                value: option['value']?.toString() ?? '',
+                text: option['text']?.toString() ??
+                    option['value']?.toString() ??
+                    '',
+              )
+            else
+              (value: option.toString(), text: option.toString()),
+      ],
+      defaultValue: json['defaultValue'],
+      validator: json['validator'] as String?,
+      buttonText: json['buttonText'] as String?,
+      hasCallback: json['hasCallback'] == true,
+    );
+  }
+
+  final String key;
+  final String title;
+
+  /// select / input / switch / callback (anything else
+  /// renders as a text input).
+  final String type;
+  final List<({String value, String text})> options;
+  final Object? defaultValue;
+  final String? validator;
+  final String? buttonText;
+  final bool hasCallback;
 }

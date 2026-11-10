@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../bean/dialog/dialog.dart';
 import '../../services/build_info.dart';
 import '../../services/manga/manga_sources.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Batch 33: manga source diagnostics.
 ///
@@ -121,7 +122,7 @@ class _MangaDiagnosticsPageState extends State<MangaDiagnosticsPage> {
                         height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.play_arrow_rounded),
+                    : const Icon(AnikumoIcons.play_arrow_rounded),
                 label: Text(_running ? '诊断中…' : '开始诊断'),
               ),
               const SizedBox(width: 12),
@@ -134,7 +135,7 @@ class _MangaDiagnosticsPageState extends State<MangaDiagnosticsPage> {
                         );
                         AnikumoDialog.showToast(message: '报告已复制');
                       },
-                icon: const Icon(Icons.copy_rounded),
+                icon: const Icon(AnikumoIcons.copy_rounded),
                 label: const Text('复制报告'),
               ),
             ],

@@ -413,6 +413,52 @@ class LegadoParse {
     return (parts.first, pairs);
   }
 
+  /// Batch 168: split a rule on its top-level `||` fallback
+  /// separators the way the reference implementation's
+  /// sub-analyzers do: separators inside balanced groups
+  /// ([...], (...), {...}) never split, and quotes are
+  /// honored while inside a group. (At the AnalyzeRule
+  /// layer the reference has no `||` at all — it lives in
+  /// the sub-analyzers — so callers must dispatch JS forms
+  /// before ever consulting this splitter.)
+  static List<String> splitAlternatives(String rule) {
+    if (!rule.contains('||')) return [rule];
+    final parts = <String>[];
+    var depth = 0;
+    String? quote;
+    var start = 0;
+    var i = 0;
+    while (i < rule.length) {
+      final ch = rule[i];
+      if (quote != null) {
+        if (ch == quote) quote = null;
+        i++;
+        continue;
+      }
+      if (depth > 0 && (ch == "'" || ch == '"')) {
+        quote = ch;
+        i++;
+        continue;
+      }
+      if (ch == '[' || ch == '(' || ch == '{') {
+        depth++;
+      } else if (ch == ']' || ch == ')' || ch == '}') {
+        if (depth > 0) depth--;
+      } else if (ch == '|' &&
+          depth == 0 &&
+          i + 1 < rule.length &&
+          rule[i + 1] == '|') {
+        parts.add(rule.substring(start, i));
+        i += 2;
+        start = i;
+        continue;
+      }
+      i++;
+    }
+    parts.add(rule.substring(start));
+    return parts;
+  }
+
   /// Apply Legado `##` replacements: regex replace where the
   /// replacement may reference $1..$9 capture groups.
   static String applyReplacements(

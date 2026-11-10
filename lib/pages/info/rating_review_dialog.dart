@@ -8,6 +8,7 @@ import 'package:anikumo/bean/widget/state_presentation.dart';
 import 'package:anikumo/modules/bangumi/bangumi_item.dart';
 import 'package:anikumo/modules/bangumi/bangumi_review.dart';
 import 'package:anikumo/services/logging/logger.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class RatingReviewDialog extends StatefulWidget {
   const RatingReviewDialog({
@@ -166,7 +167,7 @@ class _RatingReviewDialogState extends State<RatingReviewDialog> {
     final discard = await AnikumoDialog.show<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        icon: const Icon(Icons.edit_note_rounded),
+        icon: const Icon(AnikumoIcons.edit_note_rounded),
         title: const Text('放弃编辑？'),
         content: const Text('未保存的修改将丢失。'),
         actions: [
@@ -324,7 +325,7 @@ class _RatingReviewDialogState extends State<RatingReviewDialog> {
           IconButton(
             tooltip: '关闭',
             onPressed: _submitting ? null : _requestClose,
-            icon: const Icon(Icons.close_rounded),
+            icon: const Icon(AnikumoIcons.close_rounded),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -413,7 +414,7 @@ class _RatingReviewDialogState extends State<RatingReviewDialog> {
             IconButton(
               tooltip: '清除评分',
               onPressed: _submitting ? null : () => _setScore(0),
-              icon: Icon(Icons.restart_alt_rounded,
+              icon: Icon(AnikumoIcons.restart_alt_rounded,
                   color: colors.onSecondaryContainer),
             ),
         ]),
@@ -532,8 +533,8 @@ class _RatingReviewDialogState extends State<RatingReviewDialog> {
           ActionChip(
             avatar: Icon(
                 _showAllTags
-                    ? Icons.expand_less_rounded
-                    : Icons.expand_more_rounded,
+                    ? AnikumoIcons.expand_less_rounded
+                    : AnikumoIcons.expand_more_rounded,
                 size: 18),
             label: Text(_showAllTags ? '收起' : '更多'),
             onPressed: _submitting
@@ -542,7 +543,7 @@ class _RatingReviewDialogState extends State<RatingReviewDialog> {
           ),
         if (!_showCustomTag)
           ActionChip(
-            avatar: const Icon(Icons.add_rounded, size: 18),
+            avatar: const Icon(AnikumoIcons.add_rounded, size: 18),
             label: const Text('自定义标签'),
             onPressed: _submitting
                 ? null
@@ -578,7 +579,7 @@ class _RatingReviewDialogState extends State<RatingReviewDialog> {
                     suffixIcon: IconButton(
                       tooltip: '添加标签',
                       onPressed: _submitting ? null : _addCustomTag,
-                      icon: const Icon(Icons.add_rounded),
+                      icon: const Icon(AnikumoIcons.add_rounded),
                     ),
                   ),
                 ),
@@ -607,7 +608,7 @@ class _RatingReviewDialogState extends State<RatingReviewDialog> {
               color: colors.errorContainer,
               borderRadius: BorderRadius.circular(16)),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Icon(Icons.error_outline_rounded, color: colors.onErrorContainer),
+            Icon(AnikumoIcons.error_outline_rounded, color: colors.onErrorContainer),
             const SizedBox(width: 12),
             Expanded(
                 child: Text(_submitError!,
@@ -650,8 +651,8 @@ class _RatingReviewDialogState extends State<RatingReviewDialog> {
                     ? '保存修改'
                     : '发表',
             icon: _submitError != null
-                ? Icons.refresh_rounded
-                : Icons.arrow_upward_rounded,
+                ? AnikumoIcons.refresh_rounded
+                : AnikumoIcons.arrow_upward_rounded,
           ),
       ]),
     );

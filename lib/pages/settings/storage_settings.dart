@@ -5,6 +5,7 @@ import 'package:anikumo/bean/dialog/dialog_helper.dart';
 import 'package:anikumo/bean/settings/settings_detail_scaffold.dart';
 import 'package:anikumo/bean/settings/settings_list.dart';
 import 'package:anikumo/services/storage/image_cache_service.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class StorageSettingsPage extends StatefulWidget {
   const StorageSettingsPage({super.key});
@@ -29,7 +30,7 @@ class _StorageSettingsPageState extends State<StorageSettingsPage> {
     final confirmed = await AnikumoDialog.show<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        icon: const Icon(Icons.cleaning_services_rounded),
+        icon: const Icon(AnikumoIcons.cleaning_services_rounded),
         title: const Text('清除图片缓存？'),
         content: const Text('图片会在下次加载时重新下载。视频、记录和设置不会删除。'),
         actions: [
@@ -76,7 +77,7 @@ class _StorageSettingsPageState extends State<StorageSettingsPage> {
                 title: const Text('缓存'),
                 tiles: [
                   SettingsTile(
-                    leading: Icons.image_outlined,
+                    leading: AnikumoIcons.image_outlined,
                     title: const Text('清除图片缓存'),
                     description: Text(_cacheDescription(snapshot)),
                     enabled: snapshot.connectionState == ConnectionState.done &&
@@ -89,9 +90,9 @@ class _StorageSettingsPageState extends State<StorageSettingsPage> {
                             ? IconButton(
                                 tooltip: '重新统计',
                                 onPressed: _refreshSize,
-                                icon: const Icon(Icons.refresh_rounded),
+                                icon: const Icon(AnikumoIcons.refresh_rounded),
                               )
-                            : const Icon(Icons.cleaning_services_rounded),
+                            : const Icon(AnikumoIcons.cleaning_services_rounded),
                   ),
                 ],
               ),
@@ -99,9 +100,9 @@ class _StorageSettingsPageState extends State<StorageSettingsPage> {
                 title: const Text('诊断'),
                 tiles: [
                   SettingsTile(
-                    leading: Icons.receipt_long_rounded,
+                    leading: AnikumoIcons.receipt_long_rounded,
                     title: const Text('错误日志'),
-                    trailing: const Icon(Icons.chevron_right_rounded),
+                    trailing: const Icon(AnikumoIcons.chevron_right_rounded),
                     onPressed: (_) =>
                         context.pushNamed('/settings/storage/logs'),
                   ),

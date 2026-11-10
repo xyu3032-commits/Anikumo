@@ -13,6 +13,7 @@ import 'package:anikumo/request/apis/bangumi_api.dart';
 import 'package:anikumo/services/share/share_builders.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 const _weekdayLabels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
@@ -107,7 +108,7 @@ class _UpdatesPageState extends State<UpdatesPage> {
         actions: [
           IconButton(
             onPressed: _exportIcs,
-            icon: const Icon(Icons.event_available_rounded),
+            icon: const Icon(AnikumoIcons.event_available_rounded),
             tooltip: '导出放送日历 (.ics)',
           ),
         ],
@@ -128,7 +129,7 @@ class _UpdatesPageState extends State<UpdatesPage> {
                       strong: true,
                       child: Row(
                         children: [
-                          Icon(Icons.update_rounded,
+                          Icon(AnikumoIcons.update_rounded,
                               color: theme.colorScheme.primary),
                           const SizedBox(width: 12),
                           Expanded(

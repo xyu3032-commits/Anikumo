@@ -17,6 +17,7 @@ import 'package:anikumo/services/manga/manga_source.dart';
 import 'package:anikumo/services/manga/manga_sources.dart';
 import 'package:anikumo/utils/constants.dart';
 import 'package:anikumo/navigation.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Manga-zone search, unified with the anime search page: the
 /// 全部 / 动漫 / 漫画 switch defaults to 全部， both kinds are
@@ -590,7 +591,7 @@ class _MangaSearchPageState extends State<MangaSearchPage>
                   IconButton(
                     tooltip: '返回',
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.arrow_back_rounded),
+                    icon: const Icon(AnikumoIcons.arrow_back_rounded),
                   ),
                   Expanded(
                     child: SearchHeroShell(
@@ -598,7 +599,7 @@ class _MangaSearchPageState extends State<MangaSearchPage>
                       child: Row(
                         children: [
                           Icon(
-                            Icons.search_rounded,
+                            AnikumoIcons.search_rounded,
                             size: 20,
                             color: Theme.of(context).colorScheme.primary,
                           ),
@@ -623,7 +624,7 @@ class _MangaSearchPageState extends State<MangaSearchPage>
                   const SizedBox(width: 4),
                   IconButton(
                     onPressed: _searchFromUser,
-                    icon: const Icon(Icons.search_rounded),
+                    icon: const Icon(AnikumoIcons.search_rounded),
                     tooltip: '搜索',
                   ),
                 ],
@@ -758,7 +759,7 @@ class _MangaSearchPageState extends State<MangaSearchPage>
           children: [
             for (final keyword in history)
               ActionChip(
-                avatar: const Icon(Icons.history_rounded, size: 16),
+                avatar: const Icon(AnikumoIcons.history_rounded, size: 16),
                 label: Text(keyword),
                 shape: const StadiumBorder(),
                 onPressed: () {
@@ -802,7 +803,7 @@ class _MangaSearchPageState extends State<MangaSearchPage>
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const GeneralEmptyState(
-            icon: Icons.search_off_rounded,
+            icon: AnikumoIcons.search_off_rounded,
             title: '没有找到能观看的漫画，换个关键词试试',
             compact: true,
           ),
@@ -842,7 +843,7 @@ class _MangaSearchPageState extends State<MangaSearchPage>
     }
     if (_animeResults.isEmpty) {
       return const GeneralEmptyState(
-        icon: Icons.search_off_rounded,
+        icon: AnikumoIcons.search_off_rounded,
         title: '没有找到相关动漫，换个关键词试试',
       );
     }
@@ -860,7 +861,7 @@ class _MangaSearchPageState extends State<MangaSearchPage>
     }
     if (_novelResultsAll.isEmpty) {
       return const GeneralEmptyState(
-        icon: Icons.auto_stories_outlined,
+        icon: AnikumoIcons.auto_stories_outlined,
         title: '没有找到小说，换个关键词试试',
       );
     }
@@ -887,7 +888,7 @@ class _MangaSearchPageState extends State<MangaSearchPage>
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const GeneralEmptyState(
-            icon: Icons.search_off_rounded,
+            icon: AnikumoIcons.search_off_rounded,
             title: '动漫、漫画和小说都没有找到能看的，换个关键词试试',
             compact: true,
           ),

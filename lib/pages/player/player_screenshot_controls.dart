@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:anikumo/pages/player/controller/player_screenshot_controller.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class PlayerScreenshotControls extends StatelessWidget {
   const PlayerScreenshotControls({
@@ -33,7 +34,7 @@ class PlayerScreenshotControls extends StatelessWidget {
                     color: Colors.white,
                   ),
                 )
-              : const Icon(Icons.photo_camera_outlined),
+              : const Icon(AnikumoIcons.photo_camera_outlined),
         ),
         if (controller.candidates.isNotEmpty)
           IconButton(
@@ -47,7 +48,7 @@ class PlayerScreenshotControls extends StatelessWidget {
               count: controller.candidates.length,
               backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
               textColor: Theme.of(context).colorScheme.onSecondaryContainer,
-              child: const Icon(Icons.photo_library_outlined),
+              child: const Icon(AnikumoIcons.photo_library_outlined),
             ),
           ),
       ],

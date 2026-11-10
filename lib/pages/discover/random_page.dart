@@ -9,6 +9,7 @@ import 'package:anikumo/modules/bangumi/bangumi_item.dart';
 import 'package:anikumo/request/apis/bangumi_api.dart';
 import 'package:anikumo/services/library/user_library.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// 随便看一部： for decision paralysis. Draws one random title from
 /// trends + this week's calendar; reroll as often as you like.
@@ -156,7 +157,7 @@ class _RandomPageState extends State<RandomPage> {
                     const SizedBox(height: 20),
                     FilledButton.icon(
                       onPressed: _draw,
-                      icon: const Icon(Icons.casino_rounded),
+                      icon: const Icon(AnikumoIcons.casino_rounded),
                       label: const Text('换一部'),
                     ),
                     const SizedBox(height: 8),

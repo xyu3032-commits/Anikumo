@@ -4,6 +4,7 @@ import 'package:dlna_dart/dlna.dart';
 import 'package:flutter/material.dart';
 import 'package:anikumo/bean/dialog/dialog_helper.dart';
 import 'package:anikumo/services/logging/logger.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class RemotePlay {
   Future<void> castVideo(String video, {required String title}) async {
@@ -105,27 +106,27 @@ class RemotePlay {
   Icon _deviceUPnPIcon(String deviceType) {
     switch (deviceType) {
       case 'MediaRenderer':
-        return const Icon(Icons.cast_connected);
+        return const Icon(AnikumoIcons.cast_connected);
       case 'MediaServer':
-        return const Icon(Icons.cast_connected);
+        return const Icon(AnikumoIcons.cast_connected);
       case 'InternetGatewayDevice':
-        return const Icon(Icons.router);
+        return const Icon(AnikumoIcons.router);
       case 'BasicDevice':
-        return const Icon(Icons.device_hub);
+        return const Icon(AnikumoIcons.device_hub);
       case 'DimmableLight':
-        return const Icon(Icons.lightbulb);
+        return const Icon(AnikumoIcons.lightbulb);
       case 'WLANAccessPoint':
-        return const Icon(Icons.lan);
+        return const Icon(AnikumoIcons.lan);
       case 'WLANConnectionDevice':
-        return const Icon(Icons.wifi_tethering);
+        return const Icon(AnikumoIcons.wifi_tethering);
       case 'Printer':
-        return const Icon(Icons.print);
+        return const Icon(AnikumoIcons.print);
       case 'Scanner':
-        return const Icon(Icons.scanner);
+        return const Icon(AnikumoIcons.scanner);
       case 'DigitalSecurityCamera':
-        return const Icon(Icons.camera_enhance_outlined);
+        return const Icon(AnikumoIcons.camera_enhance_outlined);
       default:
-        return const Icon(Icons.question_mark);
+        return const Icon(AnikumoIcons.question_mark);
     }
   }
 }

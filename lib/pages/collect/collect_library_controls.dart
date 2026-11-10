@@ -122,8 +122,8 @@ class _CollectLayoutSwitch extends StatelessWidget {
                     : const Duration(milliseconds: 200),
               ),
               icon: Icon(layout == CollectLayout.list
-                  ? Icons.view_list_rounded
-                  : Icons.grid_view_rounded),
+                  ? AnikumoIcons.view_list_rounded
+                  : AnikumoIcons.grid_view_rounded),
             ),
           ),
       ],
@@ -164,12 +164,12 @@ class _CollectSortMenu extends StatelessWidget {
                         Theme.of(context).colorScheme.onSurfaceVariant,
                     minimumSize: const Size(48, 48),
                   ),
-                  icon: const Icon(Icons.sort_rounded, size: 20),
+                  icon: const Icon(AnikumoIcons.sort_rounded, size: 20),
                   label: Text(value.label),
                 )
               : IconButton(
                   onPressed: toggle,
-                  icon: const Icon(Icons.sort_rounded),
+                  icon: const Icon(AnikumoIcons.sort_rounded),
                 ),
         );
       },

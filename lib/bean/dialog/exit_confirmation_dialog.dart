@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 enum ExitDialogAction { exit, minimizeToTray }
 
@@ -64,7 +65,7 @@ class _ExitConfirmationDialogState extends State<ExitConfirmationDialog> {
             borderRadius: BorderRadius.circular(20),
           ),
           child: Icon(
-            Icons.exit_to_app_rounded,
+            AnikumoIcons.exit_to_app_rounded,
             color: colors.onPrimaryContainer,
             size: 28,
           ),
@@ -171,12 +172,12 @@ class _ExitConfirmationDialogState extends State<ExitConfirmationDialog> {
     final colors = theme.colorScheme;
     final (icon, title, description) = switch (action) {
       ExitDialogAction.minimizeToTray => (
-          Icons.minimize_rounded,
+          AnikumoIcons.minimize_rounded,
           '最小化至托盘',
           '隐藏窗口，继续在后台运行',
         ),
       ExitDialogAction.exit => (
-          Icons.power_settings_new_rounded,
+          AnikumoIcons.power_settings_new_rounded,
           '退出 Anikumo',
           '结束运行并关闭应用',
         ),

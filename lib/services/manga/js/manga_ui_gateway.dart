@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:anikumo/bean/dialog/dialog.dart';
 import 'package:anikumo/navigation.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Batch 74: the UI half of the Venera bridge. Sources call
 /// `UI.showMessage/showDialog/showInputDialog/...` (login
@@ -238,7 +239,7 @@ class MangaUiGateway {
               title: Text(options[index]),
               trailing: index == initial
                   ? Icon(
-                      Icons.check,
+                      AnikumoIcons.check,
                       color: Theme.of(itemContext).colorScheme.primary,
                     )
                   : null,

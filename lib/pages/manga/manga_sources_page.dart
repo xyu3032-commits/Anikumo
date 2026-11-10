@@ -7,12 +7,15 @@ import 'package:flutter_modular/flutter_modular.dart';
 import 'package:anikumo/bean/dialog/dialog.dart';
 import 'package:anikumo/bean/widget/github_file_picker.dart';
 import 'package:anikumo/pages/manga/manga_widgets.dart';
+import 'package:anikumo/pages/manga/manga_source_settings_panel.dart';
+import 'package:anikumo/pages/manga/manga_source_update_prompt.dart';
 import 'package:anikumo/services/manga/js/js_manga_source.dart';
 import 'package:anikumo/services/manga/local_manga_source.dart';
 import 'package:anikumo/services/manga/manga_sources.dart';
 import 'package:anikumo/utils/constants.dart';
 import 'package:anikumo/utils/error_message.dart';
 import 'package:anikumo/utils/github_links.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// 漫画源管理 — every source the zone can read from: built-in
 /// native sources and the user's downloaded Venera JS sources.
@@ -27,6 +30,14 @@ class MangaSourcesPage extends StatefulWidget {
 
 class _MangaSourcesPageState extends State<MangaSourcesPage> {
   bool _importing = false;
+
+  // Batch 159: batch-delete selection mode.
+  bool _selecting = false;
+
+  /// Batch 191: the JS source whose settings panel is
+  /// expanded under its row (tap toggles).
+  String? _expandedId;
+  final Set<String> _selected = {};
 
   @override
   void initState() {
@@ -92,7 +103,11 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
   /// Batch 45: the three custom-import channels all end in
   /// MangaSources.installCustomJs — only the way the code
   /// text is obtained differs.
-  Future<void> _installCode(String code, {String fileName = ''}) async {
+  Future<void> _installCode(
+    String code, {
+    String fileName = '',
+    String? origin,
+  }) async {
     setState(() => _importing = true);
     try {
       // Batch 88: a pasted/opened payload may be a source
@@ -123,6 +138,7 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
       final meta = await MangaSources.installCustomJs(
         code,
         fileName: fileName,
+        origin: origin,
       );
       if (!mounted) return;
       AnikumoDialog.showToast(message: '已导入源「${meta.name}」v${meta.version}');
@@ -197,10 +213,13 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
       // file — resolve and install every entry it lists.
       final index = MangaSources.parseVeneraIndex(code);
       if (index != null) {
+        // Batch 190: remember this repository so the
+        // update checker can watch it for new versions.
+        await MangaSources.addSourceRepository(url);
         await _importFromVeneraIndex(url, index);
         return;
       }
-      await _installCode(code, fileName: url.split('/').last);
+      await _installCode(code, fileName: url.split('/').last, origin: url);
     } on FormatException catch (e) {
       if (mounted) {
         AnikumoDialog.showToast(message: '导入失败：${e.message}');
@@ -247,6 +266,7 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
           await MangaSources.installCustomJs(
             code,
             fileName: entry.fileName.split('/').last,
+            origin: fileUrl,
           );
           installed++;
         } catch (_) {
@@ -303,7 +323,11 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
           if (code.trim().isEmpty) {
             throw const FormatException('下载到的文件是空的');
           }
-          await MangaSources.installCustomJs(code, fileName: file.name);
+          await MangaSources.installCustomJs(
+            code,
+            fileName: file.name,
+            origin: file.downloadUrl,
+          );
           installed++;
         } catch (_) {
           failed++;
@@ -381,19 +405,19 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.link),
+              leading: const Icon(AnikumoIcons.link),
               title: const Text('从 URL 导入'),
               subtitle: const Text('粘贴 .js 直链或 GitHub 链接，下载后安装'),
               onTap: () => Navigator.pop(sheetContext, 'url'),
             ),
             ListTile(
-              leading: const Icon(Icons.content_paste),
+              leading: const Icon(AnikumoIcons.content_paste),
               title: const Text('粘贴 JS 代码'),
               subtitle: const Text('把整段源代码粘进来'),
               onTap: () => Navigator.pop(sheetContext, 'paste'),
             ),
             ListTile(
-              leading: const Icon(Icons.folder_open_outlined),
+              leading: const Icon(AnikumoIcons.folder_open_outlined),
               title: const Text('从本地文件导入'),
               subtitle: const Text('选择一个 .js 源文件'),
               onTap: () => Navigator.pop(sheetContext, 'file'),
@@ -416,6 +440,69 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
   Future<void> _activate(String id) async {
     await MangaSources.setActive(id);
     if (mounted) setState(() {});
+  }
+
+  void _toggleSelected(String id) {
+    setState(() {
+      if (!_selected.remove(id)) _selected.add(id);
+    });
+  }
+
+  Future<void> _deleteSelected(Set<String> ids) async {
+    if (ids.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('删除来源'),
+        content: Text('确定要删除选中的 ${ids.length} 个源吗？收藏与进度会保留，但无法再打开这些源的内容。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final removed = await MangaSources.removeInstalledBatch(ids);
+    if (!mounted) return;
+    setState(() {
+      _selected.clear();
+      _selecting = false;
+    });
+    AnikumoDialog.showToast(message: '已删除 $removed 个源');
+  }
+
+  Future<void> _deleteAll(Set<String> ids) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('全部删除'),
+        content: Text('确定要删除全部 ${ids.length} 个已导入源吗？收藏与进度会保留，但无法再打开这些源的内容。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('全部删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final removed = await MangaSources.removeInstalledBatch(ids);
+    if (!mounted) return;
+    setState(() {
+      _selected.clear();
+      _selecting = false;
+    });
+    AnikumoDialog.showToast(message: '已删除 $removed 个源');
   }
 
   Future<void> _remove(String id, String name) async {
@@ -452,15 +539,59 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
     // exactly this "add a source" page. Use the nullable
     // form; no active source just means nothing is checked.
     final activeId = MangaSources.activeOrNull()?.id;
+    // Batch 159: everything except the local-library
+    // facade can be batch-deleted.
+    final deletableIds = {
+      for (final s in sources)
+        if (s.id != LocalMangaSource.sourceId) s.id,
+    };
+    final effectiveSelected = _selected.intersection(deletableIds);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('漫画源管理'),
+        title: Text(_selecting ? '已选 ${effectiveSelected.length} 个' : '漫画源管理'),
         actions: [
-          IconButton(
-            tooltip: '源诊断',
-            icon: const Icon(Icons.fact_check_outlined),
-            onPressed: () => context.pushNamed('/manga/diagnostics'),
-          ),
+          if (_selecting) ...[
+            TextButton(
+              onPressed: () =>
+                  setState(() => _selected.addAll(deletableIds)),
+              child: const Text('全选'),
+            ),
+            TextButton(
+              onPressed: effectiveSelected.isEmpty
+                  ? null
+                  : () => _deleteSelected(effectiveSelected),
+              child: Text(
+                '删除',
+                style: TextStyle(color: theme.colorScheme.error),
+              ),
+            ),
+            IconButton(
+              tooltip: '完成',
+              icon: const Icon(AnikumoIcons.close),
+              onPressed: () => setState(() {
+                _selecting = false;
+                _selected.clear();
+              }),
+            ),
+          ] else ...[
+            if (deletableIds.isNotEmpty)
+              IconButton(
+                tooltip: '批量删除',
+                icon: const Icon(AnikumoIcons.delete_sweep_outlined),
+                onPressed: () => setState(() => _selecting = true),
+              ),
+            IconButton(
+              tooltip: '检查更新',
+              icon: const Icon(AnikumoIcons.cloud_sync_rounded),
+              onPressed: () =>
+                  MangaSourceUpdatePrompt.run(context, force: true),
+            ),
+            IconButton(
+              tooltip: '源诊断',
+              icon: const Icon(AnikumoIcons.fact_check_outlined),
+              onPressed: () => context.pushNamed('/manga/diagnostics'),
+            ),
+          ],
         ],
       ),
       body: ListView(
@@ -475,16 +606,22 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
               ),
             ),
           ),
-          for (final source in sources)
+          for (final source in sources) ...[
             ListTile(
-              leading: Icon(
-                source.id == activeId
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked,
-                color: source.id == activeId
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.onSurfaceVariant,
-              ),
+              leading: _selecting &&
+                      source.id != LocalMangaSource.sourceId
+                  ? Checkbox(
+                      value: _selected.contains(source.id),
+                      onChanged: (_) => _toggleSelected(source.id),
+                    )
+                  : Icon(
+                      source.id == activeId
+                          ? AnikumoIcons.radio_button_checked
+                          : AnikumoIcons.radio_button_unchecked,
+                      color: source.id == activeId
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurfaceVariant,
+                    ),
               title: Row(
                 children: [
                   Flexible(child: Text(source.name)),
@@ -511,13 +648,15 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
                 ],
               ),
               subtitle: Text('${source.description} · 已导入'),
-              trailing: Row(
+              trailing: _selecting
+                  ? null
+                  : Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (source is JsMangaSource)
                     IconButton(
                       tooltip: '源账号登录',
-                      icon: const Icon(Icons.account_circle_outlined),
+                      icon: const Icon(AnikumoIcons.account_circle_outlined),
                       onPressed: () => context.pushNamed(
                         '/manga/login',
                         arguments: source.id,
@@ -529,8 +668,8 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
                         : '置顶这个源',
                     icon: Icon(
                       MangaSources.isPinned(source.id)
-                          ? Icons.push_pin
-                          : Icons.push_pin_outlined,
+                          ? AnikumoIcons.push_pin
+                          : AnikumoIcons.push_pin_outlined,
                       color: MangaSources.isPinned(source.id)
                           ? theme.colorScheme.primary
                           : null,
@@ -544,17 +683,65 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
                     const Chip(label: Text('使用中'))
                   else if (source.id != LocalMangaSource.sourceId)
                     IconButton(
-                      icon: const Icon(Icons.delete_outline),
+                      icon: const Icon(AnikumoIcons.delete_outline),
                       tooltip: '删除',
                       onPressed: () => _remove(source.id, source.name),
                     ),
+                  if (source is JsMangaSource)
+                    Icon(
+                      _expandedId == source.id
+                          ? AnikumoIcons.expand_less_rounded
+                          : AnikumoIcons.expand_more,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                 ],
               ),
-              onTap: () => _activate(source.id),
+              onTap: _selecting
+                  ? (source.id == LocalMangaSource.sourceId
+                      ? null
+                      : () => _toggleSelected(source.id))
+                  : () {
+                      // Batch 191: tapping a JS source
+                      // expands its settings panel in
+                      // place; other sources keep the
+                      // tap-to-activate behavior.
+                      if (source is JsMangaSource) {
+                        setState(() {
+                          _expandedId = _expandedId == source.id
+                              ? null
+                              : source.id;
+                        });
+                      } else {
+                        _activate(source.id);
+                      }
+                    },
+            ),
+            if (_expandedId == source.id &&
+                source is JsMangaSource &&
+                !_selecting)
+              MangaSourceSettingsPanel(
+                key: ValueKey('source-settings:${source.id}'),
+                source: source,
+                isActive: source.id == activeId,
+                onActivate: () => _activate(source.id),
+              ),
+          ],
+          if (!_selecting && deletableIds.isNotEmpty)
+            ListTile(
+              leading: Icon(
+                AnikumoIcons.delete_outline,
+                color: theme.colorScheme.error,
+              ),
+              title: Text(
+                '全部删除',
+                style: TextStyle(color: theme.colorScheme.error),
+              ),
+              subtitle: Text('删除全部 ${deletableIds.length} 个已导入源'),
+              onTap: () => _deleteAll(deletableIds),
             ),
           const Divider(),
           ListTile(
-            leading: const Icon(Icons.file_download_outlined),
+            leading: const Icon(AnikumoIcons.file_download_outlined),
             title: const Text('导入自定义源'),
             subtitle: const Text('从 URL、粘贴代码或本地文件导入'),
             trailing: _importing
@@ -563,7 +750,7 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.chevron_right),
+                : const Icon(AnikumoIcons.chevron_right),
             onTap: _importing ? null : _showImportSheet,
           ),
           const Divider(),
@@ -577,7 +764,7 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
             ),
           ),
           ListTile(
-            leading: const Icon(Icons.folder_zip_outlined),
+            leading: const Icon(AnikumoIcons.folder_zip_outlined),
             title: const Text('导入本地漫画'),
             subtitle: const Text('从 CBZ / ZIP 文件导入，导入后离线可读'),
             trailing: _importing
@@ -586,7 +773,7 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.chevron_right),
+                : const Icon(AnikumoIcons.chevron_right),
             onTap: _importing ? null : _importLocalBook,
           ),
           for (final book in LocalMangaLibrary.cachedBooks)
@@ -600,7 +787,7 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
               title: Text(book.title, maxLines: 1, overflow: TextOverflow.ellipsis),
               subtitle: Text('${book.pages} 页'),
               trailing: IconButton(
-                icon: const Icon(Icons.delete_outline),
+                icon: const Icon(AnikumoIcons.delete_outline),
                 tooltip: '删除这本书',
                 onPressed: () => _deleteLocalBook(book),
               ),

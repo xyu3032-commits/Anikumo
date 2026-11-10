@@ -1,9 +1,26 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hive_ce/hive.dart';
 import 'package:anikumo/models/novel_item.dart';
 import 'package:anikumo/services/novel/legado_def.dart';
 import 'package:anikumo/services/novel/novel_source.dart';
+import 'package:anikumo/services/storage/storage.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+
+class _FakePathProvider extends Fake
+    with MockPlatformInterfaceMixin
+    implements PathProviderPlatform {
+  _FakePathProvider(this.root);
+  final String root;
+  @override
+  Future<String?> getApplicationSupportPath() async => root;
+  @override
+  Future<String?> getApplicationDocumentsPath() async => root;
+  @override
+  Future<String?> getTemporaryPath() async => root;
+}
 
 // Batch 40 regressions for the v12 device report: a novel
 // from 速读谷 showed 最新章节第350章 in the header yet the
@@ -17,6 +34,20 @@ import 'package:anikumo/services/novel/novel_source.dart';
 //     the page could not tell failure from a book that
 //     genuinely has no chapters.
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  // Batch 174: chapters() now runs on the JS engine
+  // host, which needs the services binding, the settings
+  // store, and real loopback networking (the test
+  // framework's mock HttpClient would 400 everything).
+  setUpAll(() async {
+    HttpOverrides.global = null;
+    final dir = await Directory.systemTemp.createTemp('anikumo_toc_');
+    Hive.init(dir.path);
+    PathProviderPlatform.instance = _FakePathProvider(dir.path);
+    await GStorage.init();
+  });
+
   late HttpServer server;
   late String base;
 

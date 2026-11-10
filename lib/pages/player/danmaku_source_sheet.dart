@@ -19,8 +19,10 @@ import 'package:anikumo/modules/danmaku/danmaku_search_response.dart';
 import 'package:anikumo/pages/player/controller/player_danmaku_controller.dart';
 import 'package:anikumo/request/apis/danmaku_api.dart';
 import 'package:anikumo/request/clients/danmaku_client.dart';
+import 'package:anikumo/services/danmaku/builtin_danmu.dart';
 import 'package:anikumo/services/logging/logger.dart';
 import 'package:anikumo/services/storage/storage.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 const _episodeToolThreshold = 25;
 const _episodeSegmentSize = 100;
@@ -141,7 +143,9 @@ class _DanmakuSourceSheetState extends State<_DanmakuSourceSheet> {
 
     // Batch 25: without credentials the API can only 403 —
     // skip the doomed request and show the setup guide.
-    if (!DanmakuClient.hasCredentials) {
+    // Batch 163: the built-in service needs no setup, so
+    // the guide only appears when neither is available.
+    if (!DanmakuClient.hasCredentials && !BuiltinDanmu.available) {
       setState(() {
         _loading = false;
         _error = null;
@@ -393,13 +397,13 @@ class _DanmakuSourceSheetState extends State<_DanmakuSourceSheet> {
               onSubmitted: (_) => _searchAnime(),
               decoration: InputDecoration(
                 hintText: '番剧名称',
-                prefixIcon: const Icon(Icons.search),
+                prefixIcon: const Icon(AnikumoIcons.search),
                 suffixIcon: value.text.isEmpty
                     ? null
                     : IconButton(
                         tooltip: '清空',
                         onPressed: () => _keywordController.clear(),
-                        icon: const Icon(Icons.close, size: 18),
+                        icon: const Icon(AnikumoIcons.close, size: 18),
                       ),
               ),
             ),
@@ -427,7 +431,7 @@ class _DanmakuSourceSheetState extends State<_DanmakuSourceSheet> {
                     children: [
                       for (final keyword in _recentKeywords)
                         ActionChip(
-                          avatar: const Icon(Icons.history, size: 16),
+                          avatar: const Icon(AnikumoIcons.history, size: 16),
                           label: Text(keyword),
                           onPressed: () {
                             _keywordController.text = keyword;
@@ -459,7 +463,7 @@ class _DanmakuSourceSheetState extends State<_DanmakuSourceSheet> {
                 const SizedBox(width: 10),
                 StateActionButton(
                   onPressed: _searchAnime,
-                  icon: Icons.search,
+                  icon: AnikumoIcons.search,
                   text: '搜索',
                 ),
               ],
@@ -473,7 +477,7 @@ class _DanmakuSourceSheetState extends State<_DanmakuSourceSheet> {
   Future<void> _openDanmakuSettings() async {
     await context.pushNamed('/settings/danmaku/');
     if (!mounted) return;
-    if (DanmakuClient.hasCredentials) {
+    if (DanmakuClient.hasCredentials || BuiltinDanmu.available) {
       unawaited(_searchAnime());
     }
   }
@@ -482,12 +486,12 @@ class _DanmakuSourceSheetState extends State<_DanmakuSourceSheet> {
     if (_needsCredentials) {
       return GeneralEmptyState(
         compact: true,
-        icon: Icons.key_rounded,
+        icon: AnikumoIcons.key_rounded,
         title: '弹幕接口未设置：在弹弹Play 免费注册后填入 AppId / AppKey 即可搜索弹幕（只需填一次）',
         actions: [
           StateActionButton(
             onPressed: _openDanmakuSettings,
-            icon: Icons.settings_rounded,
+            icon: AnikumoIcons.settings_rounded,
             text: '去设置',
           ),
           StateActionButton.tonal(onPressed: _goBack, text: '返回搜索'),
@@ -497,7 +501,7 @@ class _DanmakuSourceSheetState extends State<_DanmakuSourceSheet> {
     if (_error != null) {
       return GeneralEmptyState(
         compact: true,
-        icon: Icons.search_off,
+        icon: AnikumoIcons.search_off,
         title: _error!,
         actions: [
           StateActionButton.tonal(onPressed: _goBack, text: '返回搜索'),
@@ -537,7 +541,7 @@ class _DanmakuSourceSheetState extends State<_DanmakuSourceSheet> {
                   subtitle: anime.typeDescription.isEmpty
                       ? null
                       : Text(anime.typeDescription),
-                  trailing: const Icon(Icons.chevron_right_rounded),
+                  trailing: const Icon(AnikumoIcons.chevron_right_rounded),
                 ),
               );
             },
@@ -551,7 +555,7 @@ class _DanmakuSourceSheetState extends State<_DanmakuSourceSheet> {
     if (_error != null) {
       return GeneralErrorWidget(
         compact: true,
-        icon: Icons.subtitles_off_outlined,
+        icon: AnikumoIcons.subtitles_off_outlined,
         title: _error!,
         errMsg: '',
         actions: [StateActionButton.tonal(onPressed: _goBack, text: '返回番剧')],
@@ -579,7 +583,7 @@ class _DanmakuSourceSheetState extends State<_DanmakuSourceSheet> {
           child: visible.isEmpty
               ? const GeneralEmptyState(
                   compact: true,
-                  icon: Icons.filter_list_off,
+                  icon: AnikumoIcons.filter_list_off,
                   title: '未找到分集',
                 )
               : ListView.builder(
@@ -656,7 +660,7 @@ class _SheetHeader extends StatelessWidget {
                 : IconButton(
                     tooltip: '返回',
                     onPressed: onBack,
-                    icon: const Icon(Icons.arrow_back),
+                    icon: const Icon(AnikumoIcons.arrow_back),
                   ),
             onClose: onClose,
             compact: true,
@@ -749,7 +753,7 @@ class _EpisodeToolbar extends StatelessWidget {
                     decoration: InputDecoration(
                       isDense: true,
                       hintText: '标题或集号',
-                      prefixIcon: const Icon(Icons.search, size: 18),
+                      prefixIcon: const Icon(AnikumoIcons.search, size: 18),
                       suffixIcon: searchController.text.isEmpty
                           ? null
                           : IconButton(
@@ -758,7 +762,7 @@ class _EpisodeToolbar extends StatelessWidget {
                                 searchController.clear();
                                 onSearch('');
                               },
-                              icon: const Icon(Icons.close, size: 18),
+                              icon: const Icon(AnikumoIcons.close, size: 18),
                             ),
                     ),
                   ),
@@ -781,7 +785,7 @@ class _EpisodeToolbar extends StatelessWidget {
                       suffixIcon: IconButton(
                         tooltip: '跳转',
                         onPressed: onJump,
-                        icon: const Icon(Icons.arrow_forward, size: 18),
+                        icon: const Icon(AnikumoIcons.arrow_forward, size: 18),
                       ),
                     ),
                   ),

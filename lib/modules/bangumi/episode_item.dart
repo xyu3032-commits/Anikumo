@@ -5,12 +5,20 @@ class EpisodeInfo {
   String name;
   String nameCn;
 
+  /// Batch 152: the episode's air date ('YYYY-MM-DD', ''
+  /// when Bangumi has none) — the raw episodes payload
+  /// always carried it; the model finally reads it. The
+  /// TMDB stills service aligns stills on it when TMDB's
+  /// season layout cannot be matched by number.
+  String airDate;
+
   EpisodeInfo({
     required this.id,
     required this.episode,
     required this.type,
     required this.name,
     required this.nameCn,
+    this.airDate = '',
   });
 
   factory EpisodeInfo.fromJson(Map<String, dynamic> json) {
@@ -19,11 +27,13 @@ class EpisodeInfo {
         episode: json['sort'] ?? 0,
         type: json['type'] ?? 0,
         name: json['name'] ?? '',
-        nameCn: json['name_cn'] ?? '');
+        nameCn: json['name_cn'] ?? '',
+        airDate: json['airdate'] ?? '');
   }
 
   factory EpisodeInfo.fromTemplate() {
-    return EpisodeInfo(id: 0, episode: 0, type: 0, name: '', nameCn: '');
+    return EpisodeInfo(
+        id: 0, episode: 0, type: 0, name: '', nameCn: '', airDate: '');
   }
 
   void reset() {
@@ -32,6 +42,7 @@ class EpisodeInfo {
     type = 0;
     name = '';
     nameCn = '';
+    airDate = '';
   }
 
   String readType() {

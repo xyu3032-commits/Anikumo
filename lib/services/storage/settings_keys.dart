@@ -179,6 +179,48 @@ class SettingsKeys {
     '',
     group: SettingGroup.danmaku,
   );
+
+  /// Batch 163: the built-in danmaku service switch. On
+  /// by default; off means danmaku comes only from the
+  /// credentials above （弹弹Play). Nothing about the
+  /// service itself is shown anywhere in the app.
+  static const danmakuBuiltinEnabled = SettingKey<bool>(
+    'danmakuBuiltinEnabled',
+    true,
+    group: SettingGroup.danmaku,
+  );
+
+  /// Batch 182: danmaku the user sent to the video, kept
+  /// locally (the danmaku providers have no send API, so a
+  /// sent item used to vanish after its on-screen echo).
+  /// JSON object: episode key -> list of DanmakuEntry JSON.
+  static const danmakuLocalSentJson = SettingKey<String>(
+    'danmakuLocalSentJson',
+    '',
+    group: SettingGroup.danmaku,
+  );
+
+  // Batch 129: the user's own TMDB API key (v3), used only to
+  // fetch per-episode stills/metadata for the episode picker.
+  // Empty = the feature stays off and the picker keeps using
+  // the series cover. Bring-your-own, like the DanDanPlay
+  // credentials above: the app ships no shared key.
+  static const tmdbApiKey = SettingKey<String>(
+    'tmdbApiKey',
+    '',
+    group: SettingGroup.player,
+  );
+
+  /// Batch 129: resolved TMDB matches, JSON by Bangumi id —
+  /// {bangumiId: {"tmdbId": n, "season": n, "stills":
+  /// {"1": {"img": url, "name": s, "air": s, "run": mins}}}}.
+  /// Stills barely change, so matches persist indefinitely;
+  /// a wrong match can be flushed from the TMDB settings page.
+  static const tmdbMatchCache = SettingKey<String>(
+    'tmdbMatchCache',
+    '',
+    group: SettingGroup.player,
+  );
   static const danmakuColor = SettingKey<bool>(
     _SettingBoxKey.danmakuColor,
     true,
@@ -364,6 +406,37 @@ class SettingsKeys {
     group: SettingGroup.misc,
   );
 
+  /// Batch 167: user-imported subscription (RSS-format)
+  /// sources, JSON array string. Kept apart from book
+  /// sources: they carry article rules, not book rules.
+  static const novelRssSourcesJson = SettingKey<String>(
+    'novelRssSourcesJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 169: per-source login form values, JSON object
+  /// {sourceId: loginInfoJsonString}. The stored string is
+  /// exactly what rule scripts read back as their login
+  /// info (the reference stores the same shape).
+  static const novelLoginInfoJson = SettingKey<String>(
+    'novelLoginInfoJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 176: per-source variable store, JSON object
+  /// {sourceId: {key: value}}. Rule scripts read and write
+  /// it via source.get/put and java.get/put — line-switching
+  /// sources (a stored current-line value) depend on it
+  /// surviving restarts. Seeded into the MoYuan engine
+  /// after every build and harvested back after calls.
+  static const novelSourceVarsJson = SettingKey<String>(
+    'novelSourceVarsJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
   /// Batch 68: persistent cookie jar for novel source
   /// sites, JSON object {domain: {name: value}}. Filled
   /// from Set-Cookie responses and WebView logins.
@@ -377,6 +450,30 @@ class SettingsKeys {
   /// built-in id).
   static const novelActiveSource = SettingKey<String>(
     'novelActiveSource',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 158: installed optional features of the novel
+  /// zone's feature repository, JSON array of feature ids.
+  static const novelFeatureInstallsJson = SettingKey<String>(
+    'novelFeatureInstallsJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 158: user-added feature repository addresses
+  /// (catalog JSON URLs), JSON array of strings.
+  static const novelFeatureReposJson = SettingKey<String>(
+    'novelFeatureReposJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 158: the local-books registry (imported EPUB /
+  /// TXT files), JSON array of book entries.
+  static const novelLocalBooksJson = SettingKey<String>(
+    'novelLocalBooksJson',
     '',
     group: SettingGroup.misc,
   );
@@ -523,11 +620,40 @@ class SettingsKeys {
     group: SettingGroup.misc,
   );
 
+  /// Batch 190: source repository (index) URLs the user
+  /// imported from — the update checker re-reads them to
+  /// learn each installed source's latest version. JSON
+  /// list of URL strings.
+  static const mangaSourceRepos = SettingKey<String>(
+    'mangaSourceRepos',
+    '',
+    group: SettingGroup.misc,
+  );
+
   /// Batch 47: user-pinned manga source ids (JSON array,
   /// pin order) — pinned sources lead the sources page and
   /// the explore tab's source chips.
   static const mangaPinnedSourceIds = SettingKey<String>(
     'mangaPinnedSourceIds',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 122: user cabinets for locally imported manga —
+  /// {"cabinets": [{id, name, createdAtMs}], "assign":
+  /// {bookId: cabinetId}}. Books without an assignment live
+  /// in the implicit default cabinet.
+  static const mangaCabinetsJson = SettingKey<String>(
+    'mangaCabinetsJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 124: user cabinets for novels — same shape as
+  /// [mangaCabinetsJson], but assignments key on the novel's
+  /// storage key (source::bookUrl).
+  static const novelCabinetsJson = SettingKey<String>(
+    'novelCabinetsJson',
     '',
     group: SettingGroup.misc,
   );
@@ -943,6 +1069,99 @@ class SettingsKeys {
     false,
     group: SettingGroup.player,
   );
+  // Batch 116: while the in-app mini window is playing, leaving the
+  // app (Home button) can hand playback over to the SYSTEM picture
+  // in picture instead of letting the mini window vanish into the
+  // background. Opt-in; only applies in in-app mode on Android.
+  static const pipAutoSystemOnLeave = SettingKey<bool>(
+    _SettingBoxKey.pipAutoSystemOnLeave,
+    false,
+    group: SettingGroup.player,
+  );
+  // Batch 117: mini player personalisation. Theme: 0 dark glass,
+  // 1 moon white, 2 fog blue, 3 light purple. Control mode caps the
+  // layout tier: 0 simple, 1 standard, 2 full. Double-tap action:
+  // 0 play/pause, 1 side seek (left back / right forward).
+  static const pipTheme = SettingKey<int>(
+    _SettingBoxKey.pipTheme,
+    0,
+    group: SettingGroup.player,
+  );
+  static const pipControlMode = SettingKey<int>(
+    _SettingBoxKey.pipControlMode,
+    1,
+    group: SettingGroup.player,
+  );
+  static const pipControlsOpacity = SettingKey<double>(
+    _SettingBoxKey.pipControlsOpacity,
+    0.85,
+    group: SettingGroup.player,
+  );
+  static const pipAutoHideSeconds = SettingKey<int>(
+    _SettingBoxKey.pipAutoHideSeconds,
+    3,
+    group: SettingGroup.player,
+  );
+  static const pipSeekSeconds = SettingKey<int>(
+    _SettingBoxKey.pipSeekSeconds,
+    10,
+    group: SettingGroup.player,
+  );
+  static const pipDoubleTapAction = SettingKey<int>(
+    _SettingBoxKey.pipDoubleTapAction,
+    0,
+    group: SettingGroup.player,
+  );
+  static const pipSideGestures = SettingKey<bool>(
+    _SettingBoxKey.pipSideGestures,
+    false,
+    group: SettingGroup.player,
+  );
+  static const pipHaptics = SettingKey<bool>(
+    _SettingBoxKey.pipHaptics,
+    false,
+    group: SettingGroup.player,
+  );
+  static const pipAnimations = SettingKey<bool>(
+    _SettingBoxKey.pipAnimations,
+    true,
+    group: SettingGroup.player,
+  );
+  static const pipDefaultSize = SettingKey<int>(
+    _SettingBoxKey.pipDefaultSize,
+    1,
+    group: SettingGroup.player,
+  );
+  // Batch 126: the docked mini-player bubble's face — 0 is
+  // the app's own logo (the cat-ear girl), 1 is the user's
+  // uploaded image(s) in pipCatImages (a JSON path list;
+  // several images play as a flipbook).
+  static const pipCatStyle = SettingKey<int>(
+    _SettingBoxKey.pipCatStyle,
+    0,
+    group: SettingGroup.player,
+  );
+  static const pipCatImages = SettingKey<String>(
+    _SettingBoxKey.pipCatImages,
+    '',
+    group: SettingGroup.player,
+  );
+  // Remembered window geometry, as screen fractions; -1 / 0 unset.
+  static const pipOffsetX = SettingKey<double>(
+    _SettingBoxKey.pipOffsetX,
+    -1,
+    group: SettingGroup.player,
+  );
+  static const pipOffsetY = SettingKey<double>(
+    _SettingBoxKey.pipOffsetY,
+    -1,
+    group: SettingGroup.player,
+  );
+  static const pipScale = SettingKey<double>(
+    _SettingBoxKey.pipScale,
+    0,
+    group: SettingGroup.player,
+  );
   static const defaultSuperResolutionMode = SettingKey<int>(
     _SettingBoxKey.defaultSuperResolutionMode,
     1,
@@ -1189,6 +1408,22 @@ class SettingsKeys {
     pipInAppMode,
     pipHideInOtherZones,
     pipMuteWhenHidden,
+    pipAutoSystemOnLeave,
+    pipTheme,
+    pipControlMode,
+    pipControlsOpacity,
+    pipAutoHideSeconds,
+    pipSeekSeconds,
+    pipDoubleTapAction,
+    pipSideGestures,
+    pipHaptics,
+    pipAnimations,
+    pipDefaultSize,
+    pipCatStyle,
+    pipCatImages,
+    pipOffsetX,
+    pipOffsetY,
+    pipScale,
     defaultSuperResolutionMode,
     disableSuperResolutionWarning,
     playerDisableAnimations,
@@ -1302,6 +1537,22 @@ class _SettingBoxKey {
       pipInAppMode = 'pipInAppMode',
       pipHideInOtherZones = 'pipHideInOtherZones',
       pipMuteWhenHidden = 'pipMuteWhenHidden',
+      pipAutoSystemOnLeave = 'pipAutoSystemOnLeave',
+      pipTheme = 'pipTheme',
+      pipControlMode = 'pipControlMode',
+      pipControlsOpacity = 'pipControlsOpacity',
+      pipAutoHideSeconds = 'pipAutoHideSeconds',
+      pipSeekSeconds = 'pipSeekSeconds',
+      pipDoubleTapAction = 'pipDoubleTapAction',
+      pipSideGestures = 'pipSideGestures',
+      pipHaptics = 'pipHaptics',
+      pipAnimations = 'pipAnimations',
+      pipDefaultSize = 'pipDefaultSize',
+      pipCatStyle = 'pipCatStyle',
+      pipCatImages = 'pipCatImages',
+      pipOffsetX = 'pipOffsetX',
+      pipOffsetY = 'pipOffsetY',
+      pipScale = 'pipScale',
       defaultSuperResolutionMode = 'defaultSuperResolutionType',
       disableSuperResolutionWarning = 'superResolutionWarn',
       playerDisableAnimations = 'playerDisableAnimations',

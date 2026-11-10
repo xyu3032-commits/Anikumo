@@ -13,6 +13,7 @@ import 'package:anikumo/services/manga/manga_extras.dart';
 import 'package:anikumo/services/manga/manga_library.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// 收藏 tab — favorites grid with batch-15 upgrades: update
 /// badges （追新）, sorting + pinning, and a multi-select manage
@@ -180,17 +181,17 @@ class _MangaFavoritesTabState extends State<MangaFavoritesTab> {
                         child: const Text('全选'),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.push_pin_outlined),
+                        icon: const Icon(AnikumoIcons.push_pin_outlined),
                         tooltip: '置顶/取消置顶',
                         onPressed: _pinSelected,
                       ),
                       IconButton(
-                        icon: const Icon(Icons.delete_outline),
+                        icon: const Icon(AnikumoIcons.delete_outline),
                         tooltip: '删除所选',
                         onPressed: _deleteSelected,
                       ),
                       IconButton(
-                        icon: const Icon(Icons.close),
+                        icon: const Icon(AnikumoIcons.close),
                         tooltip: '取消',
                         onPressed: () => setState(() => _selection = null),
                       ),
@@ -242,12 +243,12 @@ class _MangaFavoritesTabState extends State<MangaFavoritesTab> {
                         )
                       else
                         IconButton(
-                          icon: const Icon(Icons.update_rounded),
+                          icon: const Icon(AnikumoIcons.update_rounded),
                           tooltip: '检查更新',
                           onPressed: _checkUpdates,
                         ),
                       PopupMenuButton<MangaFavoriteSort>(
-                        icon: const Icon(Icons.sort_rounded),
+                        icon: const Icon(AnikumoIcons.sort_rounded),
                         tooltip: '排序',
                         initialValue: _sort,
                         onSelected: (mode) => setState(() => _sort = mode),
@@ -276,7 +277,7 @@ class _MangaFavoritesTabState extends State<MangaFavoritesTab> {
           Expanded(
             child: favorites.isEmpty
                 ? const GeneralEmptyState(
-                    icon: Icons.collections_bookmark_outlined,
+                    icon: AnikumoIcons.collections_bookmark_outlined,
                     title: '还没有收藏，在详情页点 ♥ 就会出现在这里',
                   )
                 : GridView.builder(
@@ -354,7 +355,7 @@ class _MangaFavoritesTabState extends State<MangaFavoritesTab> {
                                 left: 6,
                                 child: ScaleIn(
                                   child: Icon(
-                                  Icons.push_pin_rounded,
+                                  AnikumoIcons.push_pin_rounded,
                                   size: 16,
                                   color: Colors.white,
                                     shadows: [
@@ -395,8 +396,8 @@ class _MangaFavoritesTabState extends State<MangaFavoritesTab> {
                                 right: 4,
                                 child: Icon(
                                   selected
-                                      ? Icons.check_circle_rounded
-                                      : Icons.radio_button_unchecked,
+                                      ? AnikumoIcons.check_circle_rounded
+                                      : AnikumoIcons.radio_button_unchecked,
                                   color: selected
                                       ? theme.colorScheme.primary
                                       : Colors.white70,

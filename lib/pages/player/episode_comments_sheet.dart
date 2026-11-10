@@ -103,6 +103,7 @@ class _EpisodeCommentsSheetState extends State<EpisodeCommentsSheet>
       type: info.type,
       name: info.name,
       nameCn: info.nameCn,
+      airDate: info.airDate,
     );
   }
 

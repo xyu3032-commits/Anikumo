@@ -4,6 +4,7 @@ import 'package:flutter_modular/flutter_modular.dart';
 import 'package:anikumo/bean/card/network_img_layer.dart';
 import 'package:anikumo/modules/bangumi/bangumi_item.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Wide hero card for the top pick of the 精选 (featured) page.
 ///
@@ -99,7 +100,7 @@ class BangumiFeatureCard extends StatelessWidget {
                       children: [
                         if (bangumiItem.ratingScore > 0)
                           _MetaChip(
-                            icon: Icons.star_rounded,
+                            icon: AnikumoIcons.star_rounded,
                             label: bangumiItem.ratingScore.toStringAsFixed(1),
                           ),
                         if (_year.isNotEmpty) _MetaChip(label: _year),

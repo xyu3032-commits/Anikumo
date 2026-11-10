@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Batch 32: state rows for the cross-zone companion sections
 /// （配套漫画 / 配套小说 / 配套动漫） on the detail pages.
@@ -64,7 +65,7 @@ class CompanionEmptyRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.search_off_rounded,
+          Icon(AnikumoIcons.search_off_rounded,
               size: 20, color: scheme.onSurfaceVariant),
           const SizedBox(width: 10),
           Expanded(

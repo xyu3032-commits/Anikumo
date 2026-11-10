@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class RuleCard extends StatelessWidget {
   const RuleCard({
@@ -85,8 +86,8 @@ class RuleCard extends StatelessWidget {
                         ),
                         child: Icon(
                           selected
-                              ? Icons.check_rounded
-                              : Icons.extension_rounded,
+                              ? AnikumoIcons.check_rounded
+                              : AnikumoIcons.extension_rounded,
                           color: selected || installed
                               ? colors.onSecondaryContainer
                               : colors.onPrimaryContainer,

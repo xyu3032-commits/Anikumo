@@ -1,7 +1,9 @@
 // ignore_for_file: library_private_types_in_public_api
 
 import 'package:canvas_danmaku/canvas_danmaku.dart' as canvas;
+import 'package:flutter/material.dart';
 import 'package:anikumo/modules/danmaku/danmaku_module.dart';
+import 'package:anikumo/services/danmaku/local_danmaku.dart';
 import 'package:anikumo/pages/download/download_controller.dart';
 import 'package:anikumo/request/apis/danmaku_api.dart';
 import 'package:anikumo/services/logging/logger.dart';
@@ -103,6 +105,10 @@ abstract class _PlayerDanmakuController with Store {
   int bangumiID = 0;
   int _scheduledDanmakuGeneration = 0;
 
+  /// Batch 182: the local-sent store key of the episode
+  /// currently loaded (set by every fetch entry point).
+  String _localEpisodeKey = '';
+
   int get scheduledDanmakuGeneration => _scheduledDanmakuGeneration;
 
   double get timelineOffsetSeconds {
@@ -136,21 +142,32 @@ abstract class _PlayerDanmakuController with Store {
   }
 
   // Apply fetched data only after VideoPageController validates the session.
+  // [animeTitle] feeds the built-in service's title match
+  // (batch 163); the credential flow ignores it.
   Future<DanmakuLoadResult> fetchDanmaku(
     int bangumiId,
     String pluginName,
-    int episode,
-  ) async {
+    int episode, {
+    String animeTitle = '',
+  }) async {
+    _localEpisodeKey = LocalDanmakuStore.episodeKey(
+      bangumiId: bangumiId,
+      pluginName: pluginName,
+      episode: episode,
+      title: animeTitle,
+    );
     if (isLocalPlayback()) {
       return await _fetchCachedDanmaku(
         bangumiId,
         pluginName,
         episode,
+        animeTitle: animeTitle,
       );
     }
     return await _fetchDanDanmakuByBgmBangumiID(
       bangumiId,
       episode,
+      animeTitle: animeTitle,
     );
   }
 
@@ -167,8 +184,34 @@ abstract class _PlayerDanmakuController with Store {
   }) {
     bangumiID = result.bangumiID;
     addDanmakus(result.danmakus);
+    // Batch 182: the user's own sent danmaku ride along
+    // with every load of this episode.
+    addDanmakus(LocalDanmakuStore.forEpisode(_localEpisodeKey));
     danmakuOn = enableDanmaku;
     danmakuLoading = false;
+  }
+
+  /// Batch 182: persist a danmaku the user just sent to
+  /// the video (the panel echoes it on screen itself).
+  /// Stored in source-timeline seconds so it re-enters
+  /// at the same moment on the next load, and bucketed
+  /// into the live map so seeking back replays it too.
+  void recordSentDanmaku(
+    String message, {
+    required Duration playbackPosition,
+  }) {
+    if (_localEpisodeKey.isEmpty) return;
+    final t =
+        playbackPosition.inMilliseconds / 1000.0 - timelineOffsetSeconds;
+    final entry = DanmakuEntry(
+      message: message,
+      time: t < 0 ? 0 : t,
+      type: 1,
+      color: Colors.white,
+      source: 'Local',
+    );
+    LocalDanmakuStore.add(_localEpisodeKey, entry);
+    addDanmakus([entry]);
   }
 
   @action
@@ -189,7 +232,8 @@ abstract class _PlayerDanmakuController with Store {
   }
 
   Future<DanmakuLoadResult> _fetchCachedDanmaku(
-      int bangumiId, String pluginName, int episode) async {
+      int bangumiId, String pluginName, int episode,
+      {String animeTitle = ''}) async {
     AnikumoLogger().i(
         'PlayerController: attempting to load cached danmaku for episode $episode');
     var nextBangumiID = bangumiID;
@@ -211,10 +255,13 @@ abstract class _PlayerDanmakuController with Store {
         AnikumoLogger()
             .i('PlayerController: no cached danmaku, attempting online fetch');
         try {
-          nextBangumiID =
-              await DanmakuApi.getDanDanBangumiIDByBgmBangumiID(bangumiId);
+          final (res, resolvedID) = await DanmakuApi.fetchAutoDanmaku(
+            bgmBangumiId: bangumiId,
+            title: animeTitle,
+            episode: episode,
+          );
+          nextBangumiID = resolvedID;
           if (nextBangumiID != 0) {
-            var res = await DanmakuApi.getDanDanmaku(nextBangumiID, episode);
             if (res.isNotEmpty) {
               AnikumoLogger()
                   .i('PlayerController: fetched ${res.length} danmakus online');
@@ -268,20 +315,24 @@ abstract class _PlayerDanmakuController with Store {
   }
 
   Future<DanmakuLoadResult> _fetchDanDanmakuByBgmBangumiID(
-      int bgmBangumiID, int episode) async {
+      int bgmBangumiID, int episode,
+      {String animeTitle = ''}) async {
     AnikumoLogger().i(
         'PlayerController: attempting to get danmaku [BgmBangumiID] $bgmBangumiID');
     var nextBangumiID = bangumiID;
     try {
-      nextBangumiID =
-          await DanmakuApi.getDanDanBangumiIDByBgmBangumiID(bgmBangumiID);
+      final (res, resolvedID) = await DanmakuApi.fetchAutoDanmaku(
+        bgmBangumiId: bgmBangumiID,
+        title: animeTitle,
+        episode: episode,
+      );
+      nextBangumiID = resolvedID;
       if (nextBangumiID == 0) {
         return DanmakuLoadResult.success(
           danmakus: const [],
           bangumiID: nextBangumiID,
         );
       }
-      var res = await DanmakuApi.getDanDanmaku(nextBangumiID, episode);
       return DanmakuLoadResult.success(
         danmakus: res,
         bangumiID: nextBangumiID,
@@ -300,8 +351,10 @@ abstract class _PlayerDanmakuController with Store {
     danmakuLoading = true;
     try {
       danDanmakus.clear();
+      _localEpisodeKey = 'ep:$episodeID';
       var res = await DanmakuApi.getDanDanmakuByEpisodeID(episodeID);
       addDanmakus(res);
+      addDanmakus(LocalDanmakuStore.forEpisode(_localEpisodeKey));
       return res.isNotEmpty;
     } catch (e) {
       AnikumoLogger().w('PlayerController: failed to get danmaku', error: e);

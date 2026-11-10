@@ -35,6 +35,7 @@ import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/utils/constants.dart';
 import 'package:anikumo/utils/date_time.dart';
 import 'package:anikumo/utils/search_parser.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 part 'search_filter_sheet.dart';
 part 'search_widgets.dart';
@@ -496,7 +497,7 @@ class _SearchPageState extends State<SearchPage> {
                   onPressed: loading
                       ? null
                       : (manga ? _expandMangaSearch : _expandNovelSearch),
-                  icon: const Icon(Icons.manage_search_outlined, size: 18),
+                  icon: const Icon(AnikumoIcons.manage_search_outlined, size: 18),
                   label: Text('更多搜索（还有 $remaining 个源）'),
                 )
               else
@@ -509,7 +510,7 @@ class _SearchPageState extends State<SearchPage> {
               const Spacer(),
               TextButton.icon(
                 onPressed: () => _pickCrossSources(manga: manga),
-                icon: const Icon(Icons.tune, size: 18),
+                icon: const Icon(AnikumoIcons.tune, size: 18),
                 label: const Text('搜索源'),
               ),
             ],
@@ -649,7 +650,7 @@ class _SearchPageState extends State<SearchPage> {
       return [
         const SliverToBoxAdapter(
           child: GeneralEmptyState(
-            icon: Icons.auto_stories_outlined,
+            icon: AnikumoIcons.auto_stories_outlined,
             title: '没有找到小说',
           ),
         ),
@@ -724,7 +725,7 @@ class _SearchPageState extends State<SearchPage> {
       return [
         SliverToBoxAdapter(
           child: GeneralEmptyState(
-            icon: Icons.menu_book_outlined,
+            icon: AnikumoIcons.menu_book_outlined,
             title: _mangaResultsAll.isEmpty ? '没有找到漫画' : '找到的漫画都无法观看，已自动隐藏',
           ),
         ),
@@ -810,14 +811,14 @@ class _SearchPageState extends State<SearchPage> {
         leading: IconButton(
           tooltip: '搜索',
           onPressed: () => _submit(_input.text),
-          icon: const Icon(Icons.search_rounded),
+          icon: const Icon(AnikumoIcons.search_rounded),
         ),
         trailing: [
           if (value.text.isNotEmpty || _hasSearched)
             IconButton(
               tooltip: '清空搜索',
               onPressed: _clearSearch,
-              icon: const Icon(Icons.close_rounded),
+              icon: const Icon(AnikumoIcons.close_rounded),
             ),
           if (value.text.trim().isNotEmpty)
             IconButton(
@@ -828,7 +829,7 @@ class _SearchPageState extends State<SearchPage> {
                   AnikumoDialog.showToast(message: '已保存到「我保存的搜索」');
                 }
               },
-              icon: const Icon(Icons.bookmark_add_outlined),
+              icon: const Icon(AnikumoIcons.bookmark_add_outlined),
             ),
         ],
         onSubmitted: _submit,
@@ -881,7 +882,7 @@ class _SearchPageState extends State<SearchPage> {
                     if (mounted) setState(() {});
                   },
                   child: ActionChip(
-                    avatar: const Icon(Icons.bookmark_rounded, size: 16),
+                    avatar: const Icon(AnikumoIcons.bookmark_rounded, size: 16),
                     label: Text(keyword),
                     onPressed: () {
                       _input.text = keyword;
@@ -919,10 +920,10 @@ class _SearchPageState extends State<SearchPage> {
               horizontal: 16,
               vertical: 4,
             ),
-            leading: const Icon(Icons.tune_rounded),
+            leading: const Icon(AnikumoIcons.tune_rounded),
             title: const Text('按条件查找'),
             subtitle: const Text('题材、放送时间与评分'),
-            trailing: const Icon(Icons.chevron_right_rounded),
+            trailing: const Icon(AnikumoIcons.chevron_right_rounded),
             onTap: _showFilters,
           ),
         ),
@@ -976,7 +977,7 @@ class _SearchPageState extends State<SearchPage> {
                     children: [
                       for (final history in histories.take(10))
                         InputChip(
-                          avatar: const Icon(Icons.history_rounded, size: 16),
+                          avatar: const Icon(AnikumoIcons.history_rounded, size: 16),
                           label: Text(
                             _readableQuery(history.keyword),
                             maxLines: 1,
@@ -994,7 +995,7 @@ class _SearchPageState extends State<SearchPage> {
                               ? () =>
                                   _controller.deleteSearchHistory(history)
                               : null,
-                          deleteIcon: const Icon(Icons.close_rounded, size: 16),
+                          deleteIcon: const Icon(AnikumoIcons.close_rounded, size: 16),
                         ),
                     ],
                   ),
@@ -1080,7 +1081,7 @@ class _SearchPageState extends State<SearchPage> {
                           _controller.notShowWatchedBangumis ||
                           _controller.notShowAbandonedBangumis,
                       smallSize: 6,
-                      child: const Icon(Icons.tune_rounded),
+                      child: const Icon(AnikumoIcons.tune_rounded),
                     ),
                   ),
                 ],
@@ -1125,25 +1126,25 @@ class _SearchPageState extends State<SearchPage> {
         SliverToBoxAdapter(
           child: _controller.isSearchError
               ? GeneralEmptyState(
-                  icon: Icons.cloud_off_rounded,
+                  icon: AnikumoIcons.cloud_off_rounded,
                   title: '网络开小差了，搜索没能完成',
                   actions: [
                     StateActionButton.tonal(
                       onPressed: () => _submit(_submittedQuery!),
-                      icon: Icons.refresh_rounded,
+                      icon: AnikumoIcons.refresh_rounded,
                       text: '重试',
                     ),
                   ],
                 )
               : const GeneralEmptyState(
-                  icon: Icons.search_off_rounded,
+                  icon: AnikumoIcons.search_off_rounded,
                   title: '没有找到番剧',
                 ),
         )
       else if (items.isEmpty)
         SliverToBoxAdapter(
           child: GeneralEmptyState(
-            icon: Icons.filter_alt_off_rounded,
+            icon: AnikumoIcons.filter_alt_off_rounded,
             title: '这些番剧被筛选隐藏了',
             actions: [
               StateActionButton.tonal(
@@ -1151,7 +1152,7 @@ class _SearchPageState extends State<SearchPage> {
                   await _controller.setNotShowWatchedBangumis(false);
                   await _controller.setNotShowAbandonedBangumis(false);
                 },
-                icon: Icons.visibility_outlined,
+                icon: AnikumoIcons.visibility_outlined,
                 text: '显示全部',
               ),
             ],
@@ -1175,7 +1176,7 @@ class _SearchPageState extends State<SearchPage> {
                   : _controller.hasMoreSearchResults
                   ? TextButton.icon(
                       onPressed: _loadMore,
-                      icon: const Icon(Icons.expand_more_rounded),
+                      icon: const Icon(AnikumoIcons.expand_more_rounded),
                       label: const Text('加载更多'),
                     )
                   : Text(

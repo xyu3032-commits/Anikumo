@@ -3,6 +3,7 @@ import 'package:anikumo/bean/settings/settings_detail_scaffold.dart';
 import 'package:anikumo/pages/player/controller/player_super_resolution.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/bean/settings/settings_list.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class SuperResolutionSettings extends StatefulWidget {
   const SuperResolutionSettings({super.key});
@@ -59,7 +60,7 @@ class _SuperResolutionSettingsState extends State<SuperResolutionSettings> {
             title: Text('默认行为'),
             tiles: [
               SettingsTile.switchTile(
-                leading: Icons.notifications_off_rounded,
+                leading: AnikumoIcons.notifications_off_rounded,
                 title: Text('关闭提示'),
                 description: Text('关闭每次启用超分辨率时的提示'),
                 initialValue: disableWarning,

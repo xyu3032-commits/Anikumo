@@ -128,9 +128,15 @@ class WebViewVideoSourceService implements IVideoSourceService {
         ResolvedSourceEntry(url: event.url, format: event.format),
       );
 
+      // Batch 143: the parser event echoes the webview
+      // controller's mutable offset field, which a concurrent
+      // load (prefetch, another resolve) can overwrite before
+      // the event lands — silently dropping the resume point.
+      // The request's offset is the caller's intent and is
+      // authoritative, exactly as on the cache path above.
       return VideoSource(
         url: event.url,
-        offset: event.offset,
+        offset: offset,
         type: VideoSourceType.online,
         format: event.format,
       );

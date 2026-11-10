@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
+import 'package:anikumo/bean/dialog/dialog.dart';
 import 'package:anikumo/bean/dialog/dialog_helper.dart';
+import 'package:anikumo/services/danmaku/local_danmaku.dart';
 import 'package:anikumo/bean/settings/settings_detail_scaffold.dart';
 import 'package:anikumo/bean/settings/settings_list.dart';
 import 'package:anikumo/pages/settings/danmaku/danmaku_ch_convert_tile.dart';
 import 'package:anikumo/services/storage/storage.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class DanmakuSettingsPage extends StatefulWidget {
   const DanmakuSettingsPage({super.key});
@@ -35,6 +38,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
   late bool danmakuFollowSpeed;
   late String danmakuAppId;
   late String danmakuAppKey;
+  late bool danmakuBuiltinEnabled;
 
   @override
   void didChangeDependencies() {
@@ -78,6 +82,8 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
         GStorage.getSetting<bool>(SettingsKeys.danmakuFollowSpeed);
     danmakuAppId = GStorage.getSetting(SettingsKeys.danmakuAppId);
     danmakuAppKey = GStorage.getSetting(SettingsKeys.danmakuAppKey);
+    danmakuBuiltinEnabled =
+        GStorage.getSetting<bool>(SettingsKeys.danmakuBuiltinEnabled);
   }
 
   Future<void> resetDanmakuSettings() async {
@@ -207,7 +213,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
             title: Text('弹弹Play 接口凭据'),
             tiles: [
               SettingsTile(
-                leading: Icons.key_rounded,
+                leading: AnikumoIcons.key_rounded,
                 title: Text('AppId'),
                 description: Text(
                   danmakuAppId.isEmpty
@@ -217,12 +223,43 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                 onPressed: (_) => _editCredential(isId: true),
               ),
               SettingsTile(
-                leading: Icons.password_rounded,
+                leading: AnikumoIcons.password_rounded,
                 title: Text('AppKey'),
                 description: Text(
                   danmakuAppKey.isEmpty ? '未设置' : '已设置（内容隐藏）',
                 ),
                 onPressed: (_) => _editCredential(isId: false),
+              ),
+              // Batch 163: the built-in service's only UI —
+              // a switch. No address, no key, nothing else
+              // about it appears anywhere in the app.
+              SettingsTile.switchTile(
+                leading: AnikumoIcons.cloud_rounded,
+                title: Text('内置弹幕服务'),
+                description: Text('未填写凭据时自动使用'),
+                initialValue: danmakuBuiltinEnabled,
+                onToggle: (value) async {
+                  danmakuBuiltinEnabled = value ?? !danmakuBuiltinEnabled;
+                  await GStorage.putSetting<bool>(
+                      SettingsKeys.danmakuBuiltinEnabled,
+                      danmakuBuiltinEnabled);
+                  setState(() {});
+                },
+              ),
+              // Batch 182: sent danmaku live only on this
+              // device (no provider send API) — show the
+              // count and offer a wipe.
+              SettingsTile(
+                leading: AnikumoIcons.delete_outline_rounded,
+                title: Text('本机弹幕记录'),
+                description: Text('你发送的弹幕只保存在这台设备上'),
+                trailing: Text('${LocalDanmakuStore.totalCount} 条'),
+                onPressed: (_) {
+                  if (LocalDanmakuStore.totalCount == 0) return;
+                  LocalDanmakuStore.clearAll();
+                  setState(() {});
+                  AnikumoDialog.showToast(message: '已清除本机弹幕记录');
+                },
               ),
             ],
           ),
@@ -230,7 +267,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
             title: Text('弹幕来源'),
             tiles: [
               SettingsTile.switchTile(
-                leading: Icons.live_tv_rounded,
+                leading: AnikumoIcons.live_tv_rounded,
                 onToggle: (value) async {
                   danmakuBiliBiliSource = value ?? !danmakuBiliBiliSource;
                   await GStorage.putSetting<bool>(
@@ -242,7 +279,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                 initialValue: danmakuBiliBiliSource,
               ),
               SettingsTile.switchTile(
-                leading: Icons.sports_esports_rounded,
+                leading: AnikumoIcons.sports_esports_rounded,
                 onToggle: (value) async {
                   danmakuGamerSource = value ?? !danmakuGamerSource;
                   await GStorage.putSetting<bool>(
@@ -253,7 +290,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                 initialValue: danmakuGamerSource,
               ),
               SettingsTile.switchTile(
-                leading: Icons.forum_rounded,
+                leading: AnikumoIcons.forum_rounded,
                 onToggle: (value) async {
                   danmakuDanDanSource = value ?? !danmakuDanDanSource;
                   await GStorage.putSetting<bool>(
@@ -269,7 +306,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
             title: Text('弹幕屏蔽'),
             tiles: [
               SettingsTile(
-                leading: Icons.block_rounded,
+                leading: AnikumoIcons.block_rounded,
                 onPressed: (_) {
                   context.pushNamed('/settings/danmaku/shield');
                 },
@@ -282,7 +319,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
             tiles: [
               const DanmakuChConvertTile(),
               SettingsSliderTile(
-                leading: Icons.crop_free_rounded,
+                leading: AnikumoIcons.crop_free_rounded,
                 title: Text('弹幕区域'),
                 value: defaultDanmakuArea,
                 min: 0,
@@ -292,7 +329,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                 onChanged: updateDanmakuArea,
               ),
               SettingsSliderTile(
-                leading: Icons.timer_rounded,
+                leading: AnikumoIcons.timer_rounded,
                 title: Text('弹幕持续时间'),
                 value: defaultDanmakuDuration,
                 min: 2,
@@ -303,7 +340,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                     updateDanmakuDuration(value.roundToDouble()),
               ),
               SettingsSliderTile(
-                leading: Icons.format_line_spacing_rounded,
+                leading: AnikumoIcons.format_line_spacing_rounded,
                 title: Text('弹幕行高'),
                 value: defaultDanmakuLineHeight,
                 min: 0,
@@ -314,7 +351,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                     double.parse(value.toStringAsFixed(1))),
               ),
               SettingsTile.switchTile(
-                leading: Icons.speed_rounded,
+                leading: AnikumoIcons.speed_rounded,
                 onToggle: (value) async {
                   danmakuFollowSpeed = value ?? !danmakuFollowSpeed;
                   await GStorage.putSetting<bool>(
@@ -326,7 +363,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                 initialValue: danmakuFollowSpeed,
               ),
               SettingsTile.switchTile(
-                leading: Icons.vertical_align_top_rounded,
+                leading: AnikumoIcons.vertical_align_top_rounded,
                 onToggle: (value) async {
                   danmakuTop = value ?? !danmakuTop;
                   await GStorage.putSetting<bool>(
@@ -337,7 +374,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                 initialValue: danmakuTop,
               ),
               SettingsTile.switchTile(
-                leading: Icons.vertical_align_bottom_rounded,
+                leading: AnikumoIcons.vertical_align_bottom_rounded,
                 onToggle: (value) async {
                   danmakuBottom = value ?? !danmakuBottom;
                   await GStorage.putSetting<bool>(
@@ -348,7 +385,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                 initialValue: danmakuBottom,
               ),
               SettingsTile.switchTile(
-                leading: Icons.swap_horiz_rounded,
+                leading: AnikumoIcons.swap_horiz_rounded,
                 onToggle: (value) async {
                   danmakuScroll = value ?? !danmakuScroll;
                   await GStorage.putSetting<bool>(
@@ -359,7 +396,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                 initialValue: danmakuScroll,
               ),
               SettingsTile.switchTile(
-                leading: Icons.layers_rounded,
+                leading: AnikumoIcons.layers_rounded,
                 onToggle: (value) async {
                   danmakuMassive = value ?? !danmakuMassive;
                   await GStorage.putSetting<bool>(
@@ -371,7 +408,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                 initialValue: danmakuMassive,
               ),
               SettingsTile.switchTile(
-                leading: Icons.filter_alt_rounded,
+                leading: AnikumoIcons.filter_alt_rounded,
                 onToggle: (value) async {
                   danmakuDeduplication = value ?? !danmakuDeduplication;
                   await GStorage.putSetting<bool>(
@@ -383,7 +420,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                 initialValue: danmakuDeduplication,
               ),
               SettingsTile.switchTile(
-                leading: Icons.pause_circle_outline_rounded,
+                leading: AnikumoIcons.pause_circle_outline_rounded,
                 onToggle: (value) async {
                   pauseOnDanmakuEdit = value ?? !pauseOnDanmakuEdit;
                   await GStorage.putSetting<bool>(
@@ -400,7 +437,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
             title: Text('弹幕样式'),
             tiles: [
               SettingsTile.switchTile(
-                leading: Icons.border_color_rounded,
+                leading: AnikumoIcons.border_color_rounded,
                 onToggle: (value) async {
                   danmakuBorder = value ?? !danmakuBorder;
                   await GStorage.putSetting<bool>(
@@ -411,7 +448,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                 initialValue: danmakuBorder,
               ),
               SettingsSliderTile(
-                leading: Icons.line_weight_rounded,
+                leading: AnikumoIcons.line_weight_rounded,
                 title: Text('弹幕描边粗细'),
                 value: defaultdanmakuBorderSize,
                 min: 0.1,
@@ -422,7 +459,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                     double.parse(value.toStringAsFixed(1))),
               ),
               SettingsTile.switchTile(
-                leading: Icons.palette_rounded,
+                leading: AnikumoIcons.palette_rounded,
                 onToggle: (value) async {
                   danmakuColor = value ?? !danmakuColor;
                   await GStorage.putSetting<bool>(
@@ -433,7 +470,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                 initialValue: danmakuColor,
               ),
               SettingsSliderTile(
-                leading: Icons.format_size_rounded,
+                leading: AnikumoIcons.format_size_rounded,
                 title: Text('字体大小'),
                 value: defaultDanmakuFontSize,
                 min: 10,
@@ -443,7 +480,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                     updateDanmakuFontSize(value.floorToDouble()),
               ),
               SettingsSliderTile(
-                leading: Icons.format_bold_rounded,
+                leading: AnikumoIcons.format_bold_rounded,
                 title: Text('字体字重'),
                 value: defaultDanmakuFontWeight.toDouble(),
                 min: 1,
@@ -453,7 +490,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                 onChanged: (value) => updateDanmakuFontWeight(value.toInt()),
               ),
               SettingsSliderTile(
-                leading: Icons.opacity_rounded,
+                leading: AnikumoIcons.opacity_rounded,
                 title: Text('弹幕不透明度'),
                 value: defaultDanmakuOpacity,
                 min: 0.1,
@@ -467,7 +504,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
           SettingsSection(
             tiles: [
               SettingsTile(
-                leading: Icons.settings_backup_restore_rounded,
+                leading: AnikumoIcons.settings_backup_restore_rounded,
                 onPressed: (_) => resetDanmakuSettings(),
                 title: Text('恢复默认设置'),
                 description: Text('将弹幕相关设置恢复为默认值'),

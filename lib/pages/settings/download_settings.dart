@@ -9,6 +9,7 @@ import 'package:anikumo/bean/widget/loading_indicator.dart';
 import 'package:anikumo/services/download/download_directory_service.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/utils/file_system.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class DownloadSettingsPage extends StatefulWidget {
   const DownloadSettingsPage({super.key});
@@ -93,7 +94,7 @@ class _DownloadSettingsPageState extends State<DownloadSettingsPage> {
             title: Text('并发设置'),
             tiles: [
               SettingsSliderTile(
-                leading: Icons.video_library_rounded,
+                leading: AnikumoIcons.video_library_rounded,
                 title: Text('同时下载集数'),
                 description: Text('并行下载的剧集数量'),
                 value: parallelEpisodes.toDouble(),
@@ -110,7 +111,7 @@ class _DownloadSettingsPageState extends State<DownloadSettingsPage> {
                 },
               ),
               SettingsSliderTile(
-                leading: Icons.call_split_rounded,
+                leading: AnikumoIcons.call_split_rounded,
                 title: Text('分片并发数'),
                 description: Text('每集同时下载的分片数量'),
                 value: parallelSegments.toDouble(),
@@ -132,7 +133,7 @@ class _DownloadSettingsPageState extends State<DownloadSettingsPage> {
             title: Text('缓存设置'),
             tiles: [
               SettingsTile(
-                leading: Icons.folder_rounded,
+                leading: AnikumoIcons.folder_rounded,
                 title: Text('下载位置'),
                 description: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -162,14 +163,14 @@ class _DownloadSettingsPageState extends State<DownloadSettingsPage> {
                     : _hasCustomDirectory
                         ? IconButton(
                             tooltip: '恢复默认',
-                            icon: const Icon(Icons.restore_rounded),
+                            icon: const Icon(AnikumoIcons.restore_rounded),
                             onPressed: _resetDownloadDirectory,
                           )
                         : null,
                 onPressed: (_) => _selectDownloadDirectory(),
               ),
               SettingsTile.switchTile(
-                leading: Icons.subtitles_rounded,
+                leading: AnikumoIcons.subtitles_rounded,
                 onToggle: (value) {
                   setState(() => downloadDanmaku = value ?? !downloadDanmaku);
                   GStorage.putSetting(
@@ -187,7 +188,7 @@ class _DownloadSettingsPageState extends State<DownloadSettingsPage> {
             title: Text('说明'),
             tiles: [
               SettingsTile(
-                leading: Icons.info_outline_rounded,
+                leading: AnikumoIcons.info_outline_rounded,
                 title: Text('关于并发设置'),
                 description: Text(
                   '• 集数并发：同时下载多少集视频\n'

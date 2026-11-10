@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:material_new_shapes/material_new_shapes.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Keeps the rule catalog lazy within the responsive onboarding scroll surface.
 class OnboardingStepLayout extends StatelessWidget {
@@ -208,7 +209,7 @@ class OnboardingHint extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.info_outline_rounded,
+          Icon(AnikumoIcons.info_outline_rounded,
               size: 20, color: theme.colorScheme.onSurfaceVariant),
           const SizedBox(width: 10),
           Expanded(

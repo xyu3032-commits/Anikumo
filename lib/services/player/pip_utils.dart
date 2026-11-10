@@ -2,8 +2,23 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:anikumo/services/logging/logger.dart';
+import 'package:anikumo/services/storage/storage.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:anikumo/utils/device.dart';
+
+/// Batch 116: the native "auto-enter PiP when leaving" flag has ONE
+/// effective value, derived from both switches. In-app mini mode
+/// always forces it off (the system PiP must not hijack leaving the
+/// player); external mode honours the user's auto-enter switch.
+/// Before this, the player page, the settings page and the PiP
+/// sheet each pushed their own value, so the switches fought and
+/// the behaviour depended on which screen was visited last.
+bool effectiveAndroidAutoEnterPIP({
+  required bool inAppMode,
+  required bool autoEnter,
+}) {
+  return !inAppMode && autoEnter;
+}
 
 class PipUtils {
   static bool androidPIPInited = false;
@@ -80,6 +95,18 @@ class PipUtils {
     } on PlatformException catch (e) {
       AnikumoLogger().e("Failed to update Android PIP actions: '${e.message}'.");
     }
+  }
+
+  /// Pushes the single effective auto-enter value (see
+  /// [effectiveAndroidAutoEnterPIP]) to the native side. Every
+  /// settings surface goes through here.
+  static Future<void> syncAndroidAutoEnterPIP() async {
+    await setAndroidAutoEnterPIPEnabled(
+      effectiveAndroidAutoEnterPIP(
+        inAppMode: GStorage.getSetting(SettingsKeys.pipInAppMode),
+        autoEnter: GStorage.getSetting(SettingsKeys.androidAutoEnterPIP),
+      ),
+    );
   }
 
   static Future<void> setAndroidAutoEnterPIPEnabled(bool enabled) async {

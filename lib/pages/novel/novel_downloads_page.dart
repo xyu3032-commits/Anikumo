@@ -5,6 +5,7 @@ import '../../bean/dialog/dialog.dart';
 import '../../models/novel_item.dart';
 import '../../services/novel/novel_downloads.dart';
 import 'novel_widgets.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Downloaded novel chapters (batch 31, mirroring the manga
 /// zone's download management): size summary, per-entry
@@ -73,7 +74,7 @@ class _NovelDownloadsPageState extends State<NovelDownloadsPage> {
         actions: [
           if (_entries.isNotEmpty)
             IconButton(
-              icon: const Icon(Icons.delete_sweep_outlined),
+              icon: const Icon(AnikumoIcons.delete_sweep_outlined),
               tooltip: '清空全部下载',
               onPressed: () async {
                 await NovelDownloadStore.clearAll();
@@ -120,7 +121,7 @@ class _NovelDownloadsPageState extends State<NovelDownloadsPage> {
                         ),
                         subtitle: Text('${entry.blockCount} 段 · 离线可读'),
                         trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline),
+                          icon: const Icon(AnikumoIcons.delete_outline),
                           tooltip: '删除这一章',
                           onPressed: () async {
                             await NovelDownloadStore.remove(entry);

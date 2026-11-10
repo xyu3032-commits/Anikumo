@@ -14,6 +14,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:anikumo/utils/device.dart';
 import 'package:anikumo/utils/version.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 enum InstallationType {
   windowsMsix('MSIX'),
@@ -388,7 +389,7 @@ class AutoUpdater {
               Row(
                 children: [
                   Icon(
-                    Icons.check_circle,
+                    AnikumoIcons.check_circle,
                     color: Theme.of(context).colorScheme.primary,
                     size: 20,
                   ),

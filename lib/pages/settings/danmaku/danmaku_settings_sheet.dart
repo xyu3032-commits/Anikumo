@@ -10,6 +10,7 @@ import 'package:anikumo/pages/settings/danmaku/danmaku_ch_convert_tile.dart';
 import 'package:anikumo/pages/settings/danmaku/danmaku_shield_settings_sheet.dart';
 import 'package:anikumo/pages/settings/danmaku/danmaku_time_offset_sheet.dart';
 import 'package:anikumo/services/storage/storage.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 enum _DanmakuSettingsDestination {
   timeOffset,
@@ -207,7 +208,7 @@ class _DanmakuSettingsSheetState extends State<_DanmakuSettingsSheet> {
                 ContentSection.group(title: '校准与过滤', children: [
                   const DanmakuChConvertTile(),
                   SettingsTile(
-                    leading: Icons.sync_rounded,
+                    leading: AnikumoIcons.sync_rounded,
                     title: const Text('时间校准'),
                     description: Text(formatDanmakuTimeOffset(
                       normalizeDanmakuTimeOffset(GStorage.getSetting<double>(
@@ -217,7 +218,7 @@ class _DanmakuSettingsSheetState extends State<_DanmakuSettingsSheet> {
                         .pop(_DanmakuSettingsDestination.timeOffset),
                   ),
                   SettingsTile(
-                    leading: Icons.filter_alt_outlined,
+                    leading: AnikumoIcons.filter_alt_outlined,
                     title: const Text('屏蔽规则'),
                     description: const Text('关键词与正则表达式'),
                     onPressed: (context) => Navigator.of(context)

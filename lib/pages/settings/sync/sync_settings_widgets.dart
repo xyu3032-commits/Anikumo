@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:anikumo/bean/widget/state_presentation.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class SyncPageBody extends StatelessWidget {
   const SyncPageBody({super.key, required this.children, this.maxWidth = 880});
@@ -109,10 +110,10 @@ class SyncFeedback extends StatelessWidget {
               children: [
                 Icon(
                   error
-                      ? Icons.error_outline_rounded
+                      ? AnikumoIcons.error_outline_rounded
                       : busy
-                          ? Icons.sync_rounded
-                          : Icons.check_circle_outline_rounded,
+                          ? AnikumoIcons.sync_rounded
+                          : AnikumoIcons.check_circle_outline_rounded,
                   size: 20,
                   color: error
                       ? colors.onErrorContainer

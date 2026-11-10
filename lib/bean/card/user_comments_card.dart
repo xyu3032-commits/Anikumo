@@ -4,6 +4,7 @@ import 'package:anikumo/bean/widget/bangumi_avatar.dart';
 import 'package:anikumo/modules/comments/comment_item.dart';
 import 'package:anikumo/utils/date_time.dart';
 import 'package:skeletonizer/skeletonizer.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class UserCommentsCard extends StatefulWidget {
   UserCommentsCard.episode(EpisodeCommentItem item, {super.key})
@@ -57,7 +58,7 @@ class _UserCommentsCardState extends State<UserCommentsCard> {
               padding: const EdgeInsets.only(left: 4, bottom: 10),
               child: Row(
                 children: [
-                  Icon(Icons.forum_outlined, size: 16, color: colors.primary),
+                  Icon(AnikumoIcons.forum_outlined, size: 16, color: colors.primary),
                   const SizedBox(width: 8),
                   Text('${replies.length} 条回复',
                       style: type.labelLarge?.copyWith(color: colors.primary)),
@@ -125,7 +126,7 @@ class _UserCommentsCardState extends State<UserCommentsCard> {
                       duration: disableAnimations
                           ? Duration.zero
                           : const Duration(milliseconds: 200),
-                      child: const Icon(Icons.expand_more_rounded, size: 20),
+                      child: const Icon(AnikumoIcons.expand_more_rounded, size: 20),
                     ),
                     label: Text(_expanded
                         ? '收起回复'

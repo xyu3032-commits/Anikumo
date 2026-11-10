@@ -5,6 +5,7 @@ import 'package:anikumo/bbcode/bbcode_elements.dart';
 
 import 'generated/BBCodeListener.dart';
 import 'generated/BBCodeParser.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class BBCodeBaseListener implements BBCodeListener {
   final List<dynamic> bbcode = [];
@@ -100,7 +101,7 @@ class BBCodeBaseListener implements BBCodeListener {
           }
         }
         // Add icon to the end of quoted text
-        bbcode.add(const Icon(Icons.format_quote));
+        bbcode.add(const Icon(AnikumoIcons.format_quote));
         break;
       case 'B':
       case 'b':

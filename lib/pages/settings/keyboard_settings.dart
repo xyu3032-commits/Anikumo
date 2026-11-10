@@ -6,6 +6,7 @@ import 'package:anikumo/bean/settings/settings_detail_scaffold.dart';
 import 'package:anikumo/bean/widget/content_section.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class _ShortcutGroup {
   const _ShortcutGroup(this.title, this.functions);
@@ -211,7 +212,7 @@ class _KeyboardSettingsPageState extends State<KeyboardSettingsPage> {
       title: const Text('操作设置'),
       actions: [
         IconButton(
-          icon: const Icon(Icons.settings_backup_restore_rounded),
+          icon: const Icon(AnikumoIcons.settings_backup_restore_rounded),
           tooltip: '恢复默认',
           onPressed: restoreDefaults,
         ),
@@ -367,7 +368,7 @@ class _KeyCap extends StatelessWidget {
                   onTap: onDelete,
                   behavior: HitTestBehavior.opaque,
                   child: Icon(
-                    Icons.close_rounded,
+                    AnikumoIcons.close_rounded,
                     size: 14,
                     color: colorScheme.onSurfaceVariant,
                   ),
@@ -406,7 +407,7 @@ class _AddKeyButton extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             child: Icon(
-              Icons.add_rounded,
+              AnikumoIcons.add_rounded,
               size: 16,
               color: colorScheme.onSurfaceVariant,
             ),

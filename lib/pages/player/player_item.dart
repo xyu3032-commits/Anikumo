@@ -53,12 +53,17 @@ class PlayerItem extends StatefulWidget {
     required this.keyboardFocus,
     required this.pauseForTimedShutdown,
     this.disableAnimations = false,
+    this.onSwitchSource,
   });
 
   final PlayerController playerController;
   final VideoPageController videoPageController;
   final bool fillsWindow;
   final VoidCallback? onToggleSidePanel;
+
+  /// Batch 116: open the in-player source switcher (page-level,
+  /// because applying a pick reloads the page's playback state).
+  final VoidCallback? onSwitchSource;
   final Future<void> Function(int episode, {int currentRoad, int offset})
       changeEpisode;
   final VoidCallback onBackPressed;
@@ -195,10 +200,11 @@ class _PlayerItemState extends State<PlayerItem>
     if (!Platform.isAndroid) {
       return;
     }
-    final bool autoEnterPIPEnabled =
-        GStorage.getSetting(SettingsKeys.androidAutoEnterPIP);
+    // Batch 116: go through the single effective-value sync — the
+    // raw auto-enter switch alone must not re-enable the system
+    // PiP while the in-app mini mode is on.
     try {
-      await PipUtils.setAndroidAutoEnterPIPEnabled(autoEnterPIPEnabled);
+      await PipUtils.syncAndroidAutoEnterPIP();
     } catch (e) {
       AnikumoLogger().w(
         'PlayerItem: failed to sync android auto enter pip setting',
@@ -1694,6 +1700,7 @@ class _PlayerItemState extends State<PlayerItem>
                             showSyncPlayPanel: showSyncPlayPanel,
                             pauseForTimedShutdown: widget.pauseForTimedShutdown,
                             disableAnimations: widget.disableAnimations,
+                            showSourceSwitch: widget.onSwitchSource,
                             handleScreenShot: handleScreenshot,
                             showScreenshotCandidates: showScreenshotCandidates,
                             skipOP: skipOP,

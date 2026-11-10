@@ -4,6 +4,7 @@ import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:anikumo/bean/widget/bangumi_mirror_error_widget.dart';
 import 'package:anikumo/bean/widget/editorial_kit.dart';
+import 'package:anikumo/bean/widget/fade_slide_in.dart';
 import 'package:anikumo/bean/widget/anikumo_menu.dart';
 import 'package:anikumo/modules/bangumi/bangumi_item.dart';
 import 'package:anikumo/pages/popular/popular_controller.dart';
@@ -13,6 +14,13 @@ import 'package:anikumo/utils/constants.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:anikumo/services/logging/logger.dart';
 import 'package:anikumo/bean/appbar/drag_to_move_bar.dart' as dtb;
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
+
+/// Batch 147: the back-to-top affordance appears only after
+/// the feed has actually scrolled about a screenful — at the
+/// top there is nowhere to go back to, and a permanently
+/// visible button is pure clutter (user report).
+bool popularShowBackToTop(double offset) => offset > 500;
 
 class PopularPage extends StatefulWidget {
   const PopularPage({
@@ -29,6 +37,10 @@ class PopularPage extends StatefulWidget {
 class _PopularPageState extends State<PopularPage> {
   late final ScrollController scrollController;
   PopularController get popularController => widget.controller;
+
+  /// Batch 147: back-to-top visibility, driven by the scroll
+  /// listener (only setState on an actual flip).
+  bool _showBackToTop = false;
 
   @override
   void initState() {
@@ -51,6 +63,13 @@ class _PopularPageState extends State<PopularPage> {
 
   void scrollListener() {
     popularController.scrollOffset = scrollController.offset;
+    // Batch 147: the back-to-top button shows only once the
+    // feed has actually scrolled (it used to sit there even
+    // at the very top, without any movement).
+    final showTop = popularShowBackToTop(scrollController.offset);
+    if (showTop != _showBackToTop && mounted) {
+      setState(() => _showBackToTop = showTop);
+    }
     if (scrollController.position.pixels >=
             scrollController.position.maxScrollExtent - 200 &&
         !popularController.isLoadingMore) {
@@ -120,10 +139,21 @@ class _PopularPageState extends State<PopularPage> {
               })),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => scrollController.animateTo(0,
-            duration: const Duration(milliseconds: 350), curve: Curves.easeOut),
-        child: const Icon(Icons.arrow_upward),
+      // Batch 147: shrunk away (and untappable) until the feed
+      // has scrolled — see popularShowBackToTop.
+      floatingActionButton: AnimatedScale(
+        scale: _showBackToTop ? 1 : 0,
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        child: IgnorePointer(
+          ignoring: !_showBackToTop,
+          child: FloatingActionButton(
+            onPressed: () => scrollController.animateTo(0,
+                duration: const Duration(milliseconds: 350),
+                curve: Curves.easeOut),
+            child: const Icon(AnikumoIcons.arrow_upward),
+          ),
+        ),
       ),
     );
   }
@@ -179,18 +209,24 @@ class _PopularPageState extends State<PopularPage> {
             subtitle: isTrend ? '大家正在追的五部' : '这个标签里最热的五部',
           ),
           for (var i = 0; i < top.length; i++)
-            EditorialRankRow(
-              rank: i + 1,
-              item: top[i],
-              showDivider: i != top.length - 1,
-              // Batch 115: rank rows fly their cover into the
-              // detail page like every other cover entry; the
-              // grid below disables its own hero for these five
-              // so each tag stays unique on this page.
-              enableHero: true,
-              onTap: () => context.pushNamed(
-                '/info/',
-                arguments: top[i],
+            // Batch 123: the Top-5 rows cascade in with a 3D
+            // perspective flip (the Hero cover flight below is
+            // unaffected — it starts on tap, after the entrance).
+            RankEntrance3D(
+              index: i,
+              child: EditorialRankRow(
+                rank: i + 1,
+                item: top[i],
+                showDivider: i != top.length - 1,
+                // Batch 115: rank rows fly their cover into the
+                // detail page like every other cover entry; the
+                // grid below disables its own hero for these five
+                // so each tag stays unique on this page.
+                enableHero: true,
+                onTap: () => context.pushNamed(
+                  '/info/',
+                  arguments: top[i],
+                ),
               ),
             ),
           EditorialSectionHeader(
@@ -303,7 +339,7 @@ class _PopularPageState extends State<PopularPage> {
                           ),
                           const SizedBox(width: 4),
                           Icon(
-                            Icons.keyboard_arrow_down,
+                            AnikumoIcons.keyboard_arrow_down,
                             size: 26,
                             color: theme.iconTheme.color,
                           ),

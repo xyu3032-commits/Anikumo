@@ -29,12 +29,13 @@ void main() {
       source: def.id,
     );
 
-    final (enriched, tocUrl) = await source.engine.bookInfo(item);
+    // Batch 174: the MoYuan engine's bookInfo returns the
+    // enriched item alone (the bridge resolves the toc
+    // address internally; it is no longer surfaced).
+    final enriched = await source.engine.bookInfo(item);
     // ignore: avoid_print
     print('INFO title=${enriched.title} author=${enriched.author} '
         'cover=${enriched.coverUrl}');
-    // ignore: avoid_print
-    print('TOCURL: $tocUrl');
 
     try {
       final chapters = await source.chapters(item);

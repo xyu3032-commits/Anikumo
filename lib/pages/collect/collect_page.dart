@@ -16,6 +16,7 @@ import 'package:anikumo/pages/collect/collect_controller.dart';
 import 'package:anikumo/pages/collect/collect_library_view.dart';
 import 'package:anikumo/pages/collect/collect_sync_dialog.dart';
 import 'package:anikumo/services/storage/storage.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class CollectPage extends StatefulWidget {
   const CollectPage({
@@ -146,7 +147,7 @@ class _CollectPageState extends State<CollectPage> with AnikumoDialogOwner {
                                   _pendingIds.isNotEmpty
                               ? null
                               : _sync,
-                          icon: Icons.sync_rounded,
+                          icon: AnikumoIcons.sync_rounded,
                         ),
                       ),
                     ],

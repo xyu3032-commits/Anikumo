@@ -13,6 +13,7 @@ import 'package:anikumo/plugins/plugins.dart';
 import 'package:anikumo/plugins/plugins_controller.dart';
 import 'package:anikumo/request/config/api_endpoints.dart';
 import 'package:anikumo/services/plugin/api_rule_engine.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 abstract final class _RuleEditorText {
   static const pageTitle = '规则编辑器';
@@ -457,7 +458,7 @@ class _PluginEditorPageState extends State<PluginEditorPage> {
                         ? '编写新规则'
                         : widget.plugin.name,
                     description: '从站点信息到搜索与选集，逐步配置你的番剧来源。',
-                    icon: Icons.edit_note_rounded,
+                    icon: AnikumoIcons.edit_note_rounded,
                   ),
                   const SizedBox(height: 20),
                   if (_editorError != null) ...[
@@ -508,7 +509,7 @@ class _PluginEditorPageState extends State<PluginEditorPage> {
                           style: FilledButton.styleFrom(
                               minimumSize: const Size(0, 48)),
                           onPressed: _saving ? null : _testRule,
-                          icon: const Icon(Icons.science_outlined),
+                          icon: const Icon(AnikumoIcons.science_outlined),
                           label: Text(
                               MediaQuery.textScalerOf(context).scale(14) > 20
                                   ? '测试'
@@ -521,7 +522,7 @@ class _PluginEditorPageState extends State<PluginEditorPage> {
                           onPressed: _saving ? null : _save,
                           icon: _saving
                               ? const LoadingIndicator(size: 20)
-                              : const Icon(Icons.check_rounded),
+                              : const Icon(AnikumoIcons.check_rounded),
                           label: Text(_saving ? '保存中' : _RuleEditorText.save))),
                 ]),
               ),
@@ -548,9 +549,9 @@ class _PluginEditorPageState extends State<PluginEditorPage> {
         _ => _RuleEditorText.sectionChapterDesc,
       },
       icon: switch (_section) {
-        0 => Icons.info_outline_rounded,
-        1 => Icons.search_rounded,
-        _ => Icons.video_library_outlined,
+        0 => AnikumoIcons.info_outline_rounded,
+        1 => AnikumoIcons.search_rounded,
+        _ => AnikumoIcons.video_library_outlined,
       },
       child: Column(
         spacing: 20,
@@ -608,7 +609,7 @@ class _PluginEditorPageState extends State<PluginEditorPage> {
     return RuleSection(
       title: _RuleEditorText.advancedOptions,
       description: _RuleEditorText.advancedOptionsDesc,
-      icon: Icons.tune_rounded,
+      icon: AnikumoIcons.tune_rounded,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

@@ -9,6 +9,7 @@ import 'package:anikumo/services/manga/manga_library.dart';
 import 'package:anikumo/services/manga/manga_page_cache.dart';
 import 'package:anikumo/services/manga/reader_settings.dart';
 import 'package:anikumo/services/storage/storage.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Manga settings, structured after Venera's SettingsPage: an
 /// index of categories （探索 / 阅读 / 外观 / 本地收藏 / 网络 /
@@ -23,27 +24,27 @@ class MangaSettingsIndex extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final entries = <(IconData, String, Widget Function())>[
-      (Icons.explore_rounded, '探索', () => const _ExploreSettingsPage()),
-      (Icons.hub_rounded, '漫画源', () => const MangaSourcesPage()),
-      (Icons.menu_book_rounded, '阅读', () => const _ReadingSettingsPage()),
-      (Icons.color_lens_rounded, '外观', () => const _AppearanceSettingsPage()),
+      (AnikumoIcons.explore_rounded, '探索', () => const _ExploreSettingsPage()),
+      (AnikumoIcons.hub_rounded, '漫画源', () => const MangaSourcesPage()),
+      (AnikumoIcons.menu_book_rounded, '阅读', () => const _ReadingSettingsPage()),
+      (AnikumoIcons.color_lens_rounded, '外观', () => const _AppearanceSettingsPage()),
       (
-        Icons.collections_bookmark_rounded,
+        AnikumoIcons.collections_bookmark_rounded,
         '本地收藏',
         () => const _DataSettingsPage()
       ),
       (
-        Icons.download_rounded,
+        AnikumoIcons.download_rounded,
         '下载管理',
         () => const MangaDownloadsPage()
       ),
       (
-        Icons.bar_chart_rounded,
+        AnikumoIcons.bar_chart_rounded,
         '阅读数据',
         () => const MangaStatsPage()
       ),
-      (Icons.public_rounded, '网络', () => const _NetworkSettingsPage()),
-      (Icons.info_rounded, '关于', () => const _AboutSettingsPage()),
+      (AnikumoIcons.public_rounded, '网络', () => const _NetworkSettingsPage()),
+      (AnikumoIcons.info_rounded, '关于', () => const _AboutSettingsPage()),
     ];
     return SafeArea(
       bottom: false,
@@ -66,7 +67,7 @@ class MangaSettingsIndex extends StatelessWidget {
                   ListTile(
                     leading: Icon(icon),
                     title: Text(title),
-                    trailing: const Icon(Icons.chevron_right_rounded),
+                    trailing: const Icon(AnikumoIcons.chevron_right_rounded),
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(builder: (_) => builder()),
                     ),
@@ -160,7 +161,7 @@ class _SelectRow<T> extends StatelessWidget {
             valueLabel,
             style: TextStyle(color: Theme.of(context).colorScheme.outline),
           ),
-          const Icon(Icons.chevron_right_rounded),
+          const Icon(AnikumoIcons.chevron_right_rounded),
         ],
       ),
       onTap: () async {
@@ -177,7 +178,7 @@ class _SelectRow<T> extends StatelessWidget {
                       Expanded(child: Text(label)),
                       if (label == valueLabel)
                         Icon(
-                          Icons.check_rounded,
+                          AnikumoIcons.check_rounded,
                           color: Theme.of(context).colorScheme.primary,
                         ),
                     ],
@@ -451,19 +452,19 @@ class _DataSettingsPageState extends State<_DataSettingsPage> {
       title: '本地收藏',
       children: [
         ListTile(
-          leading: const Icon(Icons.upload_outlined),
+          leading: const Icon(AnikumoIcons.upload_outlined),
           title: const Text('导出书架'),
           subtitle: const Text('收藏与阅读进度导出为一段文本'),
           onTap: _export,
         ),
         ListTile(
-          leading: const Icon(Icons.download_outlined),
+          leading: const Icon(AnikumoIcons.download_outlined),
           title: const Text('导入书架'),
           subtitle: const Text('粘贴导出的文本合并进当前书架'),
           onTap: _import,
         ),
         ListTile(
-          leading: const Icon(Icons.history_rounded),
+          leading: const Icon(AnikumoIcons.history_rounded),
           title: const Text('清除阅读历史'),
           onTap: () => _confirmClear(
             title: '清除全部阅读历史？',
@@ -472,7 +473,7 @@ class _DataSettingsPageState extends State<_DataSettingsPage> {
           ),
         ),
         ListTile(
-          leading: const Icon(Icons.favorite_border_rounded),
+          leading: const Icon(AnikumoIcons.favorite_border_rounded),
           title: const Text('清除全部收藏'),
           onTap: () => _confirmClear(
             title: '清除全部收藏？',
@@ -511,7 +512,7 @@ class _NetworkSettingsPageState extends State<_NetworkSettingsPage> {
           },
         ),
         ListTile(
-          leading: const Icon(Icons.cleaning_services_outlined),
+          leading: const Icon(AnikumoIcons.cleaning_services_outlined),
           title: const Text('清除图片缓存'),
           subtitle: const Text('封面与章节图片的本地缓存'),
           onTap: () async {

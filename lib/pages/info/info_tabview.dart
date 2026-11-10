@@ -11,6 +11,8 @@ import 'package:anikumo/bean/widget/error_widget.dart';
 import 'package:anikumo/bean/widget/fade_slide_in.dart';
 import 'package:anikumo/bean/widget/empty_state_widget.dart';
 import 'package:anikumo/pages/info/info_comments_view.dart';
+import 'package:anikumo/pages/info/info_controller.dart';
+import 'package:anikumo/pages/info/source_sheet.dart';
 import 'package:anikumo/bean/card/character_card.dart';
 import 'package:anikumo/bean/card/staff_card.dart';
 import 'package:anikumo/bean/card/network_img_layer.dart';
@@ -26,6 +28,7 @@ import 'package:anikumo/modules/characters/character_item.dart';
 import 'package:anikumo/modules/staff/staff_item.dart';
 import 'package:anikumo/utils/constants.dart';
 import 'package:anikumo/utils/device.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class InfoTabView extends StatefulWidget {
   const InfoTabView({
@@ -48,6 +51,9 @@ class InfoTabView extends StatefulWidget {
     required this.commentsList,
     required this.commentsIsLoading,
     required this.onWriteReview,
+    required this.infoController,
+    required this.episodeTabIndex,
+    required this.hasPlugins,
     required this.characterList,
     required this.staffList,
     required this.relationList,
@@ -58,6 +64,15 @@ class InfoTabView extends StatefulWidget {
   final bool commentsHasLoaded;
   final bool commentsIsLoading;
   final VoidCallback onWriteReview;
+
+  /// Batch 149: the 选集 tab hosts the episode picker in
+  /// place (embedded SourceSheet). [infoController] feeds
+  /// it, [episodeTabIndex] tells the lazy gate which tab it
+  /// is, and [hasPlugins] swaps in the add-a-rule guidance
+  /// when no source exists yet.
+  final InfoController infoController;
+  final int episodeTabIndex;
+  final bool hasPlugins;
   final bool charactersQueryTimeout;
   final bool charactersIsEmpty;
   final bool staffQueryTimeout;
@@ -94,11 +109,46 @@ class _InfoTabViewState extends State<InfoTabView> {
   List<NovelItem> _pairedNovels = const [];
   bool _pairedNovelsLoaded = false;
 
+  /// Batch 149: the embedded picker is created the first
+  /// time the 选集 tab is actually opened, then kept alive —
+  /// opening the detail page must not fire source searches
+  /// the viewer never asked for, and switching away and
+  /// back must not restart them either.
+  bool _episodeTabSeen = false;
+
+  /// Batch 151: the embedded picker's own scroll controller.
+  /// Its GridView/ListViews default to the primary scroll
+  /// controller — inside a NestedScrollView that is the
+  /// shared inner controller, which the slot's outer
+  /// CustomScrollView also uses; two primary scrollables on
+  /// one controller desynchronised (the grid could be pulled
+  /// down but not back, and the tab labels ghosted through
+  /// the cards — the user's v39 screenshots). The picker
+  /// gets a controller of its own; the outer view only
+  /// absorbs the pinned header's overlap.
+  final ScrollController _episodeScrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
+    _episodeTabSeen = widget.tabController.index == widget.episodeTabIndex;
+    widget.tabController.addListener(_onTabSelectionChanged);
     _loadPairedManga();
     _loadPairedNovels();
+  }
+
+  void _onTabSelectionChanged() {
+    if (_episodeTabSeen || !mounted) return;
+    if (widget.tabController.index == widget.episodeTabIndex) {
+      setState(() => _episodeTabSeen = true);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.tabController.removeListener(_onTabSelectionChanged);
+    _episodeScrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadPairedManga() async {
@@ -469,7 +519,7 @@ class _InfoTabViewState extends State<InfoTabView> {
                   return const SliverFillRemaining(
                     hasScrollBody: false,
                     child: GeneralEmptyState(
-                      icon: Icons.account_tree_rounded,
+                      icon: AnikumoIcons.account_tree_rounded,
                       title: '暂无关联条目',
                     ),
                   );
@@ -614,7 +664,7 @@ class _InfoTabViewState extends State<InfoTabView> {
                   return const SliverFillRemaining(
                     hasScrollBody: false,
                     child: GeneralEmptyState(
-                      icon: Icons.groups_rounded,
+                      icon: AnikumoIcons.groups_rounded,
                       title: '暂无制作人员信息',
                     ),
                   );
@@ -692,7 +742,7 @@ class _InfoTabViewState extends State<InfoTabView> {
                   return const SliverFillRemaining(
                     hasScrollBody: false,
                     child: GeneralEmptyState(
-                      icon: Icons.people_alt_rounded,
+                      icon: AnikumoIcons.people_alt_rounded,
                       title: '暂无角色信息',
                     ),
                   );
@@ -755,6 +805,64 @@ class _InfoTabViewState extends State<InfoTabView> {
             );
           },
         ),
+        // Batch 149: 选集 is a real tab — the picker lives
+        // right here and the TabBarView's own motion switches
+        // to it, exactly like the other five tabs. No modal
+        // sheet, no spring-back (batch 128's action tab is
+        // retired by user call).
+        if (!_episodeTabSeen)
+          const SizedBox.shrink()
+        else if (!widget.hasPlugins)
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('还没有规则，无法开始观看'),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () => context.pushNamed('/settings/plugin/'),
+                  icon: const Icon(AnikumoIcons.add_rounded),
+                  label: const Text('添加规则'),
+                ),
+              ],
+            ),
+          )
+        else
+          // Batch 150: the picker gets the same overlap
+          // treatment as every other tab (a CustomScrollView
+          // with an injector absorbing the pinned header);
+          // as a bare column it started one tab-bar height
+          // too high and the tab labels ghosted through its
+          // first row (user screenshot). FillRemaining hands
+          // it exactly the space below the header — its own
+          // grid/lists scroll inside that box.
+          Builder(
+            builder: (context) => CustomScrollView(
+              key: const PageStorageKey<String>('选集'),
+              slivers: [
+                SliverOverlapInjector(
+                  handle: NestedScrollView.sliverOverlapAbsorberHandleFor(
+                    context,
+                  ),
+                ),
+                SliverFillRemaining(
+                  hasScrollBody: true,
+                  // Batch 151: see _episodeScrollController —
+                  // the picker's scrollables must not share
+                  // the NestedScrollView's primary controller
+                  // with the CustomScrollView above them.
+                  child: PrimaryScrollController(
+                    controller: _episodeScrollController,
+                    child: SourceSheet(
+                      infoController: widget.infoController,
+                      pickEpisode: true,
+                      embedded: true,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         InfoCommentsView(
           interest: widget.bangumiItem.interest,
           comments: widget.commentsList,

@@ -328,9 +328,91 @@ __El.prototype.select = function (selector) {
   return all.length ? new __El(all[0]) : null;
 };
 __El.prototype.selectAll = function (selector) {
-  return __selectAll(this._n, selector).map(function (n) { return new __El(n); });
+  return __elements(__selectAll(this._n, selector));
+};
+__El.prototype.selectFirst = function (selector) {
+  return this.select(selector);
+};
+__El.prototype.getElementsByTag = function (tag) {
+  return this.selectAll(String(tag).toLowerCase());
+};
+__El.prototype.getElementsByClass = function (cls) {
+  return this.selectAll('.' + cls);
+};
+__El.prototype.children = function () {
+  var out = [];
+  for (var i = 0; i < this._n.c.length; i++) {
+    if (__isEl(this._n.c[i])) out.push(this._n.c[i]);
+  }
+  return __elements(out);
+};
+__El.prototype.child = function (i) {
+  return this.children().get(i);
+};
+__El.prototype.hasAttr = function (name) {
+  return this._n.a[name] !== undefined;
+};
+__El.prototype.val = function () { return this.attr('value'); };
+__El.prototype.wholeText = function () { return this.data(); };
+__El.prototype.parent = function () {
+  var found = __findParent(__doc, this._n);
+  return found ? new __El(found) : null;
 };
 __El.prototype.toJSON = function () { return { __elHtml: __htmlOf({ c: [this._n] }) }; };
+
+function __findParent(node, target) {
+  for (var i = 0; i < node.c.length; i++) {
+    var ch = node.c[i];
+    if (ch === target) return node;
+    if (__isEl(ch)) {
+      var r = __findParent(ch, target);
+      if (r) return r;
+    }
+  }
+  return null;
+}
+
+// Batch 165: the Jsoup Elements surface. Real Legado hands
+// scripts an org.jsoup.select.Elements — an object with
+// size()/get()/eachText() and friends. This bridge returns
+// arrays of __El, so the common methods ride on the array;
+// sources calling list.size() used to die with
+// "not a function" (the Qidian search script family).
+function __elements(items) {
+  var arr = [];
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i];
+    arr.push(it && it._n !== undefined ? it : new __El(it));
+  }
+  arr.size = function () { return this.length; };
+  arr.get = function (i) {
+    var pos = i >= 0 ? i : this.length + i;
+    return (pos >= 0 && pos < this.length) ? this[pos] : null;
+  };
+  arr.eachText = function () {
+    var out = [];
+    for (var i = 0; i < this.length; i++) out.push(this[i].text());
+    return out;
+  };
+  arr.text = function () { return this.eachText().join(' '); };
+  arr.html = function () {
+    var out = '';
+    for (var i = 0; i < this.length; i++) out += this[i].html();
+    return out;
+  };
+  arr.attr = function (name) {
+    return this.length ? this[0].attr(name) : '';
+  };
+  arr.first = function () { return this.length ? this[0] : null; };
+  arr.last = function () {
+    return this.length ? this[this.length - 1] : null;
+  };
+  arr.eq = function (i) {
+    var el = this.get(i);
+    return __elements(el ? [el] : []);
+  };
+  return arr;
+}
 
 function __cssSelectorOf(rule) {
   var r = String(rule || '');
@@ -365,70 +447,241 @@ function __applyIdx(list, idxStr) {
   var pos = idx >= 0 ? idx : list.length + idx;
   return (pos < 0 || pos >= list.length) ? [] : [list[pos]];
 }
-function __chainStep(nodes, step) {
-  var m = /^(class|tag|id)\.([^.]+)(?:\.(-?\d+))?$/.exec(step);
-  var out = [];
-  if (m) {
-    for (var n = 0; n < nodes.length; n++) {
-      var all = __descendantsOf(nodes[n], []);
-      var matched = all.filter(function (el) {
-        if (m[1] === 'class') {
-          return (el.a['class'] || '').split(/\s+/).indexOf(m[2]) >= 0;
-        }
-        if (m[1] === 'id') return el.a['id'] === m[2];
-        return el.t === m[2];
-      });
-      out = out.concat(__applyIdx(matched, m[3]));
-    }
-    return out;
+// Batch 172: mirror of the Dart index spec — comma
+// singles and 'start:end[:step]' ranges (either end
+// omittable/negative, descending reverses); exclude
+// removes the picked positions instead of selecting.
+function __applyIdxSpec(list, spec, exclude) {
+  var len = list.length;
+  if (!len) return [];
+  var picked = [];
+  function addSingle(raw) {
+    var pos = raw >= 0 ? raw : len + raw;
+    if (pos >= 0 && pos < len && picked.indexOf(pos) < 0) picked.push(pos);
   }
-  if (step === 'children') {
-    for (var n2 = 0; n2 < nodes.length; n2++) {
-      for (var c = 0; c < nodes[n2].c.length; c++) {
-        if (__isEl(nodes[n2].c[c])) out.push(nodes[n2].c[c]);
+  function addRange(a, b, c) {
+    var start = a === '' ? 0 : (parseInt(a, 10) || 0);
+    if (start < 0) start += len;
+    var end = b === '' ? len - 1 : (parseInt(b, 10) || 0);
+    if (b !== '' && end === 0 && b !== '0' && b !== '-0') end = len - 1;
+    if (end < 0) end += len;
+    start = Math.max(0, Math.min(len - 1, start));
+    end = Math.max(0, Math.min(len - 1, end));
+    var step = c === '' ? 0 : (parseInt(c, 10) || 0);
+    if (step === 0) step = end >= start ? 1 : -1;
+    if (step > 0) {
+      for (var i = start; i <= end; i += step) {
+        if (picked.indexOf(i) < 0) picked.push(i);
+      }
+    } else {
+      for (var i2 = start; i2 >= end; i2 += step) {
+        if (picked.indexOf(i2) < 0) picked.push(i2);
       }
     }
+  }
+  var tokens = String(spec).split(',');
+  for (var t = 0; t < tokens.length; t++) {
+    var tok = tokens[t].trim();
+    if (!tok) continue;
+    var parts = tok.split(':');
+    if (parts.length === 1) {
+      var n = parseInt(tok, 10);
+      if (!isNaN(n)) addSingle(n);
+    } else {
+      addRange(parts[0].trim(), parts.length > 1 ? parts[1].trim() : '',
+        parts.length > 2 ? parts[2].trim() : '');
+    }
+  }
+  if (exclude) {
+    return list.filter(function (_, i) { return picked.indexOf(i) < 0; });
+  }
+  return picked.map(function (i) { return list[i]; });
+}
+function __chainStepBase(node, head) {
+  var m = /^(class|tag|id|text)\.([^.]+)$/.exec(head);
+  if (m) {
+    var all = __descendantsOf(node, []);
+    return all.filter(function (el) {
+      if (m[1] === 'class') {
+        return (el.a['class'] || '').split(/\s+/).indexOf(m[2]) >= 0;
+      }
+      if (m[1] === 'id') return el.a['id'] === m[2];
+      if (m[1] === 'text') {
+        return __textOf(el, true).toLowerCase()
+            .indexOf(m[2].toLowerCase()) >= 0;
+      }
+      return el.t === m[2];
+    });
+  }
+  if (head === 'children' || head === '') {
+    var out = [];
+    for (var c = 0; c < node.c.length; c++) {
+      if (__isEl(node.c[c])) out.push(node.c[c]);
+    }
     return out;
   }
-  var css = step, idx = null;
-  var im = /^(.+)\.(-?\d+)$/.exec(step);
-  if (im && step.indexOf(' ') < 0) { css = im[1]; idx = im[2]; }
-  for (var n3 = 0; n3 < nodes.length; n3++) {
-    out = out.concat(__applyIdx(__selectAll(nodes[n3], css), idx));
+  return __selectAll(node, head);
+}
+function __chainStep(nodes, step) {
+  // Batch 172: step = kind head + optional index spec
+  // ('[...]' list / '!a:b' exclusion / dot suffix),
+  // mirroring the Dart side. Index specs apply per
+  // context node, as the reference applies them per
+  // parent element.
+  var head = String(step).trim();
+  var bracketSpec = null, bracketExclude = false, bangSpec = null;
+  var dotSpec = null;
+  if (head.charAt(head.length - 1) === ']') {
+    var open = head.indexOf('[');
+    if (open >= 0) {
+      var inner = head.substring(open + 1, head.length - 1).trim();
+      head = head.substring(0, open).trim();
+      if (inner.charAt(0) === '!') {
+        bracketExclude = true;
+        inner = inner.substring(1).trim();
+      }
+      bracketSpec = inner;
+    }
+  }
+  if (bracketSpec === null) {
+    var bang = head.indexOf('!');
+    if (bang >= 0) {
+      bangSpec = head.substring(bang + 1).trim();
+      head = head.substring(0, bang).trim();
+    }
+  }
+  var sm = /^(class|tag|id|text)\.([^.]+)(?:\.(.+))?$/.exec(head);
+  if (sm) {
+    head = sm[1] + '.' + sm[2];
+    dotSpec = sm[3] === undefined ? null : sm[3];
+  } else if (head.indexOf('children.') === 0) {
+    dotSpec = head.substring('children.'.length);
+    head = 'children';
+  }
+  var out = [];
+  for (var n = 0; n < nodes.length; n++) {
+    var base;
+    if (sm || head === 'children' || head === '') {
+      base = __chainStepBase(nodes[n], head);
+    } else {
+      var css = head, idx = null;
+      var im = /^(.+)\.(-?\d+)$/.exec(head);
+      if (im && head.indexOf(' ') < 0) { css = im[1]; idx = im[2]; }
+      base = __applyIdx(__selectAll(nodes[n], css), idx);
+    }
+    if (bracketSpec !== null) base = __applyIdxSpec(base, bracketSpec, bracketExclude);
+    else if (bangSpec !== null) base = __applyIdxSpec(base, bangSpec.replace(/:/g, ','), true);
+    else if (dotSpec !== null) base = __applyIdxSpec(base, dotSpec, false);
+    out = out.concat(base);
   }
   return out;
 }
-function __parseChain(rule) {
+function __runChainSteps(rootNode, steps) {
+  var current = [rootNode];
+  for (var i = 0; i < steps.length; i++) {
+    current = __chainStep(current, steps[i]);
+    if (!current.length) break;
+  }
+  return current;
+}
+// Batch 172: combinator-aware chain evaluation — '&&'
+// concatenates, '%%' interleaves, '||' takes the first
+// non-empty alternative; each alternative is a full
+// '@' chain. Mirrors the Dart selectChain.
+function __runChainAlt(rootNode, rule) {
+  var seps = ['&&', '%%', '||'];
+  for (var s = 0; s < seps.length; s++) {
+    var parts = rule.split(seps[s]).map(function (x) { return x.trim(); })
+      .filter(function (x) { return x !== ''; });
+    if (parts.length > 1) {
+      var lists = parts.map(function (p) { return __runChainAlt(rootNode, p); });
+      if (seps[s] === '&&') {
+        var seen = [], out = [];
+        for (var a = 0; a < lists.length; a++) {
+          for (var b = 0; b < lists[a].length; b++) {
+            if (seen.indexOf(lists[a][b]) < 0) {
+              seen.push(lists[a][b]);
+              out.push(lists[a][b]);
+            }
+          }
+        }
+        return out;
+      }
+      if (seps[s] === '%%') {
+        var out2 = [], i = 0, added = true;
+        while (added) {
+          added = false;
+          for (var c = 0; c < lists.length; c++) {
+            if (i < lists[c].length) {
+              out2.push(lists[c][i]);
+              added = true;
+            }
+          }
+          i++;
+        }
+        return out2;
+      }
+      for (var d = 0; d < lists.length; d++) {
+        if (lists[d].length) return lists[d];
+      }
+      return [];
+    }
+  }
+  var steps = rule.split('@').map(function (x) { return x.trim(); })
+    .filter(function (x) { return x !== ''; });
+  return __runChainSteps(rootNode, steps);
+}
+function __chainSelect(rootNode, rule) {
   var r = String(rule || '');
   if (r.indexOf('@css:') === 0) r = r.substring(5);
   else if (r.indexOf('@css ') === 0) r = r.substring(5);
   r = r.trim();
   var parts = r.split('@').map(function (x) { return x.trim(); })
     .filter(function (x) { return x !== ''; });
-  if (parts.length <= 1) return { steps: parts, attr: null };
+  if (parts.length <= 1) {
+    // Batch 172: a BARE extraction token ('text', 'href',
+    // any carried attribute) reads the element itself —
+    // the same starvation the Dart side had (UU看书's
+    // chapterName 'text' / chapterUrl 'href').
+    var token = parts.length ? parts[0] : '';
+    var known0 = { text: 1, ownText: 1, html: 1, outerHtml: 1, textNodes: 1 };
+    if (token &&
+        (known0[token] || (__isEl(rootNode) && rootNode.a[token] !== undefined))) {
+      return { nodes: [rootNode], attr: token };
+    }
+    return { nodes: __runChainAlt(rootNode, r), attr: null };
+  }
   var last = parts[parts.length - 1];
   var stepLike = last.indexOf('.') >= 0 || last === 'children';
-  if (stepLike) return { steps: parts, attr: null };
-  return { steps: parts.slice(0, parts.length - 1), attr: last };
-}
-function __chainSelect(rootNode, rule) {
-  var parsed = __parseChain(rule);
-  var current = [rootNode];
-  for (var i = 0; i < parsed.steps.length; i++) {
-    current = __chainStep(current, parsed.steps[i]);
-    if (!current.length) break;
+  if (stepLike) {
+    return { nodes: __runChainAlt(rootNode, r), attr: null };
   }
-  return { nodes: current, attr: parsed.attr };
+  // Batch 165: mirror the Dart side (batch 36) — a bare
+  // trailing token is an attribute only when it is a known
+  // extraction name or an attribute a matched element
+  // actually carries. Otherwise it is one more step:
+  // '.book-img-text@ul@li' ends in an li STEP, and reading
+  // it as an attribute silently matched the ul instead
+  // (the Qidian search script takes exactly this shape).
+  var known = { text: 1, ownText: 1, html: 1, outerHtml: 1, textNodes: 1 };
+  var headNodes = __runChainAlt(
+    rootNode, parts.slice(0, parts.length - 1).join('@'));
+  if (headNodes.length &&
+      (known[last] || headNodes[0].a[last] !== undefined)) {
+    return { nodes: headNodes, attr: last };
+  }
+  return { nodes: __runChainAlt(rootNode, r), attr: null };
 }
 
 // ---------- The java bridge ----------
 var __netCache = {};
+var __docCache = {};
 var __vars = {};
 var __doc = { t: '#root', a: {}, c: [] };
 var java = {
   getElements: function (rule) {
     var found = __chainSelect(__doc, rule);
-    return found.nodes.map(function (n) { return new __El(n); });
+    return __elements(found.nodes);
   },
   getElement: function (rule) {
     var found = __chainSelect(__doc, rule);
@@ -514,6 +767,430 @@ var source = {
 };
 var book = {};
 var chapter = {};
+
+// ---------- Batch 170: flow snapshots + StrResponse ----------
+// The engine hands each run a snapshot of the current
+// book/chapter (fields scripts read AND write — a script
+// may rewrite book.tocUrl and the engine adopts it). The
+// snapshot merges onto the long-lived book/chapter
+// objects so their helper methods survive; the host
+// collects the merged fields back from the envelope.
+var __snapshotKeys = {};
+function __mergeSnapshot(target, data, slot) {
+  var prev = __snapshotKeys[slot] || [];
+  for (var i = 0; i < prev.length; i++) {
+    if (!(prev[i] in data)) delete target[prev[i]];
+  }
+  var keys = [];
+  for (var k in data) {
+    target[k] = data[k];
+    keys.push(k);
+  }
+  __snapshotKeys[slot] = keys;
+}
+function __snapshotOut(slot, target) {
+  var keys = __snapshotKeys[slot] || [];
+  var out = {};
+  for (var i = 0; i < keys.length; i++) {
+    out[keys[i]] = target[keys[i]];
+  }
+  return out;
+}
+// The response object login-check scripts receive as
+// `result`: data rides in underscore fields (so it
+// survives the JSON envelope), the accessor methods are
+// what scripts actually call.
+function __strResponse(body, url, code) {
+  return {
+    __strResp: true,
+    _body: body === null || body === undefined ? '' : String(body),
+    _url: url === null || url === undefined ? '' : String(url),
+    _code: code || 0,
+    body: function () { return this._body; },
+    code: function () { return this._code; },
+    url: function () { return this._url; },
+    message: function () { return ''; },
+    isSuccessful: function () {
+      return this._code >= 200 && this._code < 300;
+    },
+    headers: function () { return {}; },
+    errorBody: function () { return ''; },
+    toString: function () { return this._body; }
+  };
+}
+
+// ---------- Batch 157: cookie / cache / misc bridges ----------
+// Real-world bundles lean on three objects this bridge
+// used to lack entirely — `cookie`, `cache`, and a fuller
+// `source`/`book` — plus a tail of small java.* helpers.
+// Any script touching them died with a ReferenceError and
+// the whole search/explore failed ("书源 JS 报错"). The
+// host mirrors the stores into every run: __cookies is a
+// snapshot of the app cookie jar (domain -> {name: value}),
+// __cacheStore is this source's memory cache, __bookVars
+// the current book's variables. Cookie writes cannot call
+// back into Dart synchronously, so they are collected in
+// __cookieWrites and applied by the host after the run;
+// the local snapshot is updated immediately so later reads
+// in the same script see them.
+var __cookies = {};
+var __cookieWrites = [];
+var __cacheStore = {};
+var __bookVars = {};
+function __hostOf(u) {
+  var m = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\/([^\/:?#]+)/.exec(String(u || ''));
+  return m ? m[1].toLowerCase() : String(u || '').toLowerCase();
+}
+function __cookieBucket(url) {
+  var host = __hostOf(url);
+  var best = null;
+  for (var d in __cookies) {
+    if (host === d || host.slice(-(d.length + 1)) === '.' + d) {
+      if (!best || d.length > best.length) best = d;
+    }
+  }
+  return best ? __cookies[best] : {};
+}
+var cookie = {
+  getKey: function (url, name) {
+    var v = __cookieBucket(url)[String(name)];
+    return v === undefined || v === null ? '' : String(v);
+  },
+  getCookie: function (url) {
+    var b = __cookieBucket(url);
+    var parts = [];
+    for (var k in b) parts.push(k + '=' + b[k]);
+    return parts.join('; ');
+  },
+  setKey: function (url, name, value) {
+    __cookieWrites.push({
+      op: 'set', url: String(url),
+      name: String(name), value: String(value),
+    });
+    var host = __hostOf(url);
+    if (!__cookies[host]) __cookies[host] = {};
+    __cookies[host][String(name)] = String(value);
+  },
+  setCookie: function (url, str) {
+    __cookieWrites.push({ op: 'raw', url: String(url), raw: String(str) });
+    var first = String(str).split(';')[0];
+    var eq = first.indexOf('=');
+    if (eq > 0) {
+      var host = __hostOf(url);
+      if (!__cookies[host]) __cookies[host] = {};
+      __cookies[host][first.substring(0, eq).trim()] =
+          first.substring(eq + 1).trim();
+    }
+  },
+  removeKey: function (url, name) {
+    __cookieWrites.push({ op: 'del', url: String(url), name: String(name) });
+    delete __cookieBucket(url)[String(name)];
+  },
+  removeCookie: function (url) {
+    __cookieWrites.push({ op: 'clear', url: String(url) });
+    var host = __hostOf(url);
+    for (var d in __cookies) {
+      if (host === d || host.slice(-(d.length + 1)) === '.' + d) {
+        delete __cookies[d];
+      }
+    }
+    return '';
+  },
+};
+var cache = {
+  get: function (key) {
+    var e = __cacheStore[String(key)];
+    if (!e) return null;
+    if (e.exp && e.exp < Date.now()) {
+      delete __cacheStore[String(key)];
+      return null;
+    }
+    return e.v === undefined ? null : e.v;
+  },
+  put: function (key, value, saveTime) {
+    var ttl = Number(saveTime) || 0;
+    __cacheStore[String(key)] = {
+      v: value,
+      exp: ttl > 0 ? Date.now() + ttl * 1000 : 0,
+    };
+    return value;
+  },
+  delete: function (key) { delete __cacheStore[String(key)]; },
+  getFromMemory: function (key) { return cache.get(key); },
+  putMemory: function (key, value) { return cache.put(key, value); },
+};
+// source/book completion: identity comes from the host
+// (source.__key is the source URL, source.bookSourceName
+// its display name — assigned per run).
+source.getKey = function () { return String(source.__key || ''); };
+source.getVariable = function () {
+  var v = __vars['__sourceVar'];
+  return v === undefined ? '' : v;
+};
+source.setVariable = function (v) {
+  __vars['__sourceVar'] = v === undefined ? '' : String(v);
+};
+source.put = function (k, v) { __vars[String(k)] = v; };
+source.get = function (k) {
+  var v = __vars[String(k)];
+  return v === undefined ? '' : v;
+};
+source.getLoginHeader = function () { return ''; };
+// Batch 169: the host injects the source's saved login
+// info per run — the raw JSON string (null when the user
+// never saved the login form) and the materialized map
+// (declared defaults overlaid with saved values).
+var __loginInfoRaw = null;
+var __loginInfoMap = null;
+var __browseCache = {};
+source.getLoginInfo = function () { return __loginInfoRaw; };
+source.getLoginInfoMap = function () { return __loginInfoMap; };
+book.getVariable = function (k) {
+  var v = __bookVars[String(k)];
+  return v === undefined ? null : v;
+};
+book.setVariable = function (k, v) { __bookVars[String(k)] = v; };
+// java.* tail: UI calls are no-ops (a toast must never
+// kill a rule script), Thread.sleep is a no-op (the Dart
+// side is synchronous here), the rest are small utilities
+// real bundles use in URL templates and rule JS.
+java.toast = function (x) { };
+java.longToast = function (x) { };
+java.getWebViewUA = function () {
+  return 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 ' +
+      '(KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36';
+};
+java.t2s = function (s) { return String(s); };
+java.s2t = function (s) { return String(s); };
+java.hexDecodeToString = function (s) {
+  var hex = String(s).replace(/[^0-9a-fA-F]/g, '');
+  var bytes = [];
+  for (var i = 0; i + 1 < hex.length; i += 2) {
+    bytes.push(parseInt(hex.substring(i, i + 2), 16));
+  }
+  return __bytesToUtf8(bytes);
+};
+java.timeFormatUTC = function (ts, format) {
+  var d = new Date(Number(ts));
+  function p(n) { return ('0' + n).slice(-2); }
+  var f = String(format || 'yyyy-MM-dd HH:mm:ss');
+  return f.replace('yyyy', String(d.getUTCFullYear()))
+      .replace('MM', p(d.getUTCMonth() + 1))
+      .replace('dd', p(d.getUTCDate()))
+      .replace('HH', p(d.getUTCHours()))
+      .replace('mm', p(d.getUTCMinutes()))
+      .replace('ss', p(d.getUTCSeconds()));
+};
+java.getCookie = function (tag, key) {
+  if (key !== undefined && key !== null && String(key) !== '') {
+    return cookie.getKey(tag, key);
+  }
+  return cookie.getCookie(tag);
+};
+java.__resp = function (method, url, body, headers) {
+  var hdrs = {};
+  if (headers && typeof headers === 'object') {
+    if (typeof headers._entries === 'function') {
+      var es = headers._entries();
+      for (var i = 0; i < es.length; i++) hdrs[es[i][0]] = String(es[i][1]);
+    } else {
+      for (var k in headers) hdrs[k] = String(headers[k]);
+    }
+  }
+  var key = method === 'GET' && !Object.keys(hdrs).length
+      ? 'GET|' + url + '||'
+      : method + '|' + url + '|' + (body || '') + '|' + JSON.stringify(hdrs);
+  var hit = __netCache[key];
+  if (hit) {
+    var code = hit.code, bodyStr = hit.body;
+    return {
+      code: function () { return code; },
+      statusCode: function () { return code; },
+      body: function () { return bodyStr; },
+      toString: function () { return bodyStr; },
+    };
+  }
+  throw new Error('__LEGADO_NET__' + JSON.stringify({
+    method: method, url: url, body: body || '', headers: hdrs
+  }));
+};
+java.connect = function (url, headers) {
+  return java.__resp('GET', String(url), '', headers || {});
+};
+java.getStrResponse = function (url, headers) {
+  return java.__resp('GET', String(url), '', headers || {});
+};
+java.ajaxAll = function (urls) {
+  var out = [];
+  var list = urls || [];
+  for (var i = 0; i < list.length; i++) out.push(java.ajax(list[i]));
+  return out;
+};
+java.getStringList = function (rule) {
+  var r = String(rule || '').trim();
+  try {
+    if (r.indexOf('$.') === 0 || r[0] === '$') {
+      var parts = r.substring(1).split(/[.[\]]+/)
+          .filter(function (x) { return x !== ''; });
+      var v = result;
+      for (var i = 0; i < parts.length; i++) {
+        if (v === null || v === undefined) return [];
+        v = v[parts[i]];
+      }
+      if (v === null || v === undefined) return [];
+      var arr = Array.isArray(v) ? v : [v];
+      return arr.map(function (x) { return String(x); });
+    }
+    var found = __chainSelect(__doc, r);
+    var tail = found.attr || '';
+    return found.nodes.map(function (n) {
+      var el = new __El(n);
+      if (tail === '' || tail === 'text') return el.text();
+      if (tail === 'ownText') return el.ownText();
+      if (tail === 'html') return el.html();
+      return el.attr(tail);
+    });
+  } catch (e) { }
+  return [];
+};
+// Batch 169: browser requests suspend to the host
+// (__LEGADO_BROWSE__), the same suspend-replay pattern
+// as the network bridge. The host routes the URL to
+// whatever surface can show it (the login page's
+// WebView) or, with no surface registered, marks the
+// request handled-empty so incidental calls in shared
+// code paths degrade instead of crashing the script.
+java.startBrowserAwait = function (url, title) {
+  var key = String(url || '');
+  if (__browseCache[key] !== undefined) return __browseCache[key];
+  throw new Error('__LEGADO_BROWSE__' + JSON.stringify({
+    url: key,
+    title: String(title || '')
+  }));
+};
+java.startBrowser = function (url, title) {
+  java.startBrowserAwait(url, title);
+};
+// Batch 162: sources call webView to harvest cookies from
+// a rendered page before parsing （起点男频 reads
+// document.cookie through it). There is no renderer here;
+// the shared jar already holds whatever the plain fetch
+// collected, so document.cookie reads are answered from
+// it and everything else stays empty instead of dying
+// with "not a function".
+java.webView = function (html, url, js) {
+  if (String(js || '').indexOf('document.cookie') >= 0) {
+    return cookie.getCookie(String(url || baseUrl || ''));
+  }
+  return '';
+};
+// Batch 162: 第X章 with Chinese numerals -> Arabic
+// digits, for the circulating chapter-name cleaners.
+function __cnChapterNum(t) {
+  var digits = {'零': 0, '一': 1, '二': 2, '两': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9};
+  var units = {'十': 10, '百': 100, '千': 1000};
+  var total = 0;
+  var num = 0;
+  for (var i = 0; i < t.length; i++) {
+    var ch = t.charAt(i);
+    if (Object.prototype.hasOwnProperty.call(digits, ch)) {
+      num = digits[ch];
+    } else if (Object.prototype.hasOwnProperty.call(units, ch)) {
+      if (num === 0) num = 1;
+      total += num * units[ch];
+      num = 0;
+    } else {
+      return null;
+    }
+  }
+  return total + num;
+}
+java.toNumChapter = function (s) {
+  return String(s).replace(/第([零一二两三四五六七八九十百千]+)章/g, function (m, g) {
+    var n = __cnChapterNum(g);
+    return n === null ? m : '第' + n + '章';
+  });
+};
+java.openUrl = function () { };
+java.open = function () { };
+java.reLoginView = function () { };
+java.upLoginData = function () { };
+java.getVerificationCode = function () { return ''; };
+function __docHash(text) {
+  var h = 5381;
+  for (var i = 0; i < text.length; i++) {
+    h = ((h << 5) + h + text.charCodeAt(i)) | 0;
+  }
+  return String(h);
+}
+// Batch 168: real setContent — the reference swaps the
+// document the rest of the rule evaluates against (the
+// only way to retarget getElements after an ajax). The
+// mini-DOM is built Dart-side, so an uncached document
+// suspends to the host (__LEGADO_DOC__), which parses it
+// and replays the script with __docCache warm — the same
+// suspend-replay the network bridge uses.
+java.setContent = function (html, url) {
+  var text = html === null || html === undefined ? '' : String(html);
+  var key = 'DOC|' + text.length + '|' + __docHash(text);
+  var hit = __docCache[key];
+  if (hit) {
+    __doc = hit;
+    if (url) baseUrl = String(url);
+    return;
+  }
+  throw new Error('__LEGADO_DOC__' + JSON.stringify({
+    key: key,
+    html: text,
+    url: url ? String(url) : ''
+  }));
+};
+java.lang = { Thread: { sleep: function (ms) { } } };
+var Packages = { java: { lang: { Thread: { sleep: function (ms) { } } } } };
+
+// ---------- Batch 161: ES2022 polyfills ----------
+// The bundled QuickJS predates a few standard library
+// additions that current sources use freely; calling them
+// died with a bare "not a function". Fill only what is
+// missing, so a native implementation wins where the
+// engine already has one.
+if (!Array.prototype.at) {
+  Array.prototype.at = function (i) {
+    var n = this.length;
+    var k = Math.trunc(Number(i) || 0);
+    if (k < 0) k += n;
+    return (k < 0 || k >= n) ? undefined : this[k];
+  };
+}
+if (!String.prototype.at) {
+  String.prototype.at = function (i) {
+    var s = String(this);
+    var k = Math.trunc(Number(i) || 0);
+    if (k < 0) k += s.length;
+    return (k < 0 || k >= s.length) ? undefined : s.charAt(k);
+  };
+}
+if (!Array.prototype.findLast) {
+  Array.prototype.findLast = function (fn) {
+    for (var i = this.length - 1; i >= 0; i--) {
+      if (fn(this[i], i, this)) return this[i];
+    }
+    return undefined;
+  };
+}
+if (!Array.prototype.findLastIndex) {
+  Array.prototype.findLastIndex = function (fn) {
+    for (var i = this.length - 1; i >= 0; i--) {
+      if (fn(this[i], i, this)) return i;
+    }
+    return -1;
+  };
+}
+if (!Object.hasOwn) {
+  Object.hasOwn = function (o, k) {
+    return Object.prototype.hasOwnProperty.call(o, k);
+  };
+}
 
 // jsLib helpers: bilinovel-style glyph maps expose a global
 // `map` HashMap and call replContent(result).

@@ -9,6 +9,7 @@ import 'package:anikumo/bean/widget/empty_state_widget.dart';
 import 'package:anikumo/repositories/history_repository.dart';
 import 'package:anikumo/services/stats/watch_stats.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// 观看统计 (hub 区二）: totals and a last-7-days chart computed from
 /// local playback history (see [computeWatchStats]).
@@ -23,7 +24,7 @@ class WatchStatsPage extends StatelessWidget {
       appBar: const SysAppBar(title: Text('观看统计')),
       body: stats.totalEpisodes == 0
           ? const GeneralEmptyState(
-              icon: Icons.bar_chart_rounded,
+              icon: AnikumoIcons.bar_chart_rounded,
               title: '还没有观看记录',
             )
           : ListView(
@@ -33,7 +34,7 @@ class WatchStatsPage extends StatelessWidget {
                   children: [
                     Expanded(
                       child: _StatTile(
-                        icon: Icons.play_circle_outline,
+                        icon: AnikumoIcons.play_circle_outline,
                         value: '${stats.totalEpisodes}',
                         label: '看过的集数',
                       ),
@@ -41,7 +42,7 @@ class WatchStatsPage extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: _StatTile(
-                        icon: Icons.schedule_outlined,
+                        icon: AnikumoIcons.schedule_outlined,
                         value: _formatMinutes(stats.totalMinutes),
                         label: '观看时长',
                       ),
@@ -49,7 +50,7 @@ class WatchStatsPage extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: _StatTile(
-                        icon: Icons.movie_outlined,
+                        icon: AnikumoIcons.movie_outlined,
                         value: '${stats.distinctAnime}',
                         label: '看过的番剧',
                       ),
@@ -78,7 +79,7 @@ class WatchStatsPage extends StatelessWidget {
                     padding: const EdgeInsets.all(StyleString.pagePadding),
                     child: Row(
                       children: [
-                        const Icon(Icons.favorite_outline),
+                        const Icon(AnikumoIcons.favorite_outline),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(

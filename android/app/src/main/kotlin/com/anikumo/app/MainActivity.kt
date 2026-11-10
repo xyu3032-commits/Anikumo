@@ -112,6 +112,10 @@ class MainActivity: AudioServiceActivity() {
             flutterEngine.dartExecutor.binaryMessenger, DownloadDirectoryHandler.CHANNEL
         )
         downloadDirectoryChannel?.setMethodCallHandler(downloadDirectoryHandler)
+        val ttsChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger, TtsHandler.CHANNEL
+        )
+        ttsChannel.setMethodCallHandler(TtsHandler(this, ttsChannel))
         intentChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
         intentChannel?.setMethodCallHandler { call, result ->
             if (call.method == "openWithMime") {

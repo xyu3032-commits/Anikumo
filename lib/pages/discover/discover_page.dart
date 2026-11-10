@@ -1,7 +1,6 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:anikumo/bean/theme/signature.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:anikumo/bean/card/bangumi_card.dart';
@@ -9,31 +8,24 @@ import 'package:anikumo/bean/widget/editorial_kit.dart';
 import 'package:anikumo/bean/widget/empty_state_widget.dart';
 import 'package:anikumo/bean/widget/error_widget.dart';
 import 'package:anikumo/bean/widget/fade_slide_in.dart';
-import 'package:anikumo/services/manga/manga_api.dart';
-import 'package:anikumo/services/manga/manga_library.dart';
-import 'package:anikumo/services/novel/novel_sources.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:anikumo/services/manga/manga_sources.dart';
-import 'package:anikumo/services/novel/novel_library.dart';
 import 'package:anikumo/services/ui/app_extras.dart';
 import 'package:anikumo/bean/widget/loading_indicator.dart';
 import 'package:anikumo/modules/bangumi/bangumi_item.dart';
-import 'package:anikumo/modules/manga/manga_item.dart';
-import 'package:anikumo/models/novel_item.dart';
 import 'package:anikumo/request/apis/bangumi_api.dart';
 import 'package:anikumo/services/browse/feed_builder.dart';
 import 'package:anikumo/services/network/bangumi_acceleration.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
-/// 发现 (discover) tab: anime discovery plus the manga and
-/// novel zone entries.
+/// 发现 (discover) tab: anime discovery only.
 ///
-/// 漫画专区 / 小说专区 — big entry cards at the top (the zones
-/// stay here per the user's batch-37 instruction).
 /// 内容发现 — 排行榜 / 今日上新 entries plus the tag exploration
 /// (rotating tag chips, same queries as the popular page's
 /// tag mode). Batch 37 moved the toolbox and 我的时光 zones
-/// out to their own bottom-nav tabs （工具箱 / 时光）.
+/// out to their own bottom-nav tabs （工具箱 / 时光）. The manga
+/// and novel zone entry features that used to headline this
+/// page were removed in batch 132 — zone switching lives on
+/// the zone-name wheel (batch 131) now.
 class DiscoverPage extends StatefulWidget {
   const DiscoverPage({super.key});
 
@@ -161,60 +153,18 @@ class _DiscoverPageState extends State<DiscoverPage> {
             ),
           ),
 
-          // ── 漫画专区（独立大区）─────────────────────────
-          // Batch 44: upgraded from a glass row card to a
-          // cinematic zone feature (see _MangaZoneFeature).
-          const SliverToBoxAdapter(
-            child: FadeSlideIn(
-              child: EditorialSectionHeader(
-                index: '01',
-                label: 'MANGA ZONE',
-                title: '漫画专区',
-                subtitle: '独立阅读区 · 多源实时更新',
-              ),
-            ),
-          ),
-          const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: StyleString.pagePadding,
-              ),
-              child: FadeSlideIn(child: _MangaZoneFeature()),
-            ),
-          ),
-          const SliverToBoxAdapter(
-              child: SizedBox(height: StyleString.sectionSpace)),
-
-          // ── 小说专区（独立大区）─────────────────────────
-          const SliverToBoxAdapter(
-            child: FadeSlideIn(
-              child: EditorialSectionHeader(
-                index: '02',
-                label: 'NOVEL ZONE',
-                title: '小说专区',
-                subtitle: '书源 · 与动漫漫画互为配套',
-              ),
-            ),
-          ),
-          const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: StyleString.pagePadding,
-              ),
-              child: FadeSlideIn(child: _NovelZoneFeature()),
-            ),
-          ),
-          const SliverToBoxAdapter(
-              child: SizedBox(height: StyleString.sectionSpace)),
-
-          // ── 区二 · 内容发现 ──────────────────────────────
+          // ── 内容发现 ──────────────────────────────────
+          // Batch 132: the manga / novel zone features that
+          // used to sit here are gone — zone switching moved
+          // to the zone-name wheel (batch 131), so Discover is
+          // purely about anime content again.
           // Batch 44: the two-column entry cards become a
           // numbered editorial index — same seven destinations.
           const SliverToBoxAdapter(
             child: FadeSlideIn(
               delay: Duration(milliseconds: 60),
               child: EditorialSectionHeader(
-                index: '03',
+                index: '01',
                 label: 'EXPLORE',
                 title: '内容发现',
                 subtitle: '排行榜、今日上新，还有按标签慢慢逛',
@@ -228,7 +178,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                 children: [
                   EditorialIndexRow(
                     index: '01',
-                    icon: Icons.emoji_events_outlined,
+                    icon: AnikumoIcons.emoji_events_outlined,
                     title: '排行榜',
                     subtitle: '按 Bangumi 排名看热门',
                     onTap: () =>
@@ -237,7 +187,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                   const EditorialHairline(),
                   EditorialIndexRow(
                     index: '02',
-                    icon: Icons.today_outlined,
+                    icon: AnikumoIcons.today_outlined,
                     title: '今日上新',
                     subtitle: '今天播出的新番与你的在追',
                     onTap: () =>
@@ -246,7 +196,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                   const EditorialHairline(),
                   EditorialIndexRow(
                     index: '03',
-                    icon: Icons.auto_awesome_outlined,
+                    icon: AnikumoIcons.auto_awesome_outlined,
                     title: '每日推荐',
                     subtitle: '每天换一批，专挑没看过的',
                     onTap: () =>
@@ -255,7 +205,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                   const EditorialHairline(),
                   EditorialIndexRow(
                     index: '04',
-                    icon: Icons.update_outlined,
+                    icon: AnikumoIcons.update_outlined,
                     title: '更新中心',
                     subtitle: '在看的番这周哪天更新',
                     onTap: () =>
@@ -264,7 +214,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                   const EditorialHairline(),
                   EditorialIndexRow(
                     index: '05',
-                    icon: Icons.movie_filter_outlined,
+                    icon: AnikumoIcons.movie_filter_outlined,
                     title: '相似推荐',
                     subtitle: '喜欢这部？再找几部像的',
                     onTap: () =>
@@ -273,7 +223,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                   const EditorialHairline(),
                   EditorialIndexRow(
                     index: '06',
-                    icon: Icons.upcoming_outlined,
+                    icon: AnikumoIcons.upcoming_outlined,
                     title: '即将开播',
                     subtitle: '想看里还没开播的，带倒计时',
                     onTap: () =>
@@ -282,7 +232,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                   const EditorialHairline(),
                   EditorialIndexRow(
                     index: '07',
-                    icon: Icons.casino_outlined,
+                    icon: AnikumoIcons.casino_outlined,
                     title: '随便看一部',
                     subtitle: '选择困难时，随机抽一部今晚看',
                     onTap: () =>
@@ -296,7 +246,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
               child: SizedBox(height: StyleString.sectionSpace)),
           SliverToBoxAdapter(
             child: EditorialSectionHeader(
-              index: '04',
+              index: '02',
               label: 'BY TAGS',
               title: '按标签发现',
               subtitle: '点一个标签，看看这个分类里有什么',
@@ -343,7 +293,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
             const SliverFillRemaining(
               hasScrollBody: false,
               child: GeneralEmptyState(
-                icon: Icons.explore_outlined,
+                icon: AnikumoIcons.explore_outlined,
                 title: '选一个标签开始发现',
                 compact: true,
               ),
@@ -405,315 +355,6 @@ class _DiscoverPageState extends State<DiscoverPage> {
         (context, index) => BangumiCardV(bangumiItem: visibleItems[index]),
         childCount: visibleItems.length,
       ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// Batch 44: zone feature cards （漫画/小说入口升级）.
-//
-// The zones' interiors are untouched; only this entry inside
-// the anime zone changes. Everything shown is real data:
-// library counts from the zone stores, the featured title
-// from the zone's own popular/explore feed, and the continue
-// button jumps straight into the work's detail page.
-// ─────────────────────────────────────────────────────────────
-
-Widget _zoneFeatureShell({
-  required BuildContext context,
-  required String kicker,
-  required String title,
-  required String stats,
-  required String coverUrl,
-  required String? sourceName,
-  required String? featuredTitle,
-  required VoidCallback onEnter,
-  required Widget? continueButton,
-}) {
-  final theme = Theme.of(context);
-  return ClipRRect(
-    borderRadius: BorderRadius.circular(20),
-    child: SizedBox(
-      height: 218,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (coverUrl.isNotEmpty)
-            CachedNetworkImage(
-              imageUrl: coverUrl,
-              fit: BoxFit.cover,
-              // Batch 45: decode at display size, not the
-              // cover's original resolution.
-              memCacheWidth: (MediaQuery.sizeOf(context).width *
-                      MediaQuery.devicePixelRatioOf(context))
-                  .round(),
-              errorWidget: (_, _, _) => const DecoratedBox(
-                decoration: BoxDecoration(gradient: Signature.gradient),
-              ),
-            )
-          else
-            const DecoratedBox(
-              decoration: BoxDecoration(gradient: Signature.gradient),
-            ),
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Colors.black45, Colors.black54, Colors.black87],
-                stops: [0, 0.45, 1],
-              ),
-            ),
-          ),
-          Material(
-            type: MaterialType.transparency,
-            child: InkWell(onTap: onEnter),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      kicker,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: Colors.white70,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 2.2,
-                      ),
-                    ),
-                    const Spacer(),
-                    if (sourceName != null)
-                      Text(
-                        '当前源 · $sourceName',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: Colors.white60,
-                        ),
-                      ),
-                  ],
-                ),
-                const Spacer(),
-                Text(
-                  title,
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  stats,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: Colors.white70,
-                  ),
-                ),
-                if (featuredTitle != null) ...[
-                  const SizedBox(height: 5),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.star_rounded,
-                        size: 14,
-                        color: Colors.amber,
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          '今日精选：《$featuredTitle》',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    if (continueButton != null) ...[
-                      continueButton,
-                      const SizedBox(width: 10),
-                    ],
-                    OutlinedButton(
-                      onPressed: onEnter,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: const BorderSide(color: Colors.white54),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      child: const Text('进入专区'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-class _MangaZoneFeature extends StatefulWidget {
-  const _MangaZoneFeature();
-
-  @override
-  State<_MangaZoneFeature> createState() => _MangaZoneFeatureState();
-}
-
-class _MangaZoneFeatureState extends State<_MangaZoneFeature> {
-  MangaItem? _featured;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadFeatured();
-  }
-
-  Future<void> _loadFeatured() async {
-    try {
-      final source = MangaSources.active();
-      final snapshot = MangaApi.popularSnapshot(source);
-      if (snapshot != null && snapshot.items.isNotEmpty) {
-        setState(() => _featured = snapshot.items.first);
-        return;
-      }
-      final items = await MangaApi.fetchPopularFor(source);
-      if (mounted && items.isNotEmpty) {
-        setState(() => _featured = items.first);
-      }
-    } catch (_) {
-      // The featured line is decorative; counts still render.
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final favorites = MangaLibraryStore.loadFavorites();
-    final reading = MangaLibraryStore.loadProgressList();
-    final latest = reading.isEmpty ? null : reading.first;
-    final empty = favorites.isEmpty && reading.isEmpty;
-    return _zoneFeatureShell(
-      context: context,
-      kicker: 'MANGA · 漫画专区',
-      title: '漫画专区',
-      stats: empty
-          ? '导入自己的 JS 源 · 点开即读'
-          : '已收藏 ${favorites.length} 部 · 在读 ${reading.length} 部',
-      coverUrl: latest?.coverUrl ?? _featured?.coverUrl ?? '',
-      sourceName: MangaSources.activeOrNull()?.name,
-      featuredTitle: _featured?.title,
-      onEnter: () => context.pushNamed('/manga/'),
-      continueButton: latest == null
-          ? null
-          : FilledButton.icon(
-              onPressed: () => context.pushNamed(
-                '/manga/detail',
-                arguments: MangaItem(
-                  id: latest.mangaId,
-                  title: latest.mangaTitle,
-                  description: '',
-                  coverUrl: latest.coverUrl,
-                  author: '',
-                  status: '',
-                  year: null,
-                  tags: const [],
-                  source: latest.mangaSource,
-                ),
-              ),
-              icon: const Icon(Icons.play_arrow_rounded, size: 18),
-              label: Text(
-                '继续阅读 · ${latest.chapterLabel}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              style: FilledButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-    );
-  }
-}
-
-class _NovelZoneFeature extends StatefulWidget {
-  const _NovelZoneFeature();
-
-  @override
-  State<_NovelZoneFeature> createState() => _NovelZoneFeatureState();
-}
-
-class _NovelZoneFeatureState extends State<_NovelZoneFeature> {
-  NovelItem? _featured;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadFeatured();
-  }
-
-  Future<void> _loadFeatured() async {
-    try {
-      final source = NovelSources.active();
-      if (source.exploreCategories.isEmpty) return;
-      final items = await source.explore(source.exploreCategories.first);
-      if (!mounted || items.isEmpty) return;
-      setState(() {
-        _featured = items.firstWhere(
-          (item) => item.coverUrl.isNotEmpty,
-          orElse: () => items.first,
-        );
-      });
-    } catch (_) {
-      // Decorative line only.
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final favorites = NovelLibraryStore.loadFavorites();
-    final reading = NovelLibraryStore.loadProgressList();
-    final latest = reading.isEmpty ? null : reading.first;
-    final empty = favorites.isEmpty && reading.isEmpty;
-    String sourceName;
-    try {
-      sourceName = NovelSources.active().name;
-    } catch (_) {
-      sourceName = '';
-    }
-    return _zoneFeatureShell(
-      context: context,
-      kicker: 'NOVEL · 小说专区',
-      title: '小说专区',
-      stats: empty
-          ? '导入自己的书源'
-          : '已收藏 ${favorites.length} 本 · 在读 ${reading.length} 本',
-      coverUrl: latest?.item.coverUrl ?? _featured?.coverUrl ?? '',
-      sourceName: sourceName.isEmpty ? null : sourceName,
-      featuredTitle: _featured?.title,
-      onEnter: () => context.pushNamed('/novel/'),
-      continueButton: latest == null
-          ? null
-          : FilledButton.icon(
-              onPressed: () => context.pushNamed(
-                '/novel/detail',
-                arguments: latest.item,
-              ),
-              icon: const Icon(Icons.menu_book_rounded, size: 18),
-              label: Text(
-                '继续阅读 · ${latest.chapterTitle}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              style: FilledButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
     );
   }
 }

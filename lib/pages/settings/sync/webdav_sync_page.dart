@@ -9,6 +9,7 @@ import 'package:anikumo/services/logging/logger.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/services/sync/webdav.dart';
 import 'package:anikumo/services/sync/danmaku_shield_sync_service.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class WebDavSyncPage extends StatefulWidget {
   const WebDavSyncPage({super.key, required this.danmakuShieldSync});
@@ -94,7 +95,7 @@ class _WebDavSyncPageState extends State<WebDavSyncPage> {
           maxWidth: 720,
           children: [
             const SyncPageIntro(
-              icon: Icons.devices_rounded,
+              icon: AnikumoIcons.devices_rounded,
               title: 'WebDAV',
               description: '连接自己的云盘，同步观看记录、收藏与弹幕屏蔽词。',
             ),
@@ -102,17 +103,17 @@ class _WebDavSyncPageState extends State<WebDavSyncPage> {
               margin: EdgeInsets.zero,
               tiles: [
                 SettingsTile(
-                  leading: Icons.dns_rounded,
+                  leading: AnikumoIcons.dns_rounded,
                   title: Text(configured ? '同步服务器' : '连接你的云盘'),
                   description: Text(configured
                       ? (host == null || host.isEmpty ? '已保存服务器地址' : host)
                       : '需要支持 WebDAV 的云盘或服务器'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
+                  trailing: const Icon(AnikumoIcons.chevron_right_rounded),
                   enabled: !_busy,
                   onPressed: (_) => _configure(),
                 ),
                 SettingsTile.switchTile(
-                  leading: Icons.cloud_sync_rounded,
+                  leading: AnikumoIcons.cloud_sync_rounded,
                   title: const Text('启用 WebDAV'),
                   description: Text(configured
                       ? (enabled ? '已开启，选择下方要同步的内容' : '开启后选择要同步的内容')
@@ -128,7 +129,7 @@ class _WebDavSyncPageState extends State<WebDavSyncPage> {
               margin: EdgeInsets.zero,
               tiles: [
                 SettingsTile.switchTile(
-                  leading: Icons.history_rounded,
+                  leading: AnikumoIcons.history_rounded,
                   title: const Text('观看记录'),
                   description: const Text('自动同步播放进度与历史记录'),
                   initialValue: history,
@@ -140,7 +141,7 @@ class _WebDavSyncPageState extends State<WebDavSyncPage> {
                   },
                 ),
                 SettingsTile.switchTile(
-                  leading: Icons.favorite_rounded,
+                  leading: AnikumoIcons.favorite_rounded,
                   title: const Text('收藏'),
                   description: const Text('在收藏页同步所有追番分类'),
                   initialValue: collect,
@@ -152,7 +153,7 @@ class _WebDavSyncPageState extends State<WebDavSyncPage> {
                   },
                 ),
                 SettingsTile.switchTile(
-                  leading: Icons.filter_alt_rounded,
+                  leading: AnikumoIcons.filter_alt_rounded,
                   title: const Text('弹幕屏蔽词'),
                   description: const Text('启动和修改规则后自动同步，包含关键词与正则表达式'),
                   initialValue: shield,
@@ -171,13 +172,13 @@ class _WebDavSyncPageState extends State<WebDavSyncPage> {
             StateActionButton(
               onPressed: enabled && !_busy ? _syncHistory : null,
               text: _busy ? '请稍候…' : '立即同步观看记录',
-              icon: Icons.sync_rounded,
+              icon: AnikumoIcons.sync_rounded,
             ),
             StateActionButton.tonal(
               onPressed:
                   enabled && shield && !_busy ? _syncDanmakuShield : null,
               text: '立即同步弹幕屏蔽词',
-              icon: Icons.sync_rounded,
+              icon: AnikumoIcons.sync_rounded,
             ),
             if (_message != null)
               SyncFeedback(message: _message!, error: _failed, busy: _busy),

@@ -6,6 +6,7 @@ import 'package:anikumo/services/storage/storage.dart';
 import 'package:flutter/services.dart';
 import 'package:anikumo/bean/dialog/dialog_helper.dart';
 import 'package:anikumo/bean/widget/channel_glyphs.dart';
+import 'package:anikumo/bean/widget/zone_switcher.dart';
 import 'package:anikumo/services/ui/glass_style.dart';
 import 'package:anikumo/bean/widget/embedded_native_control_area.dart';
 import 'package:anikumo/navigation.dart';
@@ -15,6 +16,7 @@ import 'package:anikumo/utils/device.dart';
 import 'package:anikumo/services/platform/desktop_window_config.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:anikumo/bean/appbar/drag_to_move_bar.dart' as dtb;
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class ScaffoldMenu extends StatefulWidget {
   const ScaffoldMenu({super.key, required this.location});
@@ -268,12 +270,13 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
                   child: dtb.DragToMoveArea(
                     child: Row(
                     children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: scheme.primary,
-                          borderRadius: BorderRadius.circular(2),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(7),
+                        child: Image.asset(
+                          'assets/images/logo/logo_rounded.png',
+                          width: 27,
+                          height: 27,
+                          fit: BoxFit.cover,
                         ),
                       ),
                       const SizedBox(width: 9),
@@ -285,32 +288,32 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        'ANIME',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: scheme.outline,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 3,
-                        ),
+                      // Batch 131 (user correction): the zone
+                      // switcher entry is the ANIME mark itself,
+                      // not the Anikumo wordmark — tapping it
+                      // spins the zone wheel.
+                      const ZoneWheelChip(
+                        current: AppZone.anime,
+                        english: true,
                       ),
                       const Spacer(),
                       IconButton(
                         tooltip: '搜索',
                         onPressed: () => context.pushNamed('/search/'),
-                        icon: const Icon(Icons.search),
+                        icon: const Icon(AnikumoIcons.search),
                       ),
                       IconButton(
                         tooltip: '历史记录',
                         onPressed: () =>
                             context.pushNamed('/settings/history/'),
-                        icon: const Icon(Icons.history),
+                        icon: const Icon(AnikumoIcons.history),
                       ),
                         if (isDesktop() &&
                             !DesktopWindowConfig.showWindowButton)
                           IconButton(
                             tooltip: '退出',
                             onPressed: () => windowManager.close(),
-                            icon: const Icon(Icons.close),
+                            icon: const Icon(AnikumoIcons.close),
                           ),
                       ],
                     ),
@@ -427,11 +430,17 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
                 child: Column(
                   children: [
                     const SizedBox(height: 14),
+                    // Batch 131: zone wheel entry on the rail too.
+                    const ZoneWheelChip(
+                      current: AppZone.anime,
+                      english: true,
+                    ),
+                    const SizedBox(height: 12),
                     FloatingActionButton.small(
                       elevation: 0,
                       heroTag: null,
                       onPressed: () => context.pushNamed('/search/'),
-                      child: const Icon(Icons.search),
+                      child: const Icon(AnikumoIcons.search),
                     ),
                     const SizedBox(height: 10),
                     Expanded(

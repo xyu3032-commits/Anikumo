@@ -46,10 +46,15 @@ bool miniPlayerVisible({
   required bool hasSession,
   required MiniPlayerZone zone,
   required bool hideInOtherZones,
+  bool playerPageOpen = false,
 }) {
   if (!hasSession) return false;
   // The full player page replaces the mini window while it is open;
-  // the mini never floats over the player itself.
+  // the mini never floats over the player itself. Batch 116: the
+  // page reports itself directly (playerPageOpen), because route
+  // observation alone missed pushes that land in a nested
+  // navigator — the window then stayed over the player, sometimes.
+  if (playerPageOpen) return false;
   if (zone == MiniPlayerZone.video) return false;
   if (hideInOtherZones &&
       (zone == MiniPlayerZone.manga || zone == MiniPlayerZone.novel)) {
@@ -66,6 +71,24 @@ bool miniPlayerShouldExitToMini({
   required bool hasPlayableMedia,
 }) {
   return !isDesktopPlatform && inAppMode && hasPlayableMedia;
+}
+
+/// Batch 116: which args a '/video/' navigation should use when a
+/// mini session exists. Online playback resumes by ANIME: if the
+/// session is playing the same bangumi, its own args (and live
+/// pair) win over the entry point's. Anything else keeps the
+/// strict same-source match.
+VideoPlaybackArgs? miniPlayerResumeArgs(
+  VideoPlaybackArgs current,
+  VideoPlaybackArgs candidate,
+) {
+  if (current is OnlineVideoPlaybackArgs &&
+      candidate is OnlineVideoPlaybackArgs) {
+    return current.bangumiItem.id == candidate.bangumiItem.id
+        ? current
+        : null;
+  }
+  return miniPlayerArgsMatch(current, candidate) ? current : null;
 }
 
 /// Whether two playback args describe the same video from the same
@@ -98,6 +121,19 @@ class MiniPlayerSession extends ChangeNotifier {
   MiniPlayerZone _zone = MiniPlayerZone.anime;
   MiniPlayerZone get zone => _zone;
 
+  /// Batch 116: the full player page is currently open (reported by
+  /// the page itself, not inferred from routes — see
+  /// [miniPlayerVisible]).
+  bool _playerPageOpen = false;
+  bool get playerPageOpen => _playerPageOpen;
+
+  void setPlayerPageOpen(bool open) {
+    if (_playerPageOpen == open) return;
+    _playerPageOpen = open;
+    _applyZoneAudio();
+    notifyListeners();
+  }
+
   double? _volumeBeforeMute;
   bool _mutedBySession = false;
 
@@ -108,6 +144,19 @@ class MiniPlayerSession extends ChangeNotifier {
     final current = _args;
     if (current == null) return false;
     return miniPlayerArgsMatch(current, candidate);
+  }
+
+  /// Batch 116: the args a '/video/' navigation should actually
+  /// use. When the mini session is playing the SAME anime (online),
+  /// the session's own args win over whatever the entry point built
+  /// — the user tapped the anime that is already playing, so there
+  /// is nothing to pick: no source, no line, straight back in with
+  /// the live pair. Offline entries keep the strict match (an
+  /// explicit download tap must stay offline).
+  VideoPlaybackArgs? resumeArgsFor(VideoPlaybackArgs candidate) {
+    final current = _args;
+    if (current == null) return null;
+    return miniPlayerResumeArgs(current, candidate);
   }
 
   /// Takes ownership of the pair leaving the player page. The
@@ -159,6 +208,7 @@ class MiniPlayerSession extends ChangeNotifier {
         zone: _zone,
         hideInOtherZones:
             GStorage.getSetting(SettingsKeys.pipHideInOtherZones),
+        playerPageOpen: _playerPageOpen,
       );
 
   /// Route changes come from [MiniPlayerRouteObserver]. Zone entry
@@ -182,6 +232,10 @@ class MiniPlayerSession extends ChangeNotifier {
     final shouldMute = hasSession &&
         !visible &&
         _zone != MiniPlayerZone.video &&
+        // Batch 116: never mute while the full player page is open
+        // (the user is watching it there) — zone tracking can lag
+        // behind the page in nested navigators.
+        !_playerPageOpen &&
         GStorage.getSetting(SettingsKeys.pipMuteWhenHidden);
     if (shouldMute && !_mutedBySession) {
       _volumeBeforeMute = player.state.volume;

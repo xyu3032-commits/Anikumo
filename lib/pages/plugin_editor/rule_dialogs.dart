@@ -10,6 +10,7 @@ import 'package:anikumo/plugins/plugins_controller.dart';
 import 'package:anikumo/services/plugin/plugin_import_parser.dart';
 import 'package:anikumo/services/plugin/rule_repository.dart';
 import 'package:anikumo/utils/encoding.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 enum RuleAddSource { clipboard, file, create }
 
@@ -20,7 +21,7 @@ Future<RuleAddSource?> showRuleAddDialog(BuildContext context) =>
         final colors = Theme.of(context).colorScheme;
         return _RuleDialog(
           title: '添加规则',
-          icon: Icons.add_circle_outline_rounded,
+          icon: AnikumoIcons.add_circle_outline_rounded,
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -30,19 +31,19 @@ Future<RuleAddSource?> showRuleAddDialog(BuildContext context) =>
               for (final option in [
                 (
                   RuleAddSource.clipboard,
-                  Icons.content_paste_rounded,
+                  AnikumoIcons.content_paste_rounded,
                   '从剪贴板导入',
                   '粘贴规则链接或 JSON'
                 ),
                 (
                   RuleAddSource.file,
-                  Icons.file_open_outlined,
+                  AnikumoIcons.file_open_outlined,
                   '从文件导入',
                   '读取本地 JSON 规则文件'
                 ),
                 (
                   RuleAddSource.create,
-                  Icons.edit_note_rounded,
+                  AnikumoIcons.edit_note_rounded,
                   '新建规则',
                   '从模板开始编写'
                 ),
@@ -59,7 +60,7 @@ Future<RuleAddSource?> showRuleAddDialog(BuildContext context) =>
                       title: Text(option.$3),
                       subtitle: Text(option.$4),
                       trailing:
-                          const Icon(Icons.arrow_forward_rounded, size: 20),
+                          const Icon(AnikumoIcons.arrow_forward_rounded, size: 20),
                       onTap: () => Navigator.of(context).pop(option.$1),
                     ),
                   ),
@@ -81,7 +82,7 @@ Future<bool> confirmRuleDeletion(
       context: context,
       builder: (context) => _RuleDialog(
         title: names.length == 1 ? '删除这条规则？' : '删除 ${names.length} 条规则？',
-        icon: Icons.delete_outline_rounded,
+        icon: AnikumoIcons.delete_outline_rounded,
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -115,7 +116,7 @@ Future<void> showRuleShareDialog(BuildContext context, Plugin plugin) async {
     context: context,
     builder: (context) => _RuleDialog(
       title: '分享规则',
-      icon: Icons.ios_share_rounded,
+      icon: AnikumoIcons.ios_share_rounded,
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -145,7 +146,7 @@ Future<void> showRuleShareDialog(BuildContext context, Plugin plugin) async {
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('关闭')),
         FilledButton.icon(
-          icon: const Icon(Icons.copy_rounded, size: 18),
+          icon: const Icon(AnikumoIcons.copy_rounded, size: 18),
           label: const Text('复制链接'),
           onPressed: () async {
             try {
@@ -267,7 +268,7 @@ class _RuleImportDialogState extends State<_RuleImportDialog> {
         canPop: !_saving,
         child: _RuleDialog(
           title: '导入规则',
-          icon: Icons.content_paste_go_rounded,
+          icon: AnikumoIcons.content_paste_go_rounded,
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -298,7 +299,7 @@ class _RuleImportDialogState extends State<_RuleImportDialog> {
               onPressed: _saving || _text.text.trim().isEmpty ? null : _import,
               icon: _saving
                   ? const LoadingIndicator(size: 20)
-                  : const Icon(Icons.download_rounded, size: 18),
+                  : const Icon(AnikumoIcons.download_rounded, size: 18),
               label: Text(_saving ? '正在导入' : '导入规则'),
             ),
           ],

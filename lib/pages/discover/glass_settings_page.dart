@@ -3,6 +3,7 @@ import 'package:anikumo/bean/appbar/sys_app_bar.dart';
 import 'package:anikumo/bean/glass/glass_surface.dart';
 import 'package:anikumo/services/ui/glass_style.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// 玻璃效果 (hub 区三）: one intensity switch for every frosted surface
 /// in the app — bottom navigation bar, hub panels, stat tiles. Changes
@@ -88,18 +89,18 @@ class _Preview extends StatelessWidget {
                   runSpacing: 14,
                   children: [
                     for (final icon in const [
-                      Icons.movie_rounded,
-                      Icons.music_note_rounded,
-                      Icons.star_rounded,
-                      Icons.favorite_rounded,
-                      Icons.explore_rounded,
-                      Icons.schedule_rounded,
-                      Icons.bookmark_rounded,
-                      Icons.play_circle_fill_rounded,
-                      Icons.local_fire_department_rounded,
-                      Icons.emoji_events_rounded,
-                      Icons.coffee_rounded,
-                      Icons.pets_rounded,
+                      AnikumoIcons.movie_rounded,
+                      AnikumoIcons.music_note_rounded,
+                      AnikumoIcons.star_rounded,
+                      AnikumoIcons.favorite_rounded,
+                      AnikumoIcons.explore_rounded,
+                      AnikumoIcons.schedule_rounded,
+                      AnikumoIcons.bookmark_rounded,
+                      AnikumoIcons.play_circle_fill_rounded,
+                      AnikumoIcons.local_fire_department_rounded,
+                      AnikumoIcons.emoji_events_rounded,
+                      AnikumoIcons.coffee_rounded,
+                      AnikumoIcons.pets_rounded,
                     ])
                       Icon(icon, size: 40, color: scheme.primary),
                   ],
@@ -116,7 +117,7 @@ class _Preview extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.blur_on_rounded),
+                    const Icon(AnikumoIcons.blur_on_rounded),
                     const SizedBox(width: 10),
                     Column(
                       mainAxisSize: MainAxisSize.min,

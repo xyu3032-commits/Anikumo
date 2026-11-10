@@ -5,12 +5,15 @@ import 'package:flutter/material.dart';
 import 'package:anikumo/utils/error_message.dart';
 import 'package:anikumo/bean/theme/violet_glass.dart';
 import 'package:anikumo/bean/widget/floating_capsule_nav.dart';
+import 'package:anikumo/bean/widget/zone_switcher.dart';
+import 'package:anikumo/pages/manga/manga_source_update_prompt.dart';
 import 'package:anikumo/bean/widget/violet_components.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:anikumo/bean/widget/fade_slide_in.dart';
 import 'package:anikumo/bean/widget/motion_kit.dart';
 import 'package:anikumo/modules/manga/manga_item.dart';
+import 'package:anikumo/pages/manga/manga_cabinets_page.dart';
 import 'package:anikumo/pages/manga/manga_categories_page.dart';
 import 'package:anikumo/pages/manga/manga_explore_page.dart';
 import 'package:anikumo/pages/manga/manga_favorites_page.dart';
@@ -27,6 +30,7 @@ import 'package:anikumo/services/manga/manga_sources.dart';
 import 'package:anikumo/services/ui/app_extras.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Batch 97: pull-to-refresh on the manga home tab bumps
 /// this tick; the per-source sections and the 猜你喜欢 rail
@@ -130,6 +134,14 @@ class _MangaMainPageState extends State<MangaMainPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     mangaTabSwitchRequest.addListener(_onTabSwitchRequest);
+    // Batch 190: entering the manga zone checks installed
+    // sources for new versions (recorded repositories and
+    // origins) and prompts when any are found.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        unawaited(MangaSourceUpdatePrompt.run(context));
+      }
+    });
     // Batch 16: warm up the active JS source's runtime in the
     // background so the first search/tap doesn't pay the
     // QuickJS spin-up cost.
@@ -176,6 +188,10 @@ class _MangaMainPageState extends State<MangaMainPage>
   static const _tabs = [
     MangaHomeTab(),
     MangaFavoritesTab(),
+    // Batch 122: the cabinets tab — a dedicated home for the
+    // user's own imported manga, one more bottom button as
+    // requested.
+    MangaCabinetsTab(),
     MangaExploreTab(),
     MangaCategoriesTab(),
     MangaSettingsIndex(),
@@ -218,28 +234,33 @@ class _MangaMainPageState extends State<MangaMainPage>
         }),
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
+            icon: Icon(AnikumoIcons.home_outlined),
+            selectedIcon: Icon(AnikumoIcons.home_rounded),
             label: '首页',
           ),
           NavigationDestination(
-            icon: Icon(Icons.local_activity_outlined),
-            selectedIcon: Icon(Icons.local_activity_rounded),
+            icon: Icon(AnikumoIcons.local_activity_outlined),
+            selectedIcon: Icon(AnikumoIcons.local_activity_rounded),
             label: '收藏',
           ),
           NavigationDestination(
-            icon: Icon(Icons.explore_outlined),
-            selectedIcon: Icon(Icons.explore_rounded),
+            icon: Icon(AnikumoIcons.library_books_outlined),
+            selectedIcon: Icon(AnikumoIcons.library_books_rounded),
+            label: '书柜',
+          ),
+          NavigationDestination(
+            icon: Icon(AnikumoIcons.explore_outlined),
+            selectedIcon: Icon(AnikumoIcons.explore_rounded),
             label: '探索',
           ),
           NavigationDestination(
-            icon: Icon(Icons.category_outlined),
-            selectedIcon: Icon(Icons.category_rounded),
+            icon: Icon(AnikumoIcons.category_outlined),
+            selectedIcon: Icon(AnikumoIcons.category_rounded),
             label: '分类',
           ),
           NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings_rounded),
+            icon: Icon(AnikumoIcons.settings_outlined),
+            selectedIcon: Icon(AnikumoIcons.settings_rounded),
             label: '设置',
           ),
         ],
@@ -390,13 +411,19 @@ class _MangaHomeTabState extends State<MangaHomeTab> {
                     padding: const EdgeInsets.only(top: 6),
                     child: IconButton(
                       tooltip: '返回动漫区',
-                      icon: const Icon(Icons.arrow_back_rounded),
+                      icon: const Icon(AnikumoIcons.arrow_back_rounded),
                       onPressed: () => context.pop(),
                     ),
                   ),
+                  // Batch 131: the zone's own name chip opens
+                  // the zone wheel.
+                  const Padding(
+                    padding: EdgeInsets.only(top: 10),
+                    child: ZoneWheelChip(current: AppZone.manga),
+                  ),
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(4, 10, 16, 4),
+                      padding: const EdgeInsets.fromLTRB(8, 10, 16, 4),
                       child: VioletSearchPill(
                         hint: '搜索漫画',
                         onTap: () => context.pushNamed('/manga/search'),
@@ -452,7 +479,7 @@ class _MangaHomeTabState extends State<MangaHomeTab> {
                                   ),
                                 ),
                                 const Spacer(),
-                                const Icon(Icons.arrow_right_rounded),
+                                const Icon(AnikumoIcons.arrow_right_rounded),
                               ],
                             ),
                           ),
@@ -542,11 +569,11 @@ class _MangaHomeTabState extends State<MangaHomeTab> {
                   child: VioletGlassCard(
                     radius: 20,
                     child: ListTile(
-                      leading: const Icon(Icons.extension_off_rounded),
+                      leading: const Icon(AnikumoIcons.extension_off_rounded),
                       title: const Text('还没有漫画源'),
                       subtitle:
                           const Text('Anikumo 不内置任何漫画源。用你自己的 URL 链接导入 JS 源后，这里就会有内容。'),
-                      trailing: const Icon(Icons.chevron_right),
+                      trailing: const Icon(AnikumoIcons.chevron_right),
                       onTap: () => context.pushNamed('/manga/sources'),
                     ),
                   ),
@@ -572,8 +599,8 @@ class _MangaHomeTabState extends State<MangaHomeTab> {
                     ),
                     icon: Icon(
                       _showAllSourceBands
-                          ? Icons.expand_less_rounded
-                          : Icons.expand_more_rounded,
+                          ? AnikumoIcons.expand_less_rounded
+                          : AnikumoIcons.expand_more_rounded,
                       size: 18,
                     ),
                     label: Text(
@@ -595,10 +622,10 @@ class _MangaHomeTabState extends State<MangaHomeTab> {
                   child: VioletGlassCard(
                     radius: 20,
                     child: ListTile(
-                    leading: const Icon(Icons.library_books_outlined),
+                    leading: const Icon(AnikumoIcons.library_books_outlined),
                     title: const Text('漫画源管理'),
                     subtitle: const Text('下载 JS 源、切换或删除来源'),
-                    trailing: const Icon(Icons.chevron_right),
+                    trailing: const Icon(AnikumoIcons.chevron_right),
                     onTap: () => context.pushNamed('/manga/sources'),
                     ),
                   ),
@@ -894,7 +921,7 @@ class _SourceHomeSectionState extends State<_SourceHomeSection> {
                   child: const Text('更多'),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.refresh_rounded, size: 20),
+                  icon: const Icon(AnikumoIcons.refresh_rounded, size: 20),
                   tooltip: '重新加载此源',
                   onPressed: () {
                     setState(() => _loading = true);
@@ -1397,7 +1424,7 @@ class _FeaturedBannerState extends State<_FeaturedBanner> {
                                           onPressed: () =>
                                               widget.onOpen(item),
                                           icon: const Icon(
-                                            Icons.play_arrow_rounded,
+                                            AnikumoIcons.play_arrow_rounded,
                                             size: 18,
                                           ),
                                           label: const Text('阅读'),

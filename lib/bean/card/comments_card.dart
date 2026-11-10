@@ -4,6 +4,7 @@ import 'package:anikumo/modules/comments/comment_item.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:anikumo/utils/date_time.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class CommentsCard extends StatelessWidget {
   const CommentsCard({
@@ -104,7 +105,7 @@ class CommentsCard extends StatelessWidget {
                   itemCount: 5,
                   rating: item.comment.rate.toDouble() / 2,
                   itemBuilder: (context, index) => const Icon(
-                    Icons.star_rounded,
+                    AnikumoIcons.star_rounded,
                   ),
                   itemSize: 20.0,
                 ),

@@ -7,6 +7,7 @@ import 'package:anikumo/repositories/history_repository.dart';
 import 'package:anikumo/request/apis/bangumi_api.dart';
 import 'package:anikumo/services/browse/daily_picks.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// 每日推荐： from trends and this week's calendar, a deterministic
 /// sample changes once a day. Titles already in the watch history
@@ -88,7 +89,7 @@ class _DailyPageState extends State<DailyPage> {
                       strong: true,
                       child: Row(
                         children: [
-                          Icon(Icons.auto_awesome_rounded,
+                          Icon(AnikumoIcons.auto_awesome_rounded,
                               color: theme.colorScheme.primary),
                           const SizedBox(width: 12),
                           Expanded(

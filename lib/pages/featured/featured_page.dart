@@ -4,6 +4,7 @@ import 'package:anikumo/bean/widget/motion_kit.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:anikumo/bean/card/bangumi_card.dart';
 import 'package:anikumo/bean/widget/editorial_kit.dart';
+import 'package:anikumo/bean/widget/fade_slide_in.dart';
 import 'package:anikumo/bean/widget/error_widget.dart';
 import 'package:anikumo/bean/widget/loading_indicator.dart';
 import 'package:anikumo/modules/bangumi/bangumi_item.dart';
@@ -172,17 +173,24 @@ class _FeaturedPageState extends State<FeaturedPage> {
   Widget _sectionBody(FeedSection<BangumiItem> section) {
     switch (section.id) {
       case 'top_rated':
-        final top = section.items.take(5).toList();
+        // Batch 125: the 精选 ranking runs Top 1–10 (was 5),
+        // with the same 3D cascade entrance as the Top-5 lists.
+        final top = section.items.take(10).toList();
         return Column(
           children: [
             for (var i = 0; i < top.length; i++)
-              EditorialRankRow(
-                rank: i + 1,
-                item: top[i],
-                showDivider: i != top.length - 1,
-                onTap: () => context.pushNamed(
-                  '/info/',
-                  arguments: top[i],
+              // Batch 123: the Top-5 rows cascade in with a
+              // 3D perspective flip.
+              RankEntrance3D(
+                index: i,
+                child: EditorialRankRow(
+                  rank: i + 1,
+                  item: top[i],
+                  showDivider: i != top.length - 1,
+                  onTap: () => context.pushNamed(
+                    '/info/',
+                    arguments: top[i],
+                  ),
                 ),
               ),
           ],

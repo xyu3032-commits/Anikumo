@@ -13,6 +13,7 @@ import 'package:anikumo/pages/player/player_controller.dart';
 import 'package:anikumo/services/player/syncplay_endpoint.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/utils/device.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 // Close each step before opening the next to avoid stacked modal routes.
 enum _SyncPlayDestination { create, join, server }
@@ -116,7 +117,7 @@ class _SyncPlaySheetScaffold extends StatelessWidget {
                       IconButton(
                         onPressed: () => Navigator.of(context).pop(),
                         tooltip: '关闭',
-                        icon: const Icon(Icons.close_rounded),
+                        icon: const Icon(AnikumoIcons.close_rounded),
                       ),
                     ],
                   )
@@ -183,7 +184,7 @@ class _SyncPlayHomeSheet extends StatelessWidget {
                   backgroundColor: colorScheme.errorContainer,
                   foregroundColor: colorScheme.onErrorContainer,
                 ),
-                icon: const Icon(Icons.logout_rounded),
+                icon: const Icon(AnikumoIcons.logout_rounded),
                 label: Text(connecting ? '取消连接' : '断开连接'),
               )
             : null,
@@ -253,7 +254,7 @@ class _SyncPlayHomeSheet extends StatelessWidget {
           children: [
             Expanded(
                 child: _ChoiceCard(
-              icon: Icons.add_circle_outline_rounded,
+              icon: AnikumoIcons.add_circle_outline_rounded,
               title: '创建房间',
               description: '邀请朋友加入',
               onTap: () =>
@@ -262,7 +263,7 @@ class _SyncPlayHomeSheet extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
                 child: _ChoiceCard(
-              icon: Icons.login_rounded,
+              icon: AnikumoIcons.login_rounded,
               title: '加入房间',
               description: '输入房间号',
               onTap: () => Navigator.of(context).pop(_SyncPlayDestination.join),
@@ -274,7 +275,7 @@ class _SyncPlayHomeSheet extends StatelessWidget {
           contentPadding: const EdgeInsets.symmetric(horizontal: 8),
           title: const Text('同步服务器'),
           subtitle: Text(_readEndPoint(), overflow: TextOverflow.ellipsis),
-          trailing: const Icon(Icons.chevron_right_rounded),
+          trailing: const Icon(AnikumoIcons.chevron_right_rounded),
           onTap: () => Navigator.of(context).pop(_SyncPlayDestination.server),
         ),
       ],
@@ -303,14 +304,14 @@ class _SyncPlayHomeSheet extends StatelessWidget {
             children: [
               _buildInfoRow(
                 context,
-                icon: Icons.network_ping_rounded,
+                icon: AnikumoIcons.network_ping_rounded,
                 label: '网络延迟',
                 value: '$rtt ms',
               ),
               Divider(height: 1, indent: 56, color: colorScheme.outlineVariant),
               _buildInfoRow(
                 context,
-                icon: Icons.dns_outlined,
+                icon: AnikumoIcons.dns_outlined,
                 label: '同步服务器',
                 value: _readEndPoint(),
               ),
@@ -487,7 +488,7 @@ class _SyncPlayRoomSheetState extends State<_SyncPlayRoomSheet> {
       primaryAction: FilledButton.icon(
         onPressed: _submit,
         icon: Icon(
-            isCreate ? Icons.play_circle_outline_rounded : Icons.login_rounded),
+            isCreate ? AnikumoIcons.play_circle_outline_rounded : AnikumoIcons.login_rounded),
         label: Text(isCreate ? '创建并加入' : '加入房间'),
       ),
       bodyBuilder: (context, compact) {
@@ -501,7 +502,7 @@ class _SyncPlayRoomSheetState extends State<_SyncPlayRoomSheet> {
                         setState(() => _createdRoom = _generateRoomNumber()),
                     tooltip: '重新生成',
                     color: Theme.of(context).colorScheme.onSurface,
-                    icon: const Icon(Icons.refresh_rounded),
+                    icon: const Icon(AnikumoIcons.refresh_rounded),
                   ),
                   _CopyButton(value: _createdRoom),
                 ],
@@ -688,7 +689,7 @@ class _SyncPlayServerSheetState extends State<_SyncPlayServerSheet> {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 18),
       leading: Icon(
-        isCustom ? Icons.edit_outlined : Icons.public_rounded,
+        isCustom ? AnikumoIcons.edit_outlined : AnikumoIcons.public_rounded,
         color: selected ? colorScheme.primary : colorScheme.onSurfaceVariant,
       ),
       title: Text(
@@ -699,7 +700,7 @@ class _SyncPlayServerSheetState extends State<_SyncPlayServerSheet> {
         ),
       ),
       trailing: selected
-          ? Icon(Icons.check_rounded, color: colorScheme.primary)
+          ? Icon(AnikumoIcons.check_rounded, color: colorScheme.primary)
           : null,
       onTap: () => setState(() {
         _selectedEndPoint = endPoint;
@@ -801,7 +802,7 @@ class _CopyButtonState extends State<_CopyButton> {
       onPressed: _copy,
       tooltip: _copied ? '已复制' : '复制',
       color: Theme.of(context).colorScheme.onSurface,
-      icon: Icon(_copied ? Icons.check_rounded : Icons.copy_rounded),
+      icon: Icon(_copied ? AnikumoIcons.check_rounded : AnikumoIcons.copy_rounded),
     );
   }
 }

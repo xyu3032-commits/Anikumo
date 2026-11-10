@@ -146,8 +146,9 @@ abstract class _DownloadController with Store {
     // 下载目录在实际开始下载时才创建，排队或暂停后恢复的剧集统一在完成时缓存弹幕
     if (episode.status == DownloadStatus.completed &&
         GStorage.getSetting(SettingsKeys.downloadDanmaku)) {
-      _fetchAndCacheDanmakuAsync(
-          record.bangumiId, episodeNumber, episode.downloadDirectory);
+      _fetchAndCacheDanmakuAsync(record.bangumiId, episodeNumber,
+          episode.downloadDirectory,
+          animeTitle: record.bangumiName);
     }
 
     final key = '${recordKey}_$episodeNumber';
@@ -697,24 +698,24 @@ abstract class _DownloadController with Store {
   }
 
   void _fetchAndCacheDanmakuAsync(
-      int bangumiId, int episodeNumber, String downloadDirectory) {
+      int bangumiId, int episodeNumber, String downloadDirectory,
+      {String animeTitle = ''}) {
     Future(() async {
       try {
         AnikumoLogger().i(
             'DownloadController: fetching danmaku for episode $episodeNumber (async)');
 
-        // 获取 DanDan 番剧 ID
-        final danDanBangumiID =
-            await DanmakuApi.getDanDanBangumiIDByBgmBangumiID(bangumiId);
+        // 获取弹幕（凭据流走 Bangumi 映射；内置服务走标题匹配）
+        final (danmakus, danDanBangumiID) = await DanmakuApi.fetchAutoDanmaku(
+          bgmBangumiId: bangumiId,
+          title: animeTitle,
+          episode: episodeNumber,
+        );
         if (danDanBangumiID == 0) {
           AnikumoLogger().w(
               'DownloadController: failed to get DanDan bangumiID for $bangumiId');
           return;
         }
-
-        // 获取弹幕列表
-        final danmakus =
-            await DanmakuApi.getDanDanmaku(danDanBangumiID, episodeNumber);
         if (danmakus.isEmpty) {
           AnikumoLogger().i(
               'DownloadController: no danmaku found for episode $episodeNumber');

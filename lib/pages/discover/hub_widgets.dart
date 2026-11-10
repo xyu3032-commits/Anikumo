@@ -3,6 +3,7 @@ import 'package:anikumo/bean/card/network_img_layer.dart';
 import 'package:anikumo/bean/glass/glass_surface.dart';
 import 'package:anikumo/modules/history/history_module.dart';
 import 'package:anikumo/services/library/user_library.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Shared hub widgets for the discover family of tabs
 /// （发现 / 工具箱 / 时光）. Extracted in batch 37 when the
@@ -108,7 +109,7 @@ class ToolRow extends StatelessWidget {
               ],
             ),
           ),
-          const Icon(Icons.chevron_right),
+          const Icon(AnikumoIcons.chevron_right),
         ],
       ),
     );
@@ -170,7 +171,7 @@ class ContinueWatchCard extends StatelessWidget {
                 child: IconButton.filled(
                   tooltip: '继续播放',
                   onPressed: onResume,
-                  icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                  icon: const Icon(AnikumoIcons.play_arrow_rounded, size: 20),
                   style: IconButton.styleFrom(
                     visualDensity: VisualDensity.compact,
                   ),

@@ -27,13 +27,23 @@ final videoModule = createModule(
         // visits. Reopening the same video reattaches to that pair;
         // opening a different video ends the mini session for real
         // (the mini window never survives into another video).
+        // Batch 116: "same video" now means same ANIME for online
+        // playback — tapping the anime the mini window is playing
+        // resumes it directly, whichever source the entry point
+        // happened to build its args from.
         final session = MiniPlayerSession.instance;
-        final resume = session.isActiveFor(args);
+        // Batch 127: an explicit episode pick never resumes
+        // the mini session — the user chose a specific episode,
+        // so the session ends and the pick starts fresh.
+        final explicitPick =
+            args is OnlineVideoPlaybackArgs && args.initialEpisode != null;
+        final resumeArgs = explicitPick ? null : session.resumeArgsFor(args);
+        final resume = resumeArgs != null;
         if (session.hasSession && !resume) {
           unawaited(session.close());
         }
         return VideoPage(
-          args: args,
+          args: resumeArgs ?? args,
           playerController: resume
               ? session.playerController!
               : context.read<PlayerController>(),

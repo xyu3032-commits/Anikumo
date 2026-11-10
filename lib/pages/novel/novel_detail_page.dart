@@ -18,6 +18,7 @@ import '../../services/novel/novel_downloads.dart';
 import '../../services/novel/novel_library.dart';
 import '../../services/novel/novel_sources.dart';
 import 'novel_widgets.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Novel detail: info header, intro, companion anime/manga
 /// rails, and the chapter list.
@@ -236,14 +237,14 @@ class _NovelDetailPageState extends State<NovelDetailPage> {
     }
     if (_downloadedKeys.contains(NovelDownloadStore.keyFor(_item, chapter))) {
       return Icon(
-        Icons.download_done_rounded,
+        AnikumoIcons.download_done_rounded,
         size: 20,
         color: Theme.of(context).colorScheme.primary,
       );
     }
     return IconButton(
       tooltip: '下载这一章',
-      icon: const Icon(Icons.download_outlined, size: 20),
+      icon: const Icon(AnikumoIcons.download_outlined, size: 20),
       onPressed: () => _downloadChapter(chapter, index),
     );
   }
@@ -324,7 +325,7 @@ class _NovelDetailPageState extends State<NovelDetailPage> {
                           IconButton(
                             tooltip: '返回',
                             onPressed: () => context.pop(),
-                            icon: const Icon(Icons.arrow_back_rounded,
+                            icon: const Icon(AnikumoIcons.arrow_back_rounded,
                                 color: Colors.white),
                           ),
                           const Spacer(),
@@ -332,8 +333,8 @@ class _NovelDetailPageState extends State<NovelDetailPage> {
                             tooltip: _isFavorite ? '取消收藏' : '收藏',
                             icon: Icon(
                               _isFavorite
-                                  ? Icons.bookmark
-                                  : Icons.bookmark_outline,
+                                  ? AnikumoIcons.bookmark
+                                  : AnikumoIcons.bookmark_outline,
                               color: _isFavorite
                                   ? VioletGlass.lavender
                                   : Colors.white,
@@ -444,7 +445,7 @@ class _NovelDetailPageState extends State<NovelDetailPage> {
                             ) ??
                             0,
                       ),
-              icon: const Icon(Icons.menu_book_rounded),
+              icon: const Icon(AnikumoIcons.menu_book_rounded),
               // Batch 30: a long current-chapter title used to
               // overflow the button row; it ellipsizes now.
               label: Flexible(
@@ -591,7 +592,7 @@ class _NovelDetailPageState extends State<NovelDetailPage> {
               child: Row(
                 children: [
                   Icon(
-                    Icons.swap_horiz_rounded,
+                    AnikumoIcons.swap_horiz_rounded,
                     size: 16,
                     color: theme.colorScheme.primary,
                   ),
@@ -623,7 +624,7 @@ class _NovelDetailPageState extends State<NovelDetailPage> {
                 IconButton(
                   tooltip: _descending ? '正序' : '倒序',
                   icon: Icon(
-                    _descending ? Icons.arrow_upward : Icons.arrow_downward,
+                    _descending ? AnikumoIcons.arrow_upward : AnikumoIcons.arrow_downward,
                   ),
                   onPressed: () => setState(() {
                         _descending = !_descending;
@@ -676,7 +677,7 @@ class _NovelDetailPageState extends State<NovelDetailPage> {
                       displayed[i],
                       _descending ? _chapters.length - 1 - i : i,
                     ),
-                    const Icon(Icons.chevron_right, size: 18),
+                    const Icon(AnikumoIcons.chevron_right, size: 18),
                   ],
                 ),
                 onTap: () => _openReader(
@@ -689,7 +690,7 @@ class _NovelDetailPageState extends State<NovelDetailPage> {
                   '展开全部 ${displayed.length} 章',
                   style: TextStyle(color: theme.colorScheme.primary),
                 ),
-                trailing: const Icon(Icons.expand_more),
+                trailing: const Icon(AnikumoIcons.expand_more),
                 onTap: () => setState(() => _showAllChapters = true),
               ),
           ],

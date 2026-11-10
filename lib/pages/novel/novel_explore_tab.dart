@@ -7,6 +7,7 @@ import '../../models/novel_item.dart';
 import '../../services/novel/novel_source.dart';
 import '../../services/novel/novel_sources.dart';
 import 'novel_widgets.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Args for the /novel/category route.
 typedef NovelCategoryArgs = ({
@@ -30,15 +31,21 @@ class _NovelExploreTabState extends State<NovelExploreTab> {
   void initState() {
     super.initState();
     NovelSources.revision.addListener(_onRevision);
+    NovelSource.kindsRevision.addListener(_onRevision);
+    // Batch 173: kick off dynamic category resolution
+    // for the active source (idempotent).
+    NovelSources.activeOrNull()?.ensureExploreKinds();
   }
 
   @override
   void dispose() {
     NovelSources.revision.removeListener(_onRevision);
+    NovelSource.kindsRevision.removeListener(_onRevision);
     super.dispose();
   }
 
   void _onRevision() {
+    NovelSources.activeOrNull()?.ensureExploreKinds();
     if (mounted) setState(() => _categoryIndex = 0);
   }
 
@@ -55,14 +62,37 @@ class _NovelExploreTabState extends State<NovelExploreTab> {
         ),
       );
     }
+    // Batch 173: script-declared categories resolve
+    // asynchronously — while they are in flight the
+    // static reading is bogus, so show a spinner instead.
+    if (source.hasDynamicExplore && !source.exploreKindsResolved) {
+      return SafeArea(
+        bottom: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            NovelSectionHeader(title: '探索 · ${source.name}'),
+            const Expanded(child: Center(child: CircularProgressIndicator())),
+          ],
+        ),
+      );
+    }
     final categories = source.exploreCategories;
+    // Fetchable categories in declared order; group
+    // headers render as labels in the strip below.
+    final items = [
+      for (final c in categories)
+        if (!c.isHeader) c,
+    ];
+    final selectedIndex =
+        items.isEmpty ? 0 : _categoryIndex.clamp(0, items.length - 1);
     return SafeArea(
       bottom: false,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           NovelSectionHeader(title: '探索 · ${source.name}'),
-          if (categories.isEmpty)
+          if (items.isEmpty)
             const Expanded(
               child: Center(
                 child: Padding(
@@ -80,21 +110,34 @@ class _NovelExploreTabState extends State<NovelExploreTab> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 itemCount: categories.length,
                 separatorBuilder: (_, _) => const SizedBox(width: 8),
-                itemBuilder: (context, index) => ChoiceChip(
-                  label: Text(categories[index].title),
-                  selected: index == _categoryIndex,
-                  onSelected: (_) =>
-                      setState(() => _categoryIndex = index),
-                ),
+                itemBuilder: (context, index) {
+                  final category = categories[index];
+                  if (category.isHeader) {
+                    return Center(
+                      child: Text(
+                        category.title,
+                        style: Theme.of(context).textTheme.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                    );
+                  }
+                  final itemIndex = items.indexOf(category);
+                  return ChoiceChip(
+                    label: Text(category.title),
+                    selected: itemIndex == selectedIndex,
+                    onSelected: (_) =>
+                        setState(() => _categoryIndex = itemIndex),
+                  );
+                },
               ),
             ),
             Expanded(
               child: NovelBookGrid(
                 key: ValueKey(
-                  'explore-${source.id}-${categories[_categoryIndex].url}',
+                  'explore-${source.id}-${items[selectedIndex].url}',
                 ),
                 source: source,
-                category: categories[_categoryIndex],
+                category: items[selectedIndex],
               ),
             ),
           ],
@@ -117,7 +160,7 @@ class NovelCategoryPage extends StatelessWidget {
       appBar: AppBar(title: Text(args.category.title)),
       body: source == null
           ? const GeneralEmptyState(
-              icon: Icons.find_in_page_outlined,
+              icon: AnikumoIcons.find_in_page_outlined,
               title: '书源不存在',
             )
           : NovelBookGrid(source: source, category: args.category),
@@ -212,7 +255,7 @@ class _NovelBookGridState extends State<NovelBookGrid> {
         return NovelErrorState(message: _errorText!, onRetry: _loadFirst);
       }
       return const GeneralEmptyState(
-        icon: Icons.inbox_rounded,
+        icon: AnikumoIcons.inbox_rounded,
         title: '这个分类暂时没有内容',
       );
     }
@@ -265,16 +308,25 @@ class NovelSourcePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Batch 173: rebuild when dynamic categories land.
+    return ValueListenableBuilder<int>(
+      valueListenable: NovelSource.kindsRevision,
+      builder: (context, _, _) => _buildPage(context),
+    );
+  }
+
+  Widget _buildPage(BuildContext context) {
     final source = NovelSources.byId(sourceId);
     if (source == null) {
       return Scaffold(
         appBar: AppBar(),
         body: const GeneralEmptyState(
-          icon: Icons.find_in_page_outlined,
+          icon: AnikumoIcons.find_in_page_outlined,
           title: '书源不存在',
         ),
       );
     }
+    source.ensureExploreKinds();
     final isActive = NovelSources.activeOrNull()?.id == source.id;
     final categories = source.exploreCategories;
     return Scaffold(
@@ -288,20 +340,37 @@ class NovelSourcePage extends StatelessWidget {
             ),
         ],
       ),
-      body: categories.isEmpty
-          ? const GeneralEmptyState(
-              icon: Icons.explore_off_rounded,
-              title: '这个源没有发现分类，用搜索找书吧',
-            )
-          : ListView.builder(
-        scrollCacheExtent: const ScrollCacheExtent.pixels(700),
-              padding: const EdgeInsets.only(bottom: 24),
-              itemCount: categories.length,
-              itemBuilder: (context, index) => _NovelCategoryRail(
-                source: source,
-                category: categories[index],
-              ),
-            ),
+      body: (source.hasDynamicExplore && !source.exploreKindsResolved)
+          ? const Center(child: CircularProgressIndicator())
+          : categories.isEmpty
+              ? const GeneralEmptyState(
+                  icon: AnikumoIcons.explore_off_rounded,
+                  title: '这个源没有发现分类，用搜索找书吧',
+                )
+              : ListView.builder(
+                  scrollCacheExtent: const ScrollCacheExtent.pixels(700),
+                  padding: const EdgeInsets.only(bottom: 24),
+                  itemCount: categories.length,
+                  itemBuilder: (context, index) {
+                    final category = categories[index];
+                    if (category.isHeader) {
+                      return Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
+                        child: Text(
+                          category.title,
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      );
+                    }
+                    return _NovelCategoryRail(
+                      source: source,
+                      category: category,
+                    );
+                  },
+                ),
     );
   }
 }

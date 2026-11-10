@@ -6,6 +6,7 @@ import 'package:anikumo/bean/widget/anikumo_menu.dart';
 import 'package:anikumo/bean/widget/loading_indicator.dart';
 import 'package:anikumo/modules/download/download_module.dart';
 import 'package:anikumo/utils/format.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 const Duration _kExpandDuration = Duration(milliseconds: 250);
 const Curve _kExpandCurve = Curves.easeInOutCubic;
@@ -124,7 +125,7 @@ class DownloadRecordCard extends StatelessWidget {
                   AnikumoMenuButton(
                     animated: false,
                     builder: (context, toggle) => IconButton(
-                      icon: Icon(Icons.more_vert,
+                      icon: Icon(AnikumoIcons.more_vert,
                           color: colorScheme.onSurfaceVariant),
                       tooltip: '更多操作',
                       onPressed: toggle,
@@ -145,7 +146,7 @@ class DownloadRecordCard extends StatelessWidget {
                       duration: _kExpandDuration,
                       curve: _kExpandCurve,
                       child: Icon(
-                        Icons.expand_more,
+                        AnikumoIcons.expand_more,
                         color: colorScheme.onSurfaceVariant,
                       ),
                     ),
@@ -263,7 +264,7 @@ class _EpisodeStatusBadge extends StatelessWidget {
       case DownloadStatus.completed:
         background = colorScheme.secondaryContainer;
         child = Icon(
-          Icons.check_rounded,
+          AnikumoIcons.check_rounded,
           size: 18,
           color: colorScheme.onSecondaryContainer,
         );
@@ -290,7 +291,7 @@ class _EpisodeStatusBadge extends StatelessWidget {
       case DownloadStatus.failed:
         background = colorScheme.errorContainer;
         child = Icon(
-          Icons.error_outline_rounded,
+          AnikumoIcons.error_outline_rounded,
           size: 18,
           color: colorScheme.onErrorContainer,
         );
@@ -298,7 +299,7 @@ class _EpisodeStatusBadge extends StatelessWidget {
       case DownloadStatus.paused:
         background = colorScheme.surfaceContainerHighest;
         child = Icon(
-          Icons.pause_rounded,
+          AnikumoIcons.pause_rounded,
           size: 18,
           color: colorScheme.onSurfaceVariant,
         );
@@ -307,7 +308,7 @@ class _EpisodeStatusBadge extends StatelessWidget {
       default:
         background = colorScheme.surfaceContainerHighest;
         child = Icon(
-          Icons.schedule_rounded,
+          AnikumoIcons.schedule_rounded,
           size: 18,
           color: colorScheme.onSurfaceVariant,
         );

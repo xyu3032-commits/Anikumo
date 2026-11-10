@@ -6,6 +6,7 @@ import 'package:anikumo/bean/widget/embedded_native_control_area.dart';
 import 'package:anikumo/services/platform/desktop_window_config.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:anikumo/utils/device.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class SysAppBar extends StatelessWidget implements PreferredSizeWidget {
   final double? toolbarHeight;
@@ -40,7 +41,7 @@ class SysAppBar extends StatelessWidget implements PreferredSizeWidget {
         ((ModalRoute.of(context)?.impliesAppBarDismissal ?? false)
             ? IconButton(
                 onPressed: () => context.maybePop(),
-                icon: const Icon(Icons.arrow_back),
+                icon: const Icon(AnikumoIcons.arrow_back),
               )
             : null);
 

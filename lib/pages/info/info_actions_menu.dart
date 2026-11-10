@@ -12,6 +12,7 @@ import 'package:anikumo/services/logging/logger.dart';
 import 'package:anikumo/utils/device.dart';
 import 'package:saver_gallery/saver_gallery.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class InfoActionsMenu extends StatefulWidget {
   const InfoActionsMenu({super.key, required this.bangumiItem});
@@ -206,7 +207,7 @@ class _InfoActionsMenuState extends State<InfoActionsMenu> {
       ],
       builder: (context, toggle) => IconButton(
         tooltip: '更多操作',
-        icon: const Icon(Icons.more_horiz_rounded),
+        icon: const Icon(AnikumoIcons.more_horiz_rounded),
         onPressed: toggle,
       ),
     );

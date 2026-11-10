@@ -4,6 +4,7 @@ import 'package:anikumo/bean/widget/anikumo_menu.dart';
 import 'package:anikumo/bean/widget/loading_indicator.dart';
 import 'package:anikumo/modules/collect/collect_type.dart';
 import 'package:anikumo/modules/history/history_module.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class HistoryRecordTile extends StatelessWidget {
   const HistoryRecordTile({
@@ -74,7 +75,7 @@ class HistoryRecordTile extends StatelessWidget {
         decoration: BoxDecoration(
             color: colors.errorContainer, borderRadius: borderRadius),
         child:
-            Icon(Icons.delete_outline_rounded, color: colors.onErrorContainer),
+            Icon(AnikumoIcons.delete_outline_rounded, color: colors.onErrorContainer),
       ),
       child: Material(
         color: colors.surfaceContainerLow,
@@ -157,7 +158,7 @@ class HistoryRecordTile extends StatelessWidget {
                                       width: coverWidth,
                                       height: coverWidth * 1.4,
                                       color: colors.surfaceContainerHighest,
-                                      child: Icon(Icons.movie_outlined,
+                                      child: Icon(AnikumoIcons.movie_outlined,
                                           color: colors.onSurfaceVariant),
                                     )
                                   : NetworkImgLayer(
@@ -212,7 +213,7 @@ class HistoryRecordTile extends StatelessWidget {
           foregroundColor: colors.onErrorContainer,
         ),
         onPressed: onDelete,
-        icon: const Icon(Icons.delete_outline_rounded),
+        icon: const Icon(AnikumoIcons.delete_outline_rounded),
       );
     }
 
@@ -225,7 +226,7 @@ class HistoryRecordTile extends StatelessWidget {
           foregroundColor: colors.onPrimaryContainer,
         ),
         onPressed: onPlay,
-        icon: const Icon(Icons.play_arrow_rounded),
+        icon: const Icon(AnikumoIcons.play_arrow_rounded),
       ),
       AnikumoMenuButton(
         menuChildren: [
@@ -257,7 +258,7 @@ class HistoryRecordTile extends StatelessWidget {
           tooltip: '更多操作',
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           onPressed: toggle,
-          icon: const Icon(Icons.more_horiz_rounded),
+          icon: const Icon(AnikumoIcons.more_horiz_rounded),
         ),
       ),
     ];

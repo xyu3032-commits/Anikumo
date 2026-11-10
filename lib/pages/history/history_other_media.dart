@@ -11,6 +11,7 @@ import 'package:anikumo/services/novel/novel_library.dart';
 import 'package:anikumo/utils/constants.dart';
 import 'package:anikumo/utils/date_time.dart';
 import 'package:anikumo/utils/tap_debouncer.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Batch 80: one row of the history page's cross-media
 /// modes （全部 / 漫画 / 小说）. The anime mode keeps its own
@@ -278,7 +279,7 @@ class _CrossHistoryListView extends StatelessWidget {
                         entry.novelProgress != null))
                   IconButton(
                     tooltip: '删除记录',
-                    icon: const Icon(Icons.delete_outline_rounded),
+                    icon: const Icon(AnikumoIcons.delete_outline_rounded),
                     onPressed: () => _confirmAndDelete(context, entry),
                   ),
               ],

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:anikumo/utils/format.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 enum PlayerAdjustmentHudType {
   brightness,
@@ -62,20 +63,20 @@ class _PlayerAdjustmentHudState extends State<PlayerAdjustmentHud> {
   IconData get _icon {
     if (_displayType == PlayerAdjustmentHudType.brightness) {
       if (_percent <= 8) {
-        return Icons.brightness_low_rounded;
+        return AnikumoIcons.brightness_low_rounded;
       }
       if (_percent < 55) {
-        return Icons.brightness_medium_rounded;
+        return AnikumoIcons.brightness_medium_rounded;
       }
-      return Icons.brightness_high_rounded;
+      return AnikumoIcons.brightness_high_rounded;
     }
     if (_percent <= 0) {
-      return Icons.volume_off_rounded;
+      return AnikumoIcons.volume_off_rounded;
     }
     if (_percent < 45) {
-      return Icons.volume_down_rounded;
+      return AnikumoIcons.volume_down_rounded;
     }
-    return Icons.volume_up_rounded;
+    return AnikumoIcons.volume_up_rounded;
   }
 
   Color _accent(ColorScheme colorScheme) {
@@ -621,10 +622,10 @@ class _PlayerSeekHudState extends State<PlayerSeekHud> {
         : const Duration(milliseconds: 200);
     final snapProgress = _snapProgressOnNextBuild;
     final icon = _displayCancelPending
-        ? Icons.close_rounded
+        ? AnikumoIcons.close_rounded
         : _isForward
-            ? Icons.fast_forward_rounded
-            : Icons.fast_rewind_rounded;
+            ? AnikumoIcons.fast_forward_rounded
+            : AnikumoIcons.fast_rewind_rounded;
 
     if (snapProgress) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -901,7 +902,7 @@ class _PlayerSpeedHudState extends State<PlayerSpeedHud> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(
-                        Icons.speed_rounded,
+                        AnikumoIcons.speed_rounded,
                         color: onContainer,
                         size: 15,
                       ),

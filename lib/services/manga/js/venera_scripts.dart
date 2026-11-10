@@ -82,20 +82,58 @@ function __anikumoPersistJar() {
         JSON.stringify(globalThis.__anikumoJar || {}));
   } catch (e) {}
 }
+// Batch 185: jar entries carry their cookie path
+// ({v, p}) — the jar used to be a flat name->value map
+// per host, so a cookie scoped to /api was also sent to
+// /static (and anywhere else on the host). Legacy
+// persisted entries (plain strings) are read as path '/'
+// and upgraded on the next set.
+function __anikumoCookieEntryOf(raw) {
+  if (raw && typeof raw === 'object') {
+    return {v: String(raw.v == null ? '' : raw.v), p: raw.p || '/'};
+  }
+  return {v: String(raw == null ? '' : raw), p: '/'};
+}
 function __anikumoCookieApply(host, cookies) {
   var jar = globalThis.__anikumoJar[host] ||
       (globalThis.__anikumoJar[host] = {});
   (cookies || []).forEach(function (c) {
     if (typeof c === 'string') {
-      var pair = c.split(';')[0].split('=');
+      var segments = c.split(';');
+      var pair = segments[0].split('=');
       if (pair.length >= 2) {
-        jar[pair[0].trim()] = pair.slice(1).join('=').trim();
+        var path = '/';
+        for (var i = 1; i < segments.length; i++) {
+          var attr = segments[i].trim();
+          if (/^path=/i.test(attr)) {
+            path = attr.slice(5).trim() || '/';
+          }
+        }
+        jar[pair[0].trim()] = {
+          v: pair.slice(1).join('=').trim(),
+          p: path,
+        };
       }
     } else if (c && c.name) {
-      jar[c.name] = c.value;
+      jar[c.name] = {v: String(c.value == null ? '' : c.value),
+          p: c.path || '/'};
     }
   });
   __anikumoPersistJar();
+}
+function __anikumoCookiesFor(url) {
+  var host = __anikumoHostOf(url || '');
+  var jar = globalThis.__anikumoJar[host] || {};
+  var pathname = '/';
+  try { pathname = new URL(url).pathname || '/'; } catch (e) {}
+  var out = [];
+  Object.keys(jar).forEach(function (k) {
+    var entry = __anikumoCookieEntryOf(jar[k]);
+    if (pathname.indexOf(entry.p) === 0) {
+      out.push({name: k, value: entry.v, domain: host});
+    }
+  });
+  return out;
 }
 function __anikumoCookie(msg) {
   var host = __anikumoHostOf(msg.url || '');
@@ -104,10 +142,7 @@ function __anikumoCookie(msg) {
     return true;
   }
   if (msg.function === 'get') {
-    var jar = globalThis.__anikumoJar[host] || {};
-    return Object.keys(jar).map(function (k) {
-      return {name: k, value: jar[k], domain: host};
-    });
+    return __anikumoCookiesFor(msg.url || '');
   }
   if (msg.function === 'delete') {
     delete globalThis.__anikumoJar[host];
@@ -121,12 +156,22 @@ function __anikumoHttp(msg) {
   var src = msg.headers || {};
   Object.keys(src).forEach(function (k) { headers[k] = src[k]; });
   var host = __anikumoHostOf(msg.url || '');
-  var jar = globalThis.__anikumoJar[host] || {};
-  var names = Object.keys(jar);
-  if (names.length && !headers['Cookie'] && !headers['cookie']) {
-    headers['Cookie'] = names.map(function (k) {
-      return k + '=' + jar[k];
+  // Batch 185: only cookies whose path covers this
+  // request are attached (see __anikumoCookiesFor).
+  var cookies = __anikumoCookiesFor(msg.url || '');
+  if (cookies.length && !headers['Cookie'] && !headers['cookie']) {
+    headers['Cookie'] = cookies.map(function (c) {
+      return c.name + '=' + c.value;
     }).join('; ');
+  }
+  // Batch 185: a default Referer (the host root) when the
+  // source did not set one — same-host anti-leech checks
+  // ask for exactly this; an explicit Referer always wins.
+  if (!headers['Referer'] && !headers['referer'] && host) {
+    try {
+      var u = new URL(msg.url);
+      headers['Referer'] = u.protocol + '//' + u.host + '/';
+    } catch (e) {}
   }
   var out = {};
   Object.keys(msg).forEach(function (k) { out[k] = msg[k]; });
@@ -390,7 +435,22 @@ class __AnikumoHtmlElement {
   }
   get outerHTML() { return __anikumoSerializeNode(this); }
   getAttribute(name) {
-    var v = this.attributes[name];
+    // Batch 185: attribute names are case-insensitive in
+    // HTML (the parser stores them lowercased now), and a
+    // lazy-loaded image's real address lives in a data-*
+    // attribute — reading 'src' falls back to the common
+    // lazy attributes, the normalization the stock
+    // browser-backed element effectively provided.
+    var key = String(name).toLowerCase();
+    var v = this.attributes[key];
+    if ((v === undefined || v === '') && key === 'src') {
+      var lazy = ['data-src', 'data-original', 'data-lazy-src',
+        'data-url'];
+      for (var i = 0; i < lazy.length; i++) {
+        var f = this.attributes[lazy[i]];
+        if (f) { v = f; break; }
+      }
+    }
     return v === undefined ? null : v;
   }
   // Batch 37: element surface the stock HtmlElement exposes
@@ -458,6 +518,38 @@ function __anikumoDecodeEntities(s) {
       .replace(/&amp;/g, '&');
 }
 
+// Batch 185: HTML5 implied end tags. Real-world chapter
+// and detail HTML routinely omits </li>, </p>, </td> and
+// friends; the stack parser used to nest those elements
+// forever, so child selectors (ul > li) matched only the
+// first item and lists came out truncated. When a start
+// tag arrives, open elements it implicitly closes are
+// popped first (the same table the novel engine's parser
+// adopted in its batch 178).
+var __ANIKUMO_P_CLOSERS = {
+  address: 1, article: 1, aside: 1, blockquote: 1, div: 1,
+  dl: 1, fieldset: 1, figure: 1, footer: 1, form: 1,
+  header: 1, hr: 1, main: 1, nav: 1, ol: 1, p: 1, pre: 1,
+  section: 1, table: 1, ul: 1,
+};
+function __anikumoImpliedCloses(tag) {
+  switch (tag) {
+    case 'li': return {li: 1};
+    case 'dd': case 'dt': return {dd: 1, dt: 1};
+    case 'td': case 'th': return {td: 1, th: 1};
+    case 'tr': return {tr: 1, td: 1, th: 1};
+    case 'option': return {option: 1};
+    case 'optgroup': return {option: 1, optgroup: 1};
+    case 'thead': case 'tbody': case 'tfoot':
+      return {thead: 1, tbody: 1, tfoot: 1, tr: 1, td: 1, th: 1};
+    case 'h1': case 'h2': case 'h3': case 'h4': case 'h5':
+    case 'h6':
+      return {p: 1, h1: 1, h2: 1, h3: 1, h4: 1, h5: 1, h6: 1};
+  }
+  if (__ANIKUMO_P_CLOSERS[tag]) return {p: 1};
+  return null;
+}
+
 function __anikumoParseHtml(html) {
   var root = new __AnikumoHtmlElement('#document', {});
   var stack = [root];
@@ -494,7 +586,14 @@ function __anikumoParseHtml(html) {
       var val = am[3] !== undefined ? am[3]
           : (am[4] !== undefined ? am[4]
           : (am[5] !== undefined ? am[5] : ''));
-      attrs[am[1]] = __anikumoDecodeEntities(val);
+      attrs[am[1].toLowerCase()] = __anikumoDecodeEntities(val);
+    }
+    var implied = __anikumoImpliedCloses(tag);
+    if (implied) {
+      while (stack.length > 1 &&
+          implied[stack[stack.length - 1].tagName]) {
+        stack.pop();
+      }
     }
     var el = new __AnikumoHtmlElement(tag, attrs);
     el.parentNode = stack[stack.length - 1];
@@ -535,7 +634,7 @@ function __anikumoParseCompound(text) {
     }
     else if (m[5]) {
       compound.attrs.push({
-        name: m[5],
+        name: m[5].toLowerCase(),
         op: m[6] || null,
         value: m[8] !== undefined ? m[8]
             : (m[9] !== undefined ? m[9]
@@ -604,6 +703,13 @@ function __anikumoMatchesPseudo(el, pseudo) {
     }
     return true;
   }
+  if (name === 'not') {
+    // Batch 185: :not(compound) — previously every :not
+    // fell into the unknown-pseudo bucket and the whole
+    // selector matched nothing.
+    return !__anikumoMatchesCompound(el,
+        __anikumoParseCompound(pseudo.arg));
+  }
   var isChild = name === 'first-child' || name === 'last-child' ||
       name === 'nth-child';
   var isOfType = name === 'first-of-type' || name === 'last-of-type' ||
@@ -631,24 +737,79 @@ function __anikumoMatchesPseudo(el, pseudo) {
   return __anikumoNthMatches(pseudo.arg, pos);
 }
 
+// Batch 185: selector splitting that respects brackets,
+// parens and quotes. Groups used to split on every comma
+// (an attribute value containing one broke the whole
+// selector) and compounds on every whitespace run (an
+// attribute value containing a space, or the spaces in
+// :nth-child(2n + 1), broke it the same way).
+function __anikumoSplitSelectorGroups(selector) {
+  var groups = [];
+  var depth = 0;
+  var quote = null;
+  var cur = '';
+  for (var i = 0; i < selector.length; i++) {
+    var ch = selector.charAt(i);
+    if (quote) {
+      cur += ch;
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; cur += ch; continue; }
+    if (ch === '[' || ch === '(') depth++;
+    else if (ch === ']' || ch === ')') depth--;
+    if (ch === ',' && depth === 0) { groups.push(cur); cur = ''; continue; }
+    cur += ch;
+  }
+  groups.push(cur);
+  return groups;
+}
+
+function __anikumoSplitGroup(group) {
+  var compounds = [];
+  var combinators = [];
+  var depth = 0;
+  var quote = null;
+  var cur = '';
+  var pending = null;
+  function flush() {
+    var text = cur.trim();
+    cur = '';
+    if (!text) return;
+    if (compounds.length) combinators.push(pending || ' ');
+    compounds.push(text);
+    pending = null;
+  }
+  for (var i = 0; i < group.length; i++) {
+    var ch = group.charAt(i);
+    if (quote) {
+      cur += ch;
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; cur += ch; continue; }
+    if (ch === '[' || ch === '(') { depth++; cur += ch; continue; }
+    if (ch === ']' || ch === ')') { depth--; cur += ch; continue; }
+    if (depth === 0 && (ch === '>' || ch === '+' || ch === '~')) {
+      flush();
+      pending = ch;
+      continue;
+    }
+    if (depth === 0 && /\s/.test(ch)) { flush(); continue; }
+    cur += ch;
+  }
+  flush();
+  return {compounds: compounds, combinators: combinators};
+}
+
 function __anikumoQueryAll(rootEl, selector) {
   var results = [];
-  var groups = selector.split(',');
+  var groups = __anikumoSplitSelectorGroups(selector);
   groups.forEach(function (group) {
-    var parts = group.trim().split(/\s*(>)\s*|\s+/).filter(function (p) {
-      return p !== undefined && p !== '';
-    });
-    // parts alternates compound, combinator, compound…
-    var compounds = [];
-    var combinators = [];
-    parts.forEach(function (p) {
-      if (p === '>') combinators.push('>');
-      else {
-        if (compounds.length > combinators.length) combinators.push(' ');
-        compounds.push(__anikumoParseCompound(p));
-      }
-    });
-    if (!compounds.length) return;
+    var split = __anikumoSplitGroup(group);
+    if (!split.compounds.length) return;
+    var compounds = split.compounds.map(__anikumoParseCompound);
+    var combinators = split.combinators;
     var candidates = [];
     var collect = function (n) {
       n.childNodes.forEach(function (c) {
@@ -674,6 +835,28 @@ function __anikumoQueryAll(rootEl, selector) {
             ok = false;
             break;
           }
+        } else if (comb === '+') {
+          // Batch 185: adjacent sibling — used to be
+          // silently treated as a descendant combinator.
+          node = node.previousElementSibling;
+          if (!node ||
+              !__anikumoMatchesCompound(node, compounds[idx])) {
+            ok = false;
+            break;
+          }
+        } else if (comb === '~') {
+          // Batch 185: general sibling.
+          var sib = node.previousElementSibling;
+          var foundSib = null;
+          while (sib) {
+            if (__anikumoMatchesCompound(sib, compounds[idx])) {
+              foundSib = sib;
+              break;
+            }
+            sib = sib.previousElementSibling;
+          }
+          if (!foundSib) { ok = false; break; }
+          node = foundSib;
         } else {
           var anc = node.parentNode;
           var found = null;
@@ -1472,7 +1655,23 @@ function __anikumoDefaultOptions(holder) {
 // the chain. Bounded to the last 10 chains.
 globalThis.__anikumoTokenChains = {};
 globalThis.__anikumoChainOrder = [];
+globalThis.__anikumoChainLocks = {};
 async function __anikumoPaged(chainKey, page, fetch) {
+  // Batch 188: serialize walks of the same chain. Read
+  // calls run concurrently, and two walks sharing the
+  // chain's mutable state interleaved at the fetch
+  // await: both computed the same next index, fetched
+  // the same token, and the last writer won — skewing
+  // the stored pages and tokens for every later page.
+  var locks = globalThis.__anikumoChainLocks;
+  var prev = locks[chainKey] || Promise.resolve();
+  var run = prev.then(function () {
+    return __anikumoPagedWalk(chainKey, page, fetch);
+  });
+  locks[chainKey] = run.then(function () {}, function () {});
+  return run;
+}
+async function __anikumoPagedWalk(chainKey, page, fetch) {
   var chains = globalThis.__anikumoTokenChains;
   var c = chains[chainKey];
   if (!c) {
@@ -1482,6 +1681,7 @@ async function __anikumoPaged(chainKey, page, fetch) {
     while (globalThis.__anikumoChainOrder.length > 10) {
       var old = globalThis.__anikumoChainOrder.shift();
       delete chains[old];
+      delete globalThis.__anikumoChainLocks[old];
     }
   }
   while (!(page in c.pages)) {
@@ -1490,9 +1690,29 @@ async function __anikumoPaged(chainKey, page, fetch) {
     var token = c.tokens[idx - 1];
     if (token === undefined) break;
     var r = await fetch(token);
+    // Batch 188: a flaky page must not poison the chain.
+    // A null or empty MID-CHAIN page used to be cached
+    // like a normal one, and its missing `next` then
+    // terminated the chain for good: every later page
+    // returned null, which the host maps to an empty
+    // list, which the UI latches as "no more content"
+    // until a restart. Refuse to cache it and throw
+    // instead — the call lands on the retry path and
+    // the chain stays usable. A genuine last page
+    // carries comics, a page with a next token is kept
+    // as-is, and page 1 is exempt (an empty first page
+    // is how a source says "no results").
+    var comics = (r && Array.isArray(r.comics)) ? r.comics
+        : (Array.isArray(r) ? r : null);
+    var hasNext = !!(r && typeof r === 'object' &&
+        'next' in r && r.next !== undefined && r.next !== null);
+    if (idx > 1 &&
+        (r === null || r === undefined ||
+            ((comics === null || comics.length === 0) && !hasNext))) {
+      throw new Error('paged load returned an empty page mid-chain');
+    }
     c.pages[idx] = r;
-    c.tokens[idx] = (r && typeof r === 'object' && 'next' in r)
-        ? r.next : undefined;
+    c.tokens[idx] = hasNext ? r.next : undefined;
     if (c.tokens[idx] === undefined && idx < page) break;
   }
   return (page in c.pages) ? c.pages[page] : null;
@@ -1524,7 +1744,19 @@ globalThis.__anikumoRegisterInstance = function (sourceKey, instance) {
       }
     });
   } catch (e) {}
+  // Batch 154: record the init OUTCOME per source. Until
+  // this batch a failed init existed only as a warning
+  // here while registration reported success — and since
+  // nothing ever re-ran init in-process, a source whose
+  // init does essential setup (jm fetches its API domain
+  // list there) stayed broken until the app was
+  // force-quit whenever init hit one network hiccup. The
+  // host can now read the outcome (__anikumoInitState)
+  // and force a clean re-registration to heal it.
+  globalThis.__anikumoInitState =
+      globalThis.__anikumoInitState || {};
   if (instance && typeof instance.init === 'function') {
+    globalThis.__anikumoInitState[sourceKey] = 'pending';
     try {
       var p = instance.init();
       if (p && typeof p.catch === 'function') {
@@ -1535,22 +1767,30 @@ globalThis.__anikumoRegisterInstance = function (sourceKey, instance) {
         globalThis.__anikumoInitPromises =
             globalThis.__anikumoInitPromises || {};
         globalThis.__anikumoInitPromises[sourceKey] =
-            Promise.resolve(p).catch(function (e) {
+            Promise.resolve(p).then(function () {
+              globalThis.__anikumoInitState[sourceKey] = 'ok';
+            }, function (e) {
+              globalThis.__anikumoInitState[sourceKey] = 'failed';
               globalThis.__anikumoInitWarnings =
                   globalThis.__anikumoInitWarnings || {};
               globalThis.__anikumoInitWarnings[sourceKey] =
                   String(e && e.stack || e);
             });
+      } else {
+        globalThis.__anikumoInitState[sourceKey] = 'ok';
       }
     } catch (e) {
       // init() is best-effort in Venera too: a source whose
       // init probe fails (e.g. its first mirror domain 403s
       // from this network) can still serve every load call.
+      globalThis.__anikumoInitState[sourceKey] = 'failed';
       globalThis.__anikumoInitWarnings =
           globalThis.__anikumoInitWarnings || {};
       globalThis.__anikumoInitWarnings[sourceKey] =
           String(e && e.stack || e);
     }
+  } else {
+    globalThis.__anikumoInitState[sourceKey] = 'ok';
   }
 };
 // Batch 102: onResponse byte transforms. A config whose
@@ -1649,6 +1889,37 @@ globalThis.__anikumoCall = async function (sourceKey, kind, args) {
     r = await src.categoryComics.load(
         args.category, args.param || '',
         __anikumoDefaultOptions(src.categoryComics), args.page);
+  } else if (kind === 'settingsSchema') {
+    // Batch 191: expose the source's declared settings
+    // schema so the app can render editors in its own
+    // settings UI. Functions cannot cross the bridge —
+    // a callback setting is reported as a flag and run
+    // through 'settingCallback' instead.
+    var schema191 = src.settings || src.setting || {};
+    var out191 = {};
+    Object.keys(schema191).forEach(function (k) {
+      var def = schema191[k] || {};
+      out191[k] = {
+        title: def.title || k,
+        type: def.type || 'input',
+        options: Array.isArray(def.options) ? def.options : null,
+        defaultValue: def.default === undefined ? null : def.default,
+        validator: def.validator || null,
+        buttonText: def.buttonText || null,
+        hasCallback: typeof def.callback === 'function',
+      };
+    });
+    r = out191;
+  } else if (kind === 'settingCallback') {
+    // Batch 191: run a settings callback (e.g. "clear
+    // device info") inside the runtime, where the
+    // source's own helpers and state live.
+    var schema191b = src.settings || src.setting || {};
+    var def191 = schema191b[args.settingKey];
+    if (def191 && typeof def191.callback === 'function') {
+      await def191.callback();
+    }
+    r = true;
   } else if (kind === 'loadInfo') {
     r = await src.comic.loadInfo(args.id);
   } else if (kind === 'loadEp') {

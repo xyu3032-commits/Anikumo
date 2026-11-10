@@ -4,6 +4,7 @@ import 'package:anikumo/bean/settings/settings_detail_scaffold.dart';
 import 'package:anikumo/bean/widget/content_section.dart';
 import 'package:anikumo/pages/about/about_widgets.dart';
 import 'package:anikumo/request/config/api_endpoints.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class AboutPage extends StatelessWidget {
   const AboutPage({super.key, required this.onCheckUpdate});
@@ -30,24 +31,24 @@ class AboutPage extends StatelessWidget {
               title: '开源',
               children: [
                 AboutLinkTile(
-                  icon: Icons.language_rounded,
+                  icon: AnikumoIcons.language_rounded,
                   title: '官方网站',
                   subtitle: 'anikumo-brown.vercel.app',
                   url: 'https://anikumo-brown.vercel.app/',
                 ),
                 AboutLinkTile(
-                  icon: Icons.code_rounded,
+                  icon: AnikumoIcons.code_rounded,
                   title: '开源仓库',
                   subtitle: 'GitHub · GPL-3.0',
                   url: 'https://github.com/xyu3032-commits/Anikumo',
                 ),
                 AboutLinkTile.route(
-                  icon: Icons.favorite_outline_rounded,
+                  icon: AnikumoIcons.favorite_outline_rounded,
                   title: '致谢',
                   route: '/settings/about/credits',
                 ),
                 AboutLinkTile.route(
-                  icon: Icons.description_outlined,
+                  icon: AnikumoIcons.description_outlined,
                   title: '第三方许可证',
                   route: '/settings/about/license',
                 ),

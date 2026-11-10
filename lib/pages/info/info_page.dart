@@ -19,11 +19,14 @@ import 'package:anikumo/pages/info/info_controller.dart';
 import 'package:anikumo/pages/info/info_tabview.dart';
 import 'package:anikumo/pages/info/rating_review_dialog.dart';
 import 'package:anikumo/pages/info/source_sheet.dart';
+import 'package:anikumo/pages/video/video_playback_args.dart';
 import 'package:anikumo/plugins/plugins_controller.dart';
 import 'package:anikumo/services/logging/logger.dart';
+import 'package:anikumo/services/player/mini_player_session.dart';
 import 'package:anikumo/services/platform/desktop_window_config.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/utils/device.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class InfoPage extends StatefulWidget {
   const InfoPage({
@@ -45,11 +48,18 @@ class _InfoPageState extends State<InfoPage>
     with SingleTickerProviderStateMixin {
   static const List<String> _infoTabs = <String>[
     '概览',
+    // Batch 128: 选集 sits beside 概览 (the user's placement).
+    // Batch 149: it is a real content tab now (the embedded
+    // episode picker), no longer an action in disguise.
+    '选集',
     '吐槽',
     '角色',
     '关联',
     '制作人员',
   ];
+
+  /// The 选集 tab's index in [_infoTabs].
+  static const int _episodeTabIndex = 1;
   // Batch 51: was 600ms — with the API TTL cache most
   // entries resolve faster than that, and the floor itself
   // became the perceived entry delay. 250ms still prevents
@@ -305,23 +315,37 @@ class _InfoPageState extends State<InfoPage>
   }
 
   void _startWatching() {
-    if (widget.pluginsController.pluginList.isEmpty) {
-      AnikumoDialog.showToast(
-        message: '还没有规则，无法开始观看',
-        showActionButton: true,
-        actionLabel: '添加规则',
-        onActionPressed: () {
-          if (mounted) context.pushNamed('/settings/plugin/');
-        },
-        duration: const Duration(seconds: 4),
-      );
+    // Batch 116: the mini player is already playing THIS anime —
+    // go straight back into it. No source picking, no line
+    // picking: the session's live pair is the choice.
+    final session = MiniPlayerSession.instance;
+    final sessionArgs = session.args;
+    if (session.hasSession &&
+        sessionArgs is OnlineVideoPlaybackArgs &&
+        sessionArgs.bangumiItem.id == infoController.bangumiItem.id) {
+      context.pushNamed('/video/', arguments: sessionArgs);
       return;
     }
+    if (!_ensurePlugins()) return;
     showAdaptiveBottomSheet<void>(
       context: context,
       maxHeightFactor: 0.88,
       builder: (_) => SourceSheet(infoController: infoController),
     );
+  }
+
+  bool _ensurePlugins() {
+    if (widget.pluginsController.pluginList.isNotEmpty) return true;
+    AnikumoDialog.showToast(
+      message: '还没有规则，无法开始观看',
+      showActionButton: true,
+      actionLabel: '添加规则',
+      onActionPressed: () {
+        if (mounted) context.pushNamed('/settings/plugin/');
+      },
+      duration: const Duration(seconds: 4),
+    );
+    return false;
   }
 
   Future<void> _waitForMinimumBangumiInfoLoadingDuration(
@@ -364,7 +388,7 @@ class _InfoPageState extends State<InfoPage>
                     onPressed: () {
                       context.maybePop();
                     },
-                    icon: Icon(Icons.arrow_back),
+                    icon: Icon(AnikumoIcons.arrow_back),
                   ),
                 ),
                 actions: [
@@ -439,6 +463,10 @@ class _InfoPageState extends State<InfoPage>
                   tabAlignment: TabAlignment.center,
                   dividerHeight: 0,
                   tabs: _infoTabs.map((name) => Tab(text: name)).toList(),
+                  // Batch 149: no onTap interception anymore —
+                  // 选集 is a real tab whose content (the
+                  // embedded episode picker) switches in place
+                  // below, like every other tab.
                 ),
               ),
             ),
@@ -461,6 +489,9 @@ class _InfoPageState extends State<InfoPage>
             commentsList: infoController.commentsList.toList(growable: false),
             commentsIsLoading: commentsIsLoading,
             onWriteReview: _openReviewEditor,
+            infoController: infoController,
+            episodeTabIndex: _episodeTabIndex,
+            hasPlugins: widget.pluginsController.pluginList.isNotEmpty,
             characterList: infoController.characterList,
             staffList: infoController.staffList,
             relationList: infoController.relationList,
@@ -472,11 +503,13 @@ class _InfoPageState extends State<InfoPage>
           );
         }),
       ),
+      // Batch 128: 选集 moved beside 概览 in the tab strip —
+      // the floating button is back to just 开始观看.
       floatingActionButton: FloatingActionButton.extended(
         tooltip: '开始观看',
         onPressed: _startWatching,
         label: const Text('开始观看'),
-        icon: const Icon(Icons.play_arrow_rounded),
+        icon: const Icon(AnikumoIcons.play_arrow_rounded),
       ),
     );
   }

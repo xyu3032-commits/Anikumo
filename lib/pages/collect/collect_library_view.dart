@@ -9,6 +9,7 @@ import 'package:anikumo/modules/collect/collect_layout.dart';
 import 'package:anikumo/modules/collect/collect_module.dart';
 import 'package:anikumo/modules/collect/collect_type.dart';
 import 'package:anikumo/pages/collect/collect_library_query.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 part 'collect_library_card.dart';
 part 'collect_library_controls.dart';
@@ -278,8 +279,8 @@ class _CollectLibraryViewState extends State<CollectLibraryView>
               IconButton(
                 tooltip: _searchExpanded ? '收起搜索' : '搜索收藏',
                 isSelected: _searchExpanded,
-                selectedIcon: const Icon(Icons.search_off_rounded),
-                icon: const Icon(Icons.search_rounded),
+                selectedIcon: const Icon(AnikumoIcons.search_off_rounded),
+                icon: const Icon(AnikumoIcons.search_rounded),
                 onPressed: _searchExpanded ? _closeSearch : _focusSearch,
               ),
             const SizedBox(width: 8),
@@ -315,7 +316,7 @@ class _CollectLibraryViewState extends State<CollectLibraryView>
     child: SearchBar(
       controller: _searchController,
       focusNode: _searchFocus,
-      leading: const Icon(Icons.search_rounded, size: 22),
+      leading: const Icon(AnikumoIcons.search_rounded, size: 22),
       trailing: [
         if (_query.isNotEmpty)
           IconButton(
@@ -324,7 +325,7 @@ class _CollectLibraryViewState extends State<CollectLibraryView>
               _searchController.clear();
               _search('');
             },
-            icon: const Icon(Icons.close_rounded),
+            icon: const Icon(AnikumoIcons.close_rounded),
           ),
       ],
       elevation: const WidgetStatePropertyAll(0),
@@ -583,7 +584,7 @@ class _CollectLibraryViewState extends State<CollectLibraryView>
       };
     }
     return GeneralEmptyState(
-      icon: searching ? Icons.search_off_rounded : Icons.video_library_outlined,
+      icon: searching ? AnikumoIcons.search_off_rounded : AnikumoIcons.video_library_outlined,
       title: title,
     );
   }

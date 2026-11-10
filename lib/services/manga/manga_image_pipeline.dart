@@ -55,15 +55,70 @@ class MangaImageGate {
 /// sockets at once (the batch-100 lesson, applied to images).
 final MangaImageGate mangaImageGate = MangaImageGate();
 
-class _GatedHttpFileService extends FileService {
+class _BufferedImageResponse implements FileServiceResponse {
+  _BufferedImageResponse(this._inner, this._bytes);
+
+  final FileServiceResponse _inner;
+  final List<int> _bytes;
+
+  @override
+  Stream<List<int>> get content => Stream<List<int>>.value(_bytes);
+
+  @override
+  int? get contentLength => _bytes.length;
+
+  @override
+  int get statusCode => _inner.statusCode;
+
+  @override
+  DateTime get validTill => _inner.validTill;
+
+  @override
+  String? get eTag => _inner.eTag;
+
+  @override
+  String get fileExtension => _inner.fileExtension;
+}
+
+/// Batch 185: the cache stores' file service. Downloads
+/// are checked against the image magic bytes BEFORE the
+/// cache manager may persist them: a CDN/WAF answering an
+/// image URL with a 200 HTML challenge or error page used
+/// to be cached as an "image" for the store's whole stale
+/// period (10 days), and every later view re-served the
+/// same garbage. Non-image bytes now fail the fetch, so
+/// nothing is stored and a retry really refetches. HTTP
+/// error statuses pass through untouched (the cache
+/// manager raises for those itself). [gated] keeps the
+/// cover store's existing concurrency gate.
+class MangaImageFileService extends FileService {
+  MangaImageFileService({this.gated = false});
+
+  final bool gated;
   final FileService _inner = HttpFileService();
 
   @override
   Future<FileServiceResponse> get(
     String url, {
     Map<String, String>? headers,
-  }) {
-    return mangaImageGate.run(() => _inner.get(url, headers: headers));
+  }) async {
+    final response = gated
+        ? await mangaImageGate.run(() => _inner.get(url, headers: headers))
+        : await _inner.get(url, headers: headers);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      return response;
+    }
+    final bytes = <int>[];
+    await for (final chunk in response.content) {
+      bytes.addAll(chunk);
+    }
+    if (!looksLikeImageBytes(bytes)) {
+      throw HttpExceptionWithStatus(
+        response.statusCode,
+        'image response was not image data',
+      );
+    }
+    return _BufferedImageResponse(response, bytes);
   }
 }
 
@@ -79,7 +134,7 @@ final CacheManager mangaCoverCacheManager = CacheManager(
     'anikumoMangaCovers',
     stalePeriod: const Duration(days: 10),
     maxNrOfCacheObjects: 600,
-    fileService: _GatedHttpFileService(),
+    fileService: MangaImageFileService(gated: true),
   ),
 );
 
@@ -88,7 +143,39 @@ final CacheManager mangaCoverCacheManager = CacheManager(
 /// applied (callers then use the raw bytes).
 typedef MangaByteTransform = Future<List<int>?> Function(List<int> raw);
 
-final Dio _imageDio = Dio();
+/// Batch 185: the image fetcher gets a browser baseline:
+/// a desktop User-Agent and real timeouts. It used to be
+/// a bare Dio() — no UA (anti-leech CDNs 403 the default
+/// or empty UA) and no timeouts at all (a wedged
+/// connection could hang a prefetch indefinitely).
+final Dio _imageDio = Dio(
+  BaseOptions(
+    connectTimeout: const Duration(seconds: 15),
+    receiveTimeout: const Duration(seconds: 30),
+    headers: const {
+      'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+              '(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+    },
+  ),
+);
+
+/// Batch 185: headers for one spec fetch — the spec's own
+/// headers win; a missing Referer defaults to the image
+/// host's root, which is what same-host anti-leech checks
+/// ask for (sources that need the chapter page itself as
+/// Referer set it in their image headers, as before).
+Map<String, String> _specHeaders(MangaImageLoadSpec spec) {
+  final hasReferer =
+      spec.headers.keys.any((k) => k.toLowerCase() == 'referer');
+  if (hasReferer) return spec.headers;
+  final uri = Uri.tryParse(spec.url);
+  if (uri == null || uri.host.isEmpty) return spec.headers;
+  return {
+    'Referer': '${uri.scheme}://${uri.host}/',
+    ...spec.headers,
+  };
+}
 
 String _extensionOf(String url) {
   final path = Uri.tryParse(url)?.path ?? '';
@@ -115,12 +202,23 @@ class MangaImageLoadSpec {
     this.headers = const {},
     this.process,
     this.fallback,
+    this.cacheKeySuffix,
   });
 
   final String url;
   final Map<String, String> headers;
   final MangaByteTransform? process;
   final Future<MangaImageLoadSpec?> Function()? fallback;
+
+  /// Batch 185: distinguishes processed variants of the
+  /// same URL in the page cache. Processed bytes used to
+  /// be stored under the bare URL, so a source update that
+  /// changed its transform kept serving the old processing
+  /// until the entry expired.
+  final String? cacheKeySuffix;
+
+  String get cacheKey =>
+      cacheKeySuffix == null ? url : '$url#$cacheKeySuffix';
 }
 
 /// Batch 112: whether [bytes] carry a real image format's
@@ -178,7 +276,7 @@ Future<Uint8List> loadProcessedImageBytes({
   final store = cacheManager;
   try {
     if (store != null) {
-      final cached = await store.getFileFromCache(spec.url);
+      final cached = await store.getFileFromCache(spec.cacheKey);
       if (cached != null) {
         final cachedBytes = await cached.file.readAsBytes();
         if (looksLikeImageBytes(cachedBytes)) {
@@ -188,14 +286,14 @@ Future<Uint8List> loadProcessedImageBytes({
         // cached by an earlier version or a bad fetch) —
         // evict it and fall through to a real download
         // instead of serving the same broken page forever.
-        await store.removeFile(spec.url);
+        await store.removeFile(spec.cacheKey);
       }
     }
     final raw = await mangaImageGate.run(() async {
       final response = await _imageDio.get<List<int>>(
         spec.url,
         options: Options(
-          headers: spec.headers,
+          headers: _specHeaders(spec),
           responseType: ResponseType.bytes,
           validateStatus: (status) =>
               status != null && status >= 200 && status < 300,
@@ -219,7 +317,7 @@ Future<Uint8List> loadProcessedImageBytes({
       }
       if (store != null) {
         await store.putFile(
-          spec.url,
+          spec.cacheKey,
           bytes,
           fileExtension: _extensionOf(spec.url),
         );
@@ -228,7 +326,18 @@ Future<Uint8List> loadProcessedImageBytes({
     }
     final processed = await process(raw);
     if (processed == null) {
-      return Uint8List.fromList(raw);
+      // Batch 185: "no transform applied" still has to
+      // prove the raw bytes are an image — this branch
+      // used to return them unchecked, bypassing the
+      // batch-112 validation every other path enforces.
+      // (Still uncached, per the batch-103 contract: a
+      // declined transform is retried next view, never
+      // pinned.)
+      final rawBytes = Uint8List.fromList(raw);
+      if (!looksLikeImageBytes(rawBytes) && spec.fallback != null) {
+        throw const FormatException('image bytes invalid');
+      }
+      return rawBytes;
     }
     final bytes = Uint8List.fromList(processed);
     // Batch 112: a transform that yields non-image bytes
@@ -240,7 +349,7 @@ Future<Uint8List> loadProcessedImageBytes({
     }
     if (store != null) {
       await store.putFile(
-        spec.url,
+        spec.cacheKey,
         bytes,
         fileExtension: _extensionOf(spec.url),
       );
@@ -273,7 +382,12 @@ Future<Uint8List> loadTransformedImageBytes({
 }) {
   return loadProcessedImageBytes(
     cacheManager: cacheManager,
-    spec: MangaImageLoadSpec(url: url, headers: headers, process: transform),
+    spec: MangaImageLoadSpec(
+      url: url,
+      headers: headers,
+      process: transform,
+      cacheKeySuffix: 'cover',
+    ),
   );
 }
 
@@ -355,6 +469,9 @@ MangaImageLoadSpec? mangaPageLoadSpec({
     url: page.url,
     headers: page.headers,
     process: process,
+    cacheKeySuffix: (page.transformOf == null && page.modifyCode == null)
+        ? null
+        : 'p${Object.hash(page.transformOf, page.modifyCode)}',
     fallback: fallbackOf == null
         ? null
         : () async {

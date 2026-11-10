@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:anikumo/bean/dialog/dialog_helper.dart';
 import 'package:anikumo/bean/widget/split_list_row.dart';
 import 'package:anikumo/bean/widget/state_presentation.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 void _showMessage(BuildContext context, String message) {
   AnikumoDialog.showToast(context: context, message: message);
@@ -110,8 +111,8 @@ class AboutLinkTile extends StatelessWidget {
               const SizedBox(width: 12),
               Icon(
                 _url == null
-                    ? Icons.chevron_right_rounded
-                    : Icons.open_in_new_rounded,
+                    ? AnikumoIcons.chevron_right_rounded
+                    : AnikumoIcons.open_in_new_rounded,
                 size: 20,
                 color: colors.onSurfaceVariant,
               ),
@@ -152,6 +153,6 @@ class _CheckUpdateButtonState extends State<CheckUpdateButton> {
         onPressed: _checking ? null : _check,
         text: _checking ? '正在检查…' : '检查更新',
         reserveText: '正在检查…',
-        icon: Icons.update_rounded,
+        icon: AnikumoIcons.update_rounded,
       );
 }

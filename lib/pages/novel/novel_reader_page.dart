@@ -8,11 +8,14 @@ import '../../bean/dialog/dialog.dart';
 import '../../models/novel_item.dart';
 import '../../services/novel/legado_parse.dart';
 import '../../services/novel/novel_api.dart';
+import '../../services/novel/novel_features.dart';
+import '../../services/novel/tts_service.dart';
 import '../../services/novel/novel_sources.dart';
 import '../../services/novel/novel_downloads.dart';
 import '../../services/novel/novel_library.dart';
 import '../../services/storage/storage.dart';
 import 'novel_widgets.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Args for the /novel/reader route.
 typedef NovelReaderArgs = ({
@@ -20,6 +23,27 @@ typedef NovelReaderArgs = ({
   List<NovelChapter> chapters,
   int chapterIndex,
 });
+
+/// Batch 184: what the chapter list's tail shows. The
+/// chapter-end marker is a READER state, not a claim
+/// about the source: [complete] means this chapter's
+/// content loaded and nothing known is missing;
+/// [truncated] means the engine stopped following the
+/// chapter's pagination early, so the text may continue
+/// beyond what is shown; [none] (no readable content)
+/// renders no tail at all — the page shows its empty
+/// state instead of crowning a blank chapter as finished.
+enum NovelChapterTail { none, complete, truncated }
+
+NovelChapterTail novelChapterTail({
+  required bool hasContent,
+  required bool possiblyTruncated,
+}) =>
+    !hasContent
+        ? NovelChapterTail.none
+        : possiblyTruncated
+            ? NovelChapterTail.truncated
+            : NovelChapterTail.complete;
 
 /// The novel reader: a scrolling page of text paragraphs
 /// and inline images, chapter by chapter.
@@ -38,12 +62,23 @@ class _NovelReaderPageState extends State<NovelReaderPage> {
   // Batch 46: the reader holds its own copies so a failed
   // chapter can switch the whole book to another source
   // in place （换源阅读） without leaving the reader.
-  late NovelItem _item = _item;
+  // Batch 186: this field self-initialized (`= _item`)
+  // since batch 46 — a late field whose initializer reads
+  // itself throws StackOverflowError on first access, so
+  // every chapter load died before it could render (the
+  // error state's own message reads the field too, which
+  // is why the page showed nothing at all). It must seed
+  // from the route arguments; _switchSource reassigns it.
+  late NovelItem _item = widget.args.item;
   late List<NovelChapter> _chapters = widget.args.chapters;
   bool _switchingSource = false;
   List<NovelBlock> _blocks = const [];
   bool _loading = true;
   String? _errorText;
+  // Batch 184: the current chapter may be truncated (the
+  // engine's page cap stopped its pagination) — the tail
+  // marker then warns instead of declaring completion.
+  bool _possiblyTruncated = false;
   // Batch 30: chapter changes reset the scroll position, and
   // a load ticket keeps a slow earlier chapter from winning
   // the race against a newer one.
@@ -62,11 +97,54 @@ class _NovelReaderPageState extends State<NovelReaderPage> {
   PlatformInAppWebViewWidget? _webView;
   PlatformInAppWebViewController? _webController;
 
+  // Batch 158: read-aloud (feature repository's 语音朗读，
+  // present only while that feature is installed). The
+  // player is a shared singleton; this page feeds it the
+  // current chapter's paragraphs and, when a chapter's
+  // queue runs out, advances and feeds the next one.
+  final _tts = TtsPlayer.instance;
+  bool _ttsContinue = false;
+
   @override
   void dispose() {
+    _tts.removeListener(_onTtsChanged);
+    if (_tts.onQueueFinished == _onTtsQueueFinished) {
+      _tts.onQueueFinished = null;
+    }
+    _tts.stop();
     _scrollController.dispose();
     _webView?.dispose();
     super.dispose();
+  }
+
+  void _onTtsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _onTtsQueueFinished() {
+    if (!mounted) return;
+    if (_index < _chapters.length - 1) {
+      _ttsContinue = true;
+      setState(() => _index++);
+      _load();
+    }
+  }
+
+  void _speakChapter() {
+    final paragraphs = [
+      for (final block in _blocks)
+        if (block is NovelTextBlock) block.text,
+    ];
+    if (paragraphs.isEmpty) {
+      AnikumoDialog.showToast(message: '这一章没有可朗读的文字');
+      return;
+    }
+    _tts.speakParagraphs(paragraphs);
+  }
+
+  void _stopTts() {
+    _ttsContinue = false;
+    _tts.stop();
   }
 
   String get _cleanChapterUrl =>
@@ -138,6 +216,8 @@ class _NovelReaderPageState extends State<NovelReaderPage> {
   @override
   void initState() {
     super.initState();
+    _tts.addListener(_onTtsChanged);
+    _tts.onQueueFinished = _onTtsQueueFinished;
     _load();
   }
 
@@ -151,13 +231,18 @@ class _NovelReaderPageState extends State<NovelReaderPage> {
       _webViewMode = false;
       _loading = true;
       _errorText = null;
+      _possiblyTruncated = false;
     });
     try {
       // Batch 31: downloaded chapters read from disk first
       // (offline parity with the manga reader).
       final local =
           await NovelDownloadStore.loadLocal(_item, _chapter);
-      if (local != null && local.isNotEmpty) {
+      // Batch 184: a cached chapter only counts when it
+      // carries readable content — a blank or corrupt
+      // cache falls through to the network instead of
+      // rendering as a finished, empty chapter.
+      if (local != null && novelBlocksHaveContent(local)) {
         if (!mounted || ticket != _loadTicket) return;
         if (_scrollController.hasClients) {
           _scrollController.jumpTo(0);
@@ -174,9 +259,14 @@ class _NovelReaderPageState extends State<NovelReaderPage> {
             updatedAt: DateTime.now().millisecondsSinceEpoch,
           ),
         );
+        if (_ttsContinue) {
+          _ttsContinue = false;
+          if (local.isNotEmpty) _speakChapter();
+        }
         return;
       }
-      final blocks = await NovelApi.content(_item, _chapter);
+      final result = await NovelApi.contentDetailed(_item, _chapter);
+      final blocks = result.blocks;
       if (!mounted || ticket != _loadTicket) return;
       if (_scrollController.hasClients) {
         _scrollController.jumpTo(0);
@@ -184,7 +274,13 @@ class _NovelReaderPageState extends State<NovelReaderPage> {
       setState(() {
         _blocks = blocks;
         _loading = false;
-        if (blocks.isEmpty) _errorText = '这一章没有取到内容（源站可能需要网页渲染或暂时不可用）';
+        _possiblyTruncated = result.possiblyTruncated;
+        // Batch 184: success means readable content, not
+        // merely a non-empty list — whitespace-only blocks
+        // land in the same empty state as no blocks.
+        if (!novelBlocksHaveContent(blocks)) {
+          _errorText = '这一章没有取到内容（源站可能需要网页渲染或暂时不可用）';
+        }
       });
       await NovelLibraryStore.recordProgress(
         NovelProgress(
@@ -194,6 +290,16 @@ class _NovelReaderPageState extends State<NovelReaderPage> {
           updatedAt: DateTime.now().millisecondsSinceEpoch,
         ),
       );
+      if (_ttsContinue) {
+        _ttsContinue = false;
+        if (novelBlocksHaveContent(blocks)) _speakChapter();
+      }
+      // Batch 192: warm the next chapter in the
+      // background so flipping to it doesn't pay the
+      // full engine + network path again.
+      if (_index + 1 < _chapters.length) {
+        NovelApi.prefetchContent(_item, _chapters[_index + 1]);
+      }
     } catch (e) {
       if (!mounted || ticket != _loadTicket) return;
       // Batch 46: a chapter that dies hard marks its source.
@@ -202,7 +308,9 @@ class _NovelReaderPageState extends State<NovelReaderPage> {
       }
       setState(() {
         _loading = false;
-        _errorText = e.toString();
+        _errorText = e is StackOverflowError
+            ? 'Stack Overflow（Dart 阅读器层）— 源：${_item.sourceName}，章节：${_chapter.title}'
+            : e.toString();
       });
     }
   }
@@ -213,6 +321,7 @@ class _NovelReaderPageState extends State<NovelReaderPage> {
   /// title matches, else by index, and reload in place.
   Future<void> _switchSource() async {
     if (_switchingSource) return;
+    _stopTts();
     setState(() => _switchingSource = true);
     try {
       final found = await NovelApi.findReadableEdition(_item);
@@ -255,6 +364,7 @@ class _NovelReaderPageState extends State<NovelReaderPage> {
   void _go(int delta) {
     final next = _index + delta;
     if (next < 0 || next >= _chapters.length) return;
+    _stopTts();
     setState(() => _index = next);
     _load();
   }
@@ -274,6 +384,7 @@ class _NovelReaderPageState extends State<NovelReaderPage> {
           onTap: () {
             Navigator.pop(context);
             if (index != _index) {
+              _stopTts();
               setState(() => _index = index);
               _load();
             }
@@ -294,6 +405,20 @@ class _NovelReaderPageState extends State<NovelReaderPage> {
           overflow: TextOverflow.ellipsis,
           style: theme.textTheme.titleMedium,
         ),
+        actions: [
+          if (NovelFeatures.isInstalled(NovelFeatures.ttsId))
+            IconButton(
+              icon: Icon(
+                _tts.speaking
+                    ? AnikumoIcons.stop_rounded
+                    : AnikumoIcons.volume_up_rounded,
+              ),
+              tooltip: _tts.speaking ? '停止朗读' : '朗读本章',
+              onPressed: _loading
+                  ? null
+                  : () => _tts.speaking ? _stopTts() : _speakChapter(),
+            ),
+        ],
       ),
       body: _webViewMode && _webView != null
           ? _webView!.build(context)
@@ -310,12 +435,12 @@ class _NovelReaderPageState extends State<NovelReaderPage> {
                             _forcedWebViewIndex = _index;
                             _load();
                           },
-                          icon: const Icon(Icons.public, size: 18),
+                          icon: const Icon(AnikumoIcons.public, size: 18),
                           label: const Text('用网页模式打开本章（图片章常用）'),
                         ),
                         TextButton.icon(
                           onPressed: _switchingSource ? null : _switchSource,
-                          icon: const Icon(Icons.swap_horiz, size: 18),
+                          icon: const Icon(AnikumoIcons.swap_horiz, size: 18),
                           label: Text(_switchingSource ? '正在换源…' : '换个书源继续读'),
                         ),
                       ],
@@ -334,16 +459,36 @@ class _NovelReaderPageState extends State<NovelReaderPage> {
                   key: ValueKey(_index),
                   controller: _scrollController,
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
-                  itemCount: _blocks.length + 1,
+                  // Batch 184: the tail exists only when the
+                  // chapter-end state says so (see
+                  // novelChapterTail) — never as an
+                  // unconditional +1.
+                  itemCount: _blocks.length +
+                      (novelChapterTail(
+                                hasContent:
+                                    novelBlocksHaveContent(_blocks),
+                                possiblyTruncated: _possiblyTruncated,
+                              ) ==
+                              NovelChapterTail.none
+                          ? 0
+                          : 1),
                   itemBuilder: (context, index) {
                     if (index == _blocks.length) {
+                      final truncated = novelChapterTail(
+                        hasContent: novelBlocksHaveContent(_blocks),
+                        possiblyTruncated: _possiblyTruncated,
+                      ) == NovelChapterTail.truncated;
                       return Padding(
                         padding: const EdgeInsets.only(top: 24),
                         child: Center(
                           child: Text(
-                            '— 本章完 —',
+                            truncated
+                                ? '— 内容可能不完整 · 源站分页未取完 —'
+                                : '— 本章完 —',
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.outline,
+                              color: truncated
+                                  ? theme.colorScheme.error
+                                  : theme.colorScheme.outline,
                             ),
                           ),
                         ),
@@ -379,7 +524,7 @@ class _NovelReaderPageState extends State<NovelReaderPage> {
                                     height: 120,
                                     child: Center(
                                       child:
-                                          Icon(Icons.broken_image_outlined),
+                                          Icon(AnikumoIcons.broken_image_outlined),
                                     ),
                                   ),
                                 )
@@ -396,7 +541,7 @@ class _NovelReaderPageState extends State<NovelReaderPage> {
                               height: 120,
                               color:
                                   theme.colorScheme.surfaceContainerHighest,
-                              child: const Icon(Icons.broken_image_outlined),
+                              child: const Icon(AnikumoIcons.broken_image_outlined),
                             ),
                                 ),
                         ),
@@ -405,7 +550,11 @@ class _NovelReaderPageState extends State<NovelReaderPage> {
                     ),
                   ),
                 ),
-      bottomNavigationBar: SafeArea(
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_tts.speaking) _buildTtsStrip(theme),
+          SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: Row(
@@ -413,23 +562,70 @@ class _NovelReaderPageState extends State<NovelReaderPage> {
             children: [
               TextButton.icon(
                 onPressed: _index > 0 ? () => _go(-1) : null,
-                icon: const Icon(Icons.arrow_back_ios, size: 16),
+                icon: const Icon(AnikumoIcons.arrow_back_ios, size: 16),
                 label: const Text('上一章'),
               ),
               TextButton.icon(
                 onPressed: _showChapterList,
-                icon: const Icon(Icons.list, size: 18),
+                icon: const Icon(AnikumoIcons.list, size: 18),
                 label: Text('${_index + 1}/${_chapters.length}'),
               ),
               TextButton.icon(
                 onPressed: _index < _chapters.length - 1
                     ? () => _go(1)
                     : null,
-                icon: const Icon(Icons.arrow_forward_ios, size: 16),
+                icon: const Icon(AnikumoIcons.arrow_forward_ios, size: 16),
                 label: const Text('下一章'),
               ),
             ],
           ),
+        ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Batch 158: the read-aloud control strip, shown above
+  /// the chapter bar while speech is active.
+  Widget _buildTtsStrip(ThemeData theme) {
+    const rates = [0.75, 1.0, 1.25, 1.5];
+    final at = rates.indexWhere((r) => (r - _tts.rate).abs() < 0.01);
+    final nextRate = rates[(at + 1) % rates.length];
+    return Material(
+      color: theme.colorScheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          children: [
+            IconButton(
+              icon: Icon(
+                _tts.paused
+                    ? AnikumoIcons.play_arrow_rounded
+                    : AnikumoIcons.pause_rounded,
+              ),
+              tooltip: _tts.paused ? '继续朗读' : '暂停朗读',
+              onPressed: () => _tts.paused ? _tts.resume() : _tts.pause(),
+            ),
+            IconButton(
+              icon: const Icon(AnikumoIcons.stop_rounded),
+              tooltip: '停止朗读',
+              onPressed: _stopTts,
+            ),
+            Expanded(
+              child: Text(
+                _tts.paused
+                    ? '朗读已暂停'
+                    : '朗读中 · 第 ${_tts.currentChunk + 1}/${_tts.totalChunks} 段',
+                style: theme.textTheme.bodySmall,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            TextButton(
+              onPressed: () => _tts.setRate(nextRate),
+              child: Text('语速 ${_tts.rate}x'),
+            ),
+          ],
         ),
       ),
     );

@@ -8,7 +8,7 @@ publish_to: "none"
 # legacy Kazumi-line numbers (last: 20405), so overwrite
 # installs keep working. patch must stay <= 9 in this
 # scheme; if it would reach 10, bump minor instead.
-version: 1.0.1+100106
+version: 1.0.2+100228
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
@@ -187,6 +187,9 @@ flutter:
     - assets/images/logo/logo_rounded.png
     - assets/images/logo/logo_lanczos.ico
     - assets/statements/
+    # Batch 174: the MoYuan novel engine bundle (single
+    # file, loaded into the QuickJS host at runtime).
+    - assets/moyuan/moyuan.js
     - assets/venera/
     - assets/legado/
     - licenses/ech_http/
@@ -194,3 +197,6 @@ flutter:
     - family: MI_Sans_Regular
       fonts:
         - asset: assets/fonts/MiSans-Regular.ttf
+    - family: AnikumoIcons
+      fonts:
+        - asset: assets/fonts/AnikumoIcons.ttf

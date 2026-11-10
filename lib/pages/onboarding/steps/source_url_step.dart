@@ -8,6 +8,7 @@ import 'package:anikumo/services/manga/manga_sources.dart';
 import 'package:anikumo/services/novel/novel_sources.dart';
 import 'package:anikumo/services/plugin/plugin_import_parser.dart';
 import 'package:anikumo/utils/github_links.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Batch 59: first-run source setup. The app ships with no
 /// built-in sources, so each zone gets one step: paste your
@@ -21,7 +22,7 @@ class AnimeSourceUrlStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _SourceUrlStep(
-        icon: Icons.live_tv_rounded,
+        icon: AnikumoIcons.live_tv_rounded,
         shape: OnboardingIconShape.sunny,
         title: '添加动漫来源',
         subtitle: '粘贴你自己的规则文件 URL，导入后即可搜索和播放番剧。',
@@ -50,7 +51,7 @@ class MangaSourceUrlStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _SourceUrlStep(
-        icon: Icons.menu_book_rounded,
+        icon: AnikumoIcons.menu_book_rounded,
         shape: OnboardingIconShape.cookie,
         title: '添加漫画来源',
         subtitle: '粘贴你自己的 JS 漫画源文件 URL。',
@@ -95,7 +96,7 @@ class NovelSourceUrlStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _SourceUrlStep(
-        icon: Icons.auto_stories_rounded,
+        icon: AnikumoIcons.auto_stories_rounded,
         shape: OnboardingIconShape.flower,
         title: '添加小说来源',
         subtitle: '粘贴你自己的书源 URL（JSON 或合集链接）。',
@@ -221,7 +222,7 @@ class _SourceUrlStepState extends State<_SourceUrlStep> {
                 _importing || _text.text.trim().isEmpty ? null : _import,
             icon: _importing
                 ? const LoadingIndicator(size: 18)
-                : const Icon(Icons.download_rounded, size: 18),
+                : const Icon(AnikumoIcons.download_rounded, size: 18),
             label: Text(_importing ? '导入中' : '导入'),
           ),
           if (_status != null) ...[

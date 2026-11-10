@@ -475,6 +475,17 @@ abstract class _VideoPageController with Store implements Disposable {
       _applyResolvedSelection(resolvedEpisode);
       _setOnlineHistoryIdentity(resolvedEpisode);
 
+      // Batch 143: mirror the offline path — when the caller
+      // passed no offset (history entries, episode picks, a
+      // plain re-entry), fall back to this episode's saved
+      // progress. Resume used to depend entirely on the page
+      // layer computing historyOffset up front; any path that
+      // arrived with 0 started from the beginning even though
+      // the progress was on record.
+      final effectiveOffset = offset > 0
+          ? offset
+          : getHistoryOffsetFor(_playbackHistoryIdentity!);
+
       AnikumoLogger().i(
           'VideoPageController: changed to ${resolvedEpisode.displayTitle}');
       final urlItem = normalizeEpisodeUrl(
@@ -484,7 +495,7 @@ abstract class _VideoPageController with Store implements Disposable {
 
       final result = await _resolveWithVideoSourceService(
         urlItem,
-        offset,
+        effectiveOffset,
         resolvedEpisode: resolvedEpisode,
         session: session,
         playerController: playerController,
@@ -596,6 +607,8 @@ abstract class _VideoPageController with Store implements Disposable {
         params.bangumiId,
         params.pluginName,
         params.danmakuEpisodeNumber,
+        animeTitle:
+            bangumiItem.nameCn.isNotEmpty ? bangumiItem.nameCn : bangumiItem.name,
       );
       if (session.isActive && danmakuSession.isActive) {
         if (result.hasDanmakus) {

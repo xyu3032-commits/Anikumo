@@ -7,6 +7,7 @@ import 'package:anikumo/modules/manga/manga_item.dart';
 import 'package:anikumo/pages/manga/manga_widgets.dart';
 import 'package:anikumo/services/manga/manga_library.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Full reading-history list — where the home tab's 历史 card
 /// leads. Most recently read first.
@@ -78,7 +79,7 @@ class _MangaHistoryPageState extends State<MangaHistoryPage> {
           if (progress.isNotEmpty)
             IconButton(
               tooltip: '清空全部',
-              icon: const Icon(Icons.delete_sweep_outlined),
+              icon: const Icon(AnikumoIcons.delete_sweep_outlined),
               onPressed: () => _clearAll(progress.length),
             ),
         ],
@@ -154,7 +155,7 @@ class _MangaHistoryPageState extends State<MangaHistoryPage> {
                         ),
                         IconButton(
                           tooltip: '删除记录',
-                          icon: const Icon(Icons.delete_outline_rounded),
+                          icon: const Icon(AnikumoIcons.delete_outline_rounded),
                           onPressed: () => _deleteOne(entry),
                         ),
                       ],

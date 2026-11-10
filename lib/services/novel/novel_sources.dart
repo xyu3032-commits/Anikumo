@@ -7,7 +7,10 @@ import '../../utils/github_links.dart';
 import 'legado_def.dart';
 import 'legado_http.dart';
 import 'legado_parse.dart';
+import 'local_books.dart';
+import 'novel_features.dart';
 import 'novel_source.dart';
+import 'rss_sources.dart';
 
 /// Batch 66: the outcome of probing an import payload.
 class ImportProbe {
@@ -15,6 +18,8 @@ class ImportProbe {
     required this.entries,
     required this.recognized,
     required this.encrypted,
+    this.rss = 0,
+    this.foreignPack = false,
   });
 
   /// Source-shaped entries found in the payload.
@@ -25,6 +30,14 @@ class ImportProbe {
 
   /// Entries carrying _H006_ encrypted rules.
   final int encrypted;
+
+  /// Batch 167: entries that are subscription (RSS-format)
+  /// sources rather than book sources.
+  final int rss;
+
+  /// Batch 167: the payload is a foreign app's obfuscated
+  /// rule pack (the .yds container), not a text format.
+  final bool foreignPack;
 }
 
 /// Registry of novel sources. Batch 59: the app ships
@@ -48,7 +61,17 @@ class NovelSources {
   /// JSON actually changes (import / remove invalidate).
   static List<LegadoNovelSource>? _importedCache;
 
-  static void _invalidateImported() => _importedCache = null;
+  /// Batch 167: the subscription-filtered view of
+  /// [_importedCache], memoized alongside it — callers
+  /// (MangaSources.all among them) key their own memos on
+  /// this list's identity, so it must stay identical while
+  /// the raw cache is unchanged.
+  static List<LegadoNovelSource>? _importedFilteredCache;
+
+  static void _invalidateImported() {
+    _importedCache = null;
+    _importedFilteredCache = null;
+  }
 
   /// Batch 83: backup restore writes the registry JSON
   /// directly through GStorage; drop the memoized parse and
@@ -60,11 +83,19 @@ class NovelSources {
   }
 
   static List<LegadoNovelSource> imported() {
-    final cached = _importedCache;
-    if (cached != null) return cached;
+    final filtered = _importedFilteredCache;
+    if (filtered != null) return filtered;
+    var cached = _importedCache;
+    if (cached != null) {
+      return _importedFilteredCache = [
+        for (final source in cached)
+          if (!isRssSourceEntry(source.def.raw)) source,
+      ];
+    }
     final raw = GStorage.getSetting(SettingsKeys.novelInstalledSourcesJson);
     if (raw.isEmpty) {
       _importedCache = const [];
+      _importedFilteredCache = const [];
       return const [];
     }
     final out = <LegadoNovelSource>[];
@@ -83,7 +114,10 @@ class NovelSources {
       if (def != null) out.add(LegadoNovelSource(def));
     }
     _importedCache = out;
-    return out;
+    return _importedFilteredCache = [
+      for (final source in out)
+        if (!isRssSourceEntry(source.def.raw)) source,
+    ];
   }
 
   static List<NovelSource> all() {
@@ -91,6 +125,12 @@ class NovelSources {
     final out = <NovelSource>[];
     for (final source in imported()) {
       if (seen.add(source.id)) out.add(source);
+    }
+    // Batch 158: the local-books source exists only while
+    // its feature is installed in the feature repository.
+    if (NovelFeatures.isInstalled(NovelFeatures.localBooksId) &&
+        seen.add(LocalNovelSource.sourceId)) {
+      out.add(const LocalNovelSource());
     }
     return out;
   }
@@ -129,8 +169,30 @@ class NovelSources {
   /// object, or base16). Returns how many were added (new
   /// ids) — duplicates by bookSourceUrl are skipped.
   static Future<int> importFromText(String text) async {
-    final incoming = LegadoParse.parseSourceArray(text);
-    if (incoming.isEmpty) return 0;
+    final (book, rss) = await importFromTextSplit(text);
+    return book + rss;
+  }
+
+  /// Batch 167: the split form — subscription (RSS-format)
+  /// entries in the payload are routed to the subscription
+  /// registry instead of being dropped by the book-source
+  /// parser, and the caller learns how many of each kind
+  /// were added: (bookAdded, rssAdded).
+  static Future<(int, int)> importFromTextSplit(String text) async {
+    final incomingAll = LegadoParse.parseSourceArray(text);
+    if (incomingAll.isEmpty) return (0, 0);
+    final rssEntries = <Map<String, dynamic>>[
+      for (final entry in incomingAll)
+        if (isRssSourceEntry(entry)) entry,
+    ];
+    final rssAdded = rssEntries.isEmpty
+        ? 0
+        : await RssSources.importEntries(rssEntries);
+    final incoming = <Map<String, dynamic>>[
+      for (final entry in incomingAll)
+        if (!isRssSourceEntry(entry)) entry,
+    ];
+    if (incoming.isEmpty) return (0, rssAdded);
     final existingRaw =
         GStorage.getSetting(SettingsKeys.novelInstalledSourcesJson);
     final stored = LegadoParse.parseSourceArray(existingRaw);
@@ -160,7 +222,7 @@ class NovelSources {
       _invalidateImported();
       revision.value++;
     }
-    return added;
+    return (added, rssAdded);
   }
 
   /// Import from a URL: a direct JSON/base16 file (the
@@ -169,15 +231,15 @@ class NovelSources {
   /// transparently rewritten to the raw file address —
   /// downloading the page itself would yield HTML.
   static Future<int> importFromUrl(String url) async {
-    final (added, _) = await importFromUrlDiagnosed(url);
-    return added;
+    final ((book, rss), _) = await importFromUrlDiagnosed(url);
+    return book + rss;
   }
 
   /// Batch 66: importFromUrl plus a probe of the payload,
   /// so the UI can say WHY nothing was added (unrecognized
   /// format vs. entries missing name/url vs. all already
   /// installed) instead of one misleading line for all.
-  static Future<(int, ImportProbe)> importFromUrlDiagnosed(
+  static Future<((int, int), ImportProbe)> importFromUrlDiagnosed(
     String url,
   ) async {
     final effective = GithubLinks.rawFileUrl(url) ?? url.trim();
@@ -186,7 +248,7 @@ class NovelSources {
       throw StateError('下载失败（${response.statusCode}）');
     }
     final probe = probeImport(response.body);
-    final added = await importFromText(response.body);
+    final added = await importFromTextSplit(response.body);
     return (added, probe);
   }
 
@@ -200,14 +262,22 @@ class NovelSources {
     final entries = LegadoParse.parseSourceArray(text);
     var recognized = 0;
     var encrypted = 0;
+    var rss = 0;
     for (final entry in entries) {
-      if (LegadoSourceDef.fromJson(entry) != null) recognized++;
+      final rssEntry = isRssSourceEntry(entry);
+      if (rssEntry) {
+        rss++;
+      } else if (LegadoSourceDef.fromJson(entry) != null) {
+        recognized++;
+      }
       if (_hasEncryptedRules(entry)) encrypted++;
     }
     return ImportProbe(
       entries: entries.length,
       recognized: recognized,
       encrypted: encrypted,
+      rss: rss,
+      foreignPack: entries.isEmpty && isForeignPackPayload(text),
     );
   }
 
@@ -222,38 +292,80 @@ class NovelSources {
     return entry.values.any(hit);
   }
 
-  static Future<void> removeImported(String id) async {
+  /// Whether a stored registry entry belongs to one of
+  /// [ids]. Batch 159: the match is a plain string compare
+  /// on the entry's URL fields — the def id IS the trimmed
+  /// URL (see LegadoSourceDef.fromJson), so this is exactly
+  /// the old `fromJson(s)?.id == id` test without paying a
+  /// full def parse per entry per deletion.
+  static bool _storedEntryIn(Map<String, dynamic> entry, Set<String> ids) {
+    final raw =
+        (entry['bookSourceUrl'] ?? entry['sourceUrl'] ?? entry['url'])
+            ?.toString();
+    if (raw == null) return false;
+    return ids.contains(raw) || ids.contains(raw.trim());
+  }
+
+  /// Batch 159: removes a whole set of imported sources in
+  /// ONE pass — one registry parse, one encode, one write,
+  /// and the side registries (dead / strikes / pins) swept
+  /// once for the whole set. The memoized parse is updated
+  /// surgically (survivors keep their instances and their
+  /// learned TOC caches) instead of being dropped, so the
+  /// list rebuild right after a deletion no longer re-parses
+  /// every remaining source. The old per-id path re-ran all
+  /// of that for EVERY source — deleting a handful from a
+  /// big bundle was quadratic and visibly stalled the tab.
+  /// Returns how many stored entries were removed.
+  static Future<int> removeImportedBatch(Set<String> ids) async {
+    if (ids.isEmpty) return 0;
     final raw = GStorage.getSetting(SettingsKeys.novelInstalledSourcesJson);
     final stored = LegadoParse.parseSourceArray(raw);
+    final before = stored.length;
     // Batch 65: match on the normalized def id as well as
     // the raw string — a stored URL with stray whitespace
     // used to survive deletion, so the source "came back"
     // and re-importing it reported 都已存在.
-    stored.removeWhere((s) =>
-        s['bookSourceUrl']?.toString() == id ||
-        LegadoSourceDef.fromJson(s)?.id == id);
+    stored.removeWhere((s) => _storedEntryIn(s, ids));
+    final removed = before - stored.length;
     await GStorage.putSetting(
       SettingsKeys.novelInstalledSourcesJson,
       jsonEncode(stored),
     );
-    _invalidateImported();
+    final cache = _importedCache;
+    if (cache != null) {
+      _importedCache = [
+        for (final source in cache)
+          if (!ids.contains(source.id)) source,
+      ];
+      _importedFilteredCache = null;
+    }
     final dead = deadSourceIds();
-    if (dead.remove(id)) {
+    final deadBefore = dead.length;
+    dead.removeAll(ids);
+    if (dead.length != deadBefore) {
       await GStorage.putSetting(
         SettingsKeys.novelDeadSourceIds,
         jsonEncode(dead.toList()),
       );
     }
     final strikes = _strikeCounts();
-    if (strikes.remove(id) != null) await _saveStrikes(strikes);
+    final strikesBefore = strikes.length;
+    strikes.removeWhere((id, _) => ids.contains(id));
+    if (strikes.length != strikesBefore) await _saveStrikes(strikes);
     final pins = pinnedIds();
-    if (pins.contains(id)) {
+    if (pins.any(ids.contains)) {
       await GStorage.putSetting(
         SettingsKeys.novelPinnedSourceIds,
-        jsonEncode(pins.where((e) => e != id).toList()),
+        jsonEncode(pins.where((e) => !ids.contains(e)).toList()),
       );
     }
     revision.value++;
+    return removed;
+  }
+
+  static Future<void> removeImported(String id) async {
+    await removeImportedBatch({id});
   }
 
   // ---- Batch 42/46: dead-source registry ------------------
@@ -416,18 +528,16 @@ class NovelSources {
     ];
   }
 
-  /// Removes every dead source. Returns how many
-  /// were removed.
+  /// Removes every dead source in one batch pass.
+  /// Returns how many were removed.
   static Future<int> cleanupDeadImported() async {
     final dead = deadSourceIds();
-    var removed = 0;
-    for (final source in all()) {
-      if (dead.contains(source.id)) {
-        await removeImported(source.id);
-        removed++;
-      }
-    }
-    return removed;
+    final ids = {
+      for (final source in imported())
+        if (dead.contains(source.id)) source.id,
+    };
+    if (ids.isEmpty) return 0;
+    return removeImportedBatch(ids);
   }
 
 }

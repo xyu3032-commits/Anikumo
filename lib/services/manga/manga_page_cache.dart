@@ -1,5 +1,7 @@
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
+import 'package:anikumo/services/manga/manga_image_pipeline.dart';
+
 /// Batch 51: the manga reader's own page cache.
 ///
 /// Reader pages used to share CachedNetworkImage's default
@@ -19,5 +21,10 @@ final CacheManager mangaPageCacheManager = CacheManager(
     // storage footprint roughly halves.
     stalePeriod: const Duration(days: 10),
     maxNrOfCacheObjects: 800,
+    // Batch 185: downloads pass the image-magic check
+    // before they may enter the store (see
+    // MangaImageFileService) — a 200 HTML challenge page
+    // is no longer cached as a page for ten days.
+    fileService: MangaImageFileService(),
   ),
 );

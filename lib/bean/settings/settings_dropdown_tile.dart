@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:anikumo/bean/settings/settings_list.dart';
 import 'package:anikumo/bean/widget/anikumo_menu.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class SettingsDropdownTile<T> extends StatefulWidget {
   const SettingsDropdownTile({
@@ -62,7 +63,7 @@ class _SettingsDropdownTileState<T> extends State<SettingsDropdownTile<T>> {
             ),
         ],
       ),
-      trailing: const Icon(Icons.arrow_drop_down_rounded),
+      trailing: const Icon(AnikumoIcons.arrow_drop_down_rounded),
     );
   }
 }

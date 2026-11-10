@@ -13,6 +13,7 @@ import 'package:anikumo/services/manga/manga_library.dart';
 import 'package:anikumo/services/novel/novel_library.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// 本地备份/恢复 (hub 区三）: export the user's own data to one JSON
 /// file, or merge a previously exported file back in. Complements —
@@ -145,38 +146,38 @@ class _BackupPageState extends State<BackupPage> {
   @override
   Widget build(BuildContext context) {
     final counts = <(IconData, String, String)>[
-      (Icons.history_rounded, '${GStorage.histories.length}', '观看历史'),
-      (Icons.favorite_rounded, '${GStorage.collectibles.length}', '追番收藏'),
+      (AnikumoIcons.history_rounded, '${GStorage.histories.length}', '观看历史'),
+      (AnikumoIcons.favorite_rounded, '${GStorage.collectibles.length}', '追番收藏'),
       (
-        Icons.manage_search_rounded,
+        AnikumoIcons.manage_search_rounded,
         '${GStorage.searchHistory.length}',
         '搜索记录',
       ),
-      (Icons.list_alt_rounded, '${UserListsStore.load().length}', '自建榜单'),
-      (Icons.sticky_note_2_outlined, '${BangumiNotesStore.load().length}', '番剧笔记'),
+      (AnikumoIcons.list_alt_rounded, '${UserListsStore.load().length}', '自建榜单'),
+      (AnikumoIcons.sticky_note_2_outlined, '${BangumiNotesStore.load().length}', '番剧笔记'),
       (
-        Icons.menu_book_rounded,
+        AnikumoIcons.menu_book_rounded,
         '${MangaLibraryStore.loadFavorites().length}',
         '漫画收藏',
       ),
       (
-        Icons.bookmark_rounded,
+        AnikumoIcons.bookmark_rounded,
         '${MangaLibraryStore.loadProgressList().length}',
         '漫画进度',
       ),
       (
-        Icons.library_books_rounded,
+        AnikumoIcons.library_books_rounded,
         '${NovelLibraryStore.loadFavorites().length}',
         '小说收藏',
       ),
       (
-        Icons.auto_stories_rounded,
+        AnikumoIcons.auto_stories_rounded,
         '${NovelLibraryStore.loadProgressList().length}',
         '小说进度',
       ),
-      (Icons.download_rounded, '${GStorage.downloads.length}', '动漫下载'),
+      (AnikumoIcons.download_rounded, '${GStorage.downloads.length}', '动漫下载'),
       (
-        Icons.download_for_offline_rounded,
+        AnikumoIcons.download_for_offline_rounded,
         _mangaDownloadCount?.toString() ?? '—',
         '漫画下载',
       ),
@@ -223,13 +224,13 @@ class _BackupPageState extends State<BackupPage> {
           const SizedBox(height: StyleString.sectionSpace),
           FilledButton.icon(
             onPressed: _busy ? null : _export,
-            icon: const Icon(Icons.upload_file_outlined),
+            icon: const Icon(AnikumoIcons.upload_file_outlined),
             label: const Text('导出备份文件'),
           ),
           const SizedBox(height: 10),
           OutlinedButton.icon(
             onPressed: _busy ? null : _import,
-            icon: const Icon(Icons.file_download_outlined),
+            icon: const Icon(AnikumoIcons.file_download_outlined),
             label: const Text('从文件恢复'),
           ),
           const SizedBox(height: StyleString.sectionSpace),

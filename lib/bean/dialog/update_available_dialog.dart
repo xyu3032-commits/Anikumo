@@ -8,6 +8,7 @@ import 'package:anikumo/services/update/auto_updater.dart';
 import 'package:anikumo/services/update/update_download_source.dart';
 import 'package:anikumo/utils/date_time.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 typedef UpdateDialogChoice = ({
   InstallationType type,
@@ -106,8 +107,8 @@ class _UpdateAvailableDialogState extends State<UpdateAvailableDialog> {
             popWith: (type: _type, source: _source),
           ),
           icon: downloadInApp
-              ? Icons.download_rounded
-              : Icons.open_in_new_rounded,
+              ? AnikumoIcons.download_rounded
+              : AnikumoIcons.open_in_new_rounded,
           text: downloadInApp ? '更新' : '前往下载',
         ),
       ],
@@ -124,7 +125,7 @@ class _UpdateAvailableDialogState extends State<UpdateAvailableDialog> {
     return Row(
       children: [
         StateIconBadge(
-          icon: Icons.system_update_alt_rounded,
+          icon: AnikumoIcons.system_update_alt_rounded,
           size: 48,
           iconSize: 24,
           backgroundColor: colors.primaryContainer,
@@ -181,7 +182,7 @@ class _UpdateAvailableDialogState extends State<UpdateAvailableDialog> {
                         mode: LaunchMode.externalApplication,
                       ),
                       iconAlignment: IconAlignment.end,
-                      icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                      icon: const Icon(AnikumoIcons.open_in_new_rounded, size: 16),
                       label: const Text('更新日志'),
                     ),
                 ],
@@ -225,7 +226,7 @@ class _UpdateAvailableDialogState extends State<UpdateAvailableDialog> {
       margin: EdgeInsets.zero,
       tiles: [
         SettingsDropdownTile<UpdateDownloadSource>(
-          leading: Icons.cloud_download_rounded,
+          leading: AnikumoIcons.cloud_download_rounded,
           title: const Text('下载源'),
           value: _source,
           options: {
@@ -236,7 +237,7 @@ class _UpdateAvailableDialogState extends State<UpdateAvailableDialog> {
         ),
         if (types.length > 1)
           SettingsDropdownTile<InstallationType>(
-            leading: Icons.inventory_2_rounded,
+            leading: AnikumoIcons.inventory_2_rounded,
             title: const Text('安装类型'),
             value: _type,
             options: {for (final type in types) type: type.label},

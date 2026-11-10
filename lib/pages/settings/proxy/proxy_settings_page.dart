@@ -6,6 +6,7 @@ import 'package:anikumo/bean/settings/settings_detail_scaffold.dart';
 import 'package:anikumo/bean/settings/settings_list.dart';
 import 'package:anikumo/services/network/proxy_manager.dart';
 import 'package:anikumo/services/storage/storage.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class ProxySettingsPage extends StatefulWidget {
   const ProxySettingsPage({super.key});
@@ -41,14 +42,14 @@ class _ProxySettingsPageState extends State<ProxySettingsPage> {
             title: const Text('代理'),
             tiles: [
               SettingsTile.switchTile(
-                leading: Icons.vpn_key_rounded,
+                leading: AnikumoIcons.vpn_key_rounded,
                 onToggle: (value) => _setProxyEnabled(value ?? !proxyEnabled),
                 title: const Text('启用代理'),
                 description: const Text('启用后网络请求将通过代理服务器'),
                 initialValue: proxyEnabled,
               ),
               SettingsTile(
-                leading: Icons.tune_rounded,
+                leading: AnikumoIcons.tune_rounded,
                 onPressed: (_) async {
                   await context.pushNamed('/settings/proxy/editor');
                   if (mounted) setState(() {});

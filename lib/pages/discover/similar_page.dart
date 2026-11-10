@@ -7,6 +7,7 @@ import 'package:anikumo/request/apis/bangumi_api.dart';
 import 'package:anikumo/services/browse/similarity.dart';
 import 'package:anikumo/services/library/user_library.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// 相似推荐： pick a show you like; candidates come from the trend
 /// list plus your own library, ranked by shared Bangumi tags.
@@ -68,7 +69,7 @@ class _SimilarPageState extends State<SimilarPage> {
         children: [
           OutlinedButton.icon(
             onPressed: _pickSource,
-            icon: const Icon(Icons.movie_filter_rounded),
+            icon: const Icon(AnikumoIcons.movie_filter_rounded),
             label: Text(
               _source == null
                   ? '选择一部你喜欢的番'

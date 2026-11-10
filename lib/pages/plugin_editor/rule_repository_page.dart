@@ -6,6 +6,7 @@ import 'package:anikumo/services/plugin/rule_repository.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/utils/error_message.dart';
 import 'package:anikumo/utils/transient_retry.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Batch 62: the rule repository, restored as a purely
 /// user-driven feature (the built-in repository was removed
@@ -192,7 +193,7 @@ class _RuleRepositoryPageState extends State<RuleRepositoryPage> {
                           suffixIcon: IconButton(
                             tooltip: '加载仓库',
                             onPressed: _loading ? null : _load,
-                            icon: const Icon(Icons.refresh_rounded),
+                            icon: const Icon(AnikumoIcons.refresh_rounded),
                           ),
                         ),
                         onSubmitted: (_) => _loading ? null : _load(),
@@ -225,7 +226,7 @@ class _RuleRepositoryPageState extends State<RuleRepositoryPage> {
                                     child: CircularProgressIndicator(
                                         strokeWidth: 2),
                                   )
-                                : const Icon(Icons.cloud_download_outlined),
+                                : const Icon(AnikumoIcons.cloud_download_outlined),
                             label: Text(_loading ? '加载中…' : '加载仓库'),
                           ),
                           const Spacer(),
@@ -335,7 +336,7 @@ class _RuleRepositoryPageState extends State<RuleRepositoryPage> {
                           onPressed: _selected.isEmpty || _importing
                               ? null
                               : _importSelected,
-                          icon: const Icon(Icons.download_rounded),
+                          icon: const Icon(AnikumoIcons.download_rounded),
                           label: Text(_importing
                               ? '导入中…'
                               : '导入所选（${_selected.length} 条）'),

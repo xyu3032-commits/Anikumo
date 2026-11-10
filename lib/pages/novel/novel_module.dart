@@ -3,11 +3,14 @@ import 'package:flutter_modular/flutter_modular.dart';
 import 'package:anikumo/models/novel_item.dart';
 import 'package:anikumo/pages/novel/novel_detail_page.dart';
 import 'package:anikumo/pages/novel/novel_diagnostics_page.dart';
+import 'package:anikumo/pages/novel/novel_feature_repo_page.dart';
+import 'package:anikumo/pages/novel/novel_local_page.dart';
 import 'package:anikumo/pages/novel/novel_login_page.dart';
 import 'package:anikumo/pages/novel/novel_downloads_page.dart';
 import 'package:anikumo/pages/novel/novel_explore_tab.dart';
 import 'package:anikumo/pages/novel/novel_main_page.dart';
 import 'package:anikumo/pages/novel/novel_reader_page.dart';
+import 'package:anikumo/pages/novel/novel_rss_page.dart';
 import 'package:anikumo/pages/novel/novel_search_page.dart';
 import 'package:anikumo/bean/theme/violet_glass.dart';
 import 'package:anikumo/pages/route_error_page.dart';
@@ -107,6 +110,18 @@ final novelModule = createModule(
         transition: _novelTransition,
       )
       ..route(
+        '/features',
+        child: (context, state) =>
+            const VioletZone(child: NovelFeatureRepoPage()),
+        transition: _novelTransition,
+      )
+      ..route(
+        '/local',
+        child: (context, state) =>
+            const VioletZone(child: NovelLocalPage()),
+        transition: _novelTransition,
+      )
+      ..route(
         '/reader',
         child: (context, state) {
           final args = state.arguments;
@@ -114,6 +129,28 @@ final novelModule = createModule(
             return const RouteErrorPage(message: '阅读参数无效，请返回后重新打开。');
           }
           return VioletZone(child: NovelReaderPage(args: args));
+        },
+        transition: _novelTransition,
+      )
+      ..route(
+        '/rss',
+        child: (context, state) {
+          final args = state.arguments;
+          if (args is! String) {
+            return const RouteErrorPage(message: '订阅源参数无效，请返回后重新打开。');
+          }
+          return VioletZone(child: RssArticlesPage(sourceId: args));
+        },
+        transition: _novelTransition,
+      )
+      ..route(
+        '/rss-reader',
+        child: (context, state) {
+          final args = state.arguments;
+          if (args is! RssReaderArgs) {
+            return const RouteErrorPage(message: '订阅文章参数无效，请返回后重新打开。');
+          }
+          return VioletZone(child: RssReaderPage(args: args));
         },
         transition: _novelTransition,
       );

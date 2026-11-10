@@ -19,6 +19,7 @@ import 'package:anikumo/services/novel/novel_library.dart';
 import 'package:anikumo/services/player/history_playback_service.dart';
 import 'package:anikumo/services/plugin/rule_engine_models.dart'
     show RuleCancelToken;
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 import 'package:anikumo/utils/device.dart';
 
 class HistoryPage extends StatefulWidget {
@@ -104,7 +105,7 @@ class _HistoryPageState extends State<HistoryPage> with RouteAware {
     final confirmed = await AnikumoDialog.show<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        icon: const Icon(Icons.delete_sweep_outlined),
+        icon: const Icon(AnikumoIcons.delete_sweep_outlined),
         title: const Text('清空历史记录？'),
         content: Text(
             '将删除全部 ${widget.controller.histories.length} 条观看记录，包括在线和缓存记录。此操作无法撤销。'),
@@ -172,7 +173,7 @@ class _HistoryPageState extends State<HistoryPage> with RouteAware {
                       : IconButton.filledTonal(
                           tooltip: '管理历史记录',
                           onPressed: () => setState(() => _editing = true),
-                          icon: const Icon(Icons.edit_outlined),
+                          icon: const Icon(AnikumoIcons.edit_outlined),
                         ),
                 ),
                 if (_editing)
@@ -181,7 +182,7 @@ class _HistoryPageState extends State<HistoryPage> with RouteAware {
                     onPressed: _clearing || _deleting.isNotEmpty
                         ? null
                         : _clearHistory,
-                    icon: const Icon(Icons.delete_sweep_outlined),
+                    icon: const Icon(AnikumoIcons.delete_sweep_outlined),
                   ),
               ],
             ],

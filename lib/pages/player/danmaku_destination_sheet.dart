@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:anikumo/bean/dialog/adaptive_bottom_sheet.dart';
 import 'package:anikumo/bean/dialog/material_bottom_sheet.dart';
 import 'package:anikumo/bean/widget/split_list_row.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 enum DanmakuDestination {
   chatRoom,
@@ -25,16 +26,16 @@ Future<DanmakuDestination?> showDanmakuDestinationSheet(BuildContext context) {
             child: SplitListGroup(
               children: [
                 ListTile(
-                  leading: const Icon(Icons.groups_rounded),
+                  leading: const Icon(AnikumoIcons.groups_rounded),
                   title: const Text('一起看聊天室'),
                   subtitle: const Text('与同房间的朋友聊天'),
                   onTap: () =>
                       Navigator.of(context).pop(DanmakuDestination.chatRoom),
                 ),
                 ListTile(
-                  leading: const Icon(Icons.subtitles_outlined),
+                  leading: const Icon(AnikumoIcons.subtitles_outlined),
                   title: const Text('视频弹幕'),
-                  subtitle: const Text('发送至远程弹幕库'),
+                  subtitle: const Text('保存在本机，在这集播放时显示'),
                   onTap: () => Navigator.of(context)
                       .pop(DanmakuDestination.remoteDanmaku),
                 ),

@@ -8,6 +8,7 @@ import '../../models/novel_item.dart';
 import '../../services/novel/novel_api.dart';
 import '../../services/novel/novel_sources.dart';
 import 'novel_widgets.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Novel search: the active source, or every source with
 /// relevance ranking.
@@ -95,7 +96,7 @@ class _NovelSearchPageState extends State<NovelSearchPage> {
                   IconButton(
                     tooltip: '返回',
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.arrow_back_rounded),
+                    icon: const Icon(AnikumoIcons.arrow_back_rounded),
                   ),
                   Expanded(
                     child: SearchHeroShell(
@@ -103,7 +104,7 @@ class _NovelSearchPageState extends State<NovelSearchPage> {
                       child: Row(
                         children: [
                           Icon(
-                            Icons.search_rounded,
+                            AnikumoIcons.search_rounded,
                             size: 20,
                             color: Theme.of(context).colorScheme.primary,
                           ),
@@ -128,7 +129,7 @@ class _NovelSearchPageState extends State<NovelSearchPage> {
                   const SizedBox(width: 4),
                   IconButton(
                     tooltip: '搜索',
-                    icon: const Icon(Icons.search),
+                    icon: const Icon(AnikumoIcons.search),
                     onPressed: _search,
                   ),
                 ],
@@ -144,12 +145,12 @@ class _NovelSearchPageState extends State<NovelSearchPage> {
                     PillSwitchOption(
                       value: false,
                       label: '当前源',
-                      icon: Icons.book_rounded,
+                      icon: AnikumoIcons.book_rounded,
                     ),
                     PillSwitchOption(
                       value: true,
                       label: '全部源',
-                      icon: Icons.library_books_rounded,
+                      icon: AnikumoIcons.library_books_rounded,
                     ),
                   ],
                   value: _allSources,
@@ -204,7 +205,7 @@ class _NovelSearchPageState extends State<NovelSearchPage> {
                   )
                 : !_searched
                     ? const GeneralEmptyState(
-                        icon: Icons.menu_book_outlined,
+                        icon: AnikumoIcons.menu_book_outlined,
                         title: '输入关键词开始搜索',
                       )
                     : _errorText != null
@@ -214,7 +215,7 @@ class _NovelSearchPageState extends State<NovelSearchPage> {
                           )
                         : _results.isEmpty
                             ? const GeneralEmptyState(
-                                icon: Icons.search_off_rounded,
+                                icon: AnikumoIcons.search_off_rounded,
                                 title: '没有找到相关的书',
                               )
                             : ListView.builder(

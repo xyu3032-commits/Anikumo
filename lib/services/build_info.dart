@@ -7,4 +7,4 @@
 /// the ninth because of exactly that. The diagnostics pages
 /// show this stamp; when a user reports a bug, the stamp in
 /// their report pins the build down.
-const String kAnikumoBuildStamp = 'B115 · 2026-11-08';
+const String kAnikumoBuildStamp = 'B192 · 2026-11-10';

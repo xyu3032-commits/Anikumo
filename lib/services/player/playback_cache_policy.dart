@@ -28,7 +28,15 @@ class PlaybackCachePolicy {
     if (quarter > 48 * 1024 * 1024) return 48 * 1024 * 1024;
     return quarter;
   }
-  static const int _defaultBufferSize = 1500 * 1024 * 1024;
+  /// Batch 145: 1500 MB -> 512 MB. The old cap let a long
+  /// viewing session accumulate up to a gigabyte and a half
+  /// of demuxer cache (memory + disk spill in the temp dir)
+  /// before it plateaued — the "cache grows forever while I
+  /// watch" complaint. 512 MB still holds roughly ten-plus
+  /// minutes of typical 1080p stream, far beyond the tuner's
+  /// 240-second pre-read ladder, so smoothness is untouched;
+  /// the 'saver' profile keeps its much smaller cap below.
+  static const int _defaultBufferSize = 512 * 1024 * 1024;
 
   /// 省流 buffer-profile cap: big enough for a smooth minute or so of
   /// typical streams, far below the default demuxer cache.

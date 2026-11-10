@@ -10,6 +10,7 @@ import 'package:anikumo/modules/download/download_module.dart';
 import 'package:anikumo/modules/roads/road_module.dart';
 import 'package:anikumo/pages/download/download_controller.dart';
 import 'package:anikumo/pages/video/video_controller.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class DownloadEpisodeSheet extends StatefulWidget {
   final int road;
@@ -186,7 +187,7 @@ class _DownloadEpisodeSheetState extends State<DownloadEpisodeSheet> {
                           onPressed: _selectedEpisodes.isEmpty
                               ? null
                               : () => _startBatchDownload(context),
-                          icon: const Icon(Icons.download_rounded),
+                          icon: const Icon(AnikumoIcons.download_rounded),
                           label: Text(_selectedEpisodes.isEmpty
                               ? '选择集数'
                               : '下载 ${_selectedEpisodes.length} 集'),
@@ -297,7 +298,7 @@ class _EpisodeTile extends StatelessWidget {
                   top: 4,
                   right: 4,
                   child: Icon(
-                    Icons.download_done_rounded,
+                    AnikumoIcons.download_done_rounded,
                     size: 14,
                     color: colorScheme.outline,
                   ),
@@ -311,7 +312,7 @@ class _EpisodeTile extends StatelessWidget {
                     duration: const Duration(milliseconds: 250),
                     curve: Curves.easeInOutCubic,
                     child: Icon(
-                      Icons.check_circle_rounded,
+                      AnikumoIcons.check_circle_rounded,
                       size: 14,
                       color: colorScheme.onSecondaryContainer,
                     ),

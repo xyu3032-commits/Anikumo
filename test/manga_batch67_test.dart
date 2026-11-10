@@ -45,6 +45,15 @@ class _FakeNovelSource implements NovelSource {
       ];
 
   @override
+  bool get hasDynamicExplore => false;
+
+  @override
+  bool get exploreKindsResolved => true;
+
+  @override
+  Future<void> ensureExploreKinds() async {}
+
+  @override
   Future<List<NovelItem>> search(String key, {int page = 1}) async => [
         NovelItem(
           bookUrl: 'https://m.example.com/book/1',

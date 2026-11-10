@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:anikumo/bean/theme/violet_glass.dart';
 import 'package:anikumo/services/ui/app_extras.dart';
 import 'package:anikumo/services/ui/glass_style.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Shared Violet Glass components for the manga / novel zones
 /// (batch 38). Every zone page composes THESE instead of
@@ -67,7 +68,7 @@ class VioletSectionHeader extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(actionLabel!),
-                const Icon(Icons.chevron_right_rounded, size: 16),
+                const Icon(AnikumoIcons.chevron_right_rounded, size: 16),
               ],
             ),
           ),
@@ -194,7 +195,7 @@ class VioletSearchPill extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          Icon(Icons.search_rounded, size: 20, color: scheme.primary),
+          Icon(AnikumoIcons.search_rounded, size: 20, color: scheme.primary),
           const SizedBox(width: 10),
           Expanded(
             child: Text(

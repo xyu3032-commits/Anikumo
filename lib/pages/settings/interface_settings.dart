@@ -6,6 +6,7 @@ import 'package:anikumo/bean/settings/settings_list.dart';
 import 'package:anikumo/modules/collect/collect_layout.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/utils/device.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class InterfaceSettingsPage extends StatefulWidget {
   const InterfaceSettingsPage({super.key});
@@ -70,7 +71,7 @@ class _InterfaceSettingsPageState extends State<InterfaceSettingsPage> {
         sections: [
           SettingsSection(title: Text('启动'), tiles: [
             SettingsDropdownTile<String>(
-              leading: Icons.home_rounded,
+              leading: AnikumoIcons.home_rounded,
               title: const Text('启动界面设置'),
               description: const Text('设置应用开启时的默认页面'),
               value: defaultPage,
@@ -81,7 +82,7 @@ class _InterfaceSettingsPageState extends State<InterfaceSettingsPage> {
           ]),
           SettingsSection(title: Text('展示信息'), tiles: [
             SettingsDropdownTile<CollectLayout>(
-              leading: Icons.view_agenda_rounded,
+              leading: AnikumoIcons.view_agenda_rounded,
               title: const Text('追番默认布局'),
               description: const Text('下次打开追番页时使用，页面内切换不会改变此设置'),
               enabled: !_savingCollectLayout,
@@ -92,7 +93,7 @@ class _InterfaceSettingsPageState extends State<InterfaceSettingsPage> {
               onChanged: _updateDefaultCollectLayout,
             ),
             SettingsTile.switchTile(
-              leading: Icons.star_rounded,
+              leading: AnikumoIcons.star_rounded,
               onToggle: (value) async {
                 showRating = value ?? !showRating;
                 await GStorage.putSetting(SettingsKeys.showRating, showRating);
@@ -108,7 +109,7 @@ class _InterfaceSettingsPageState extends State<InterfaceSettingsPage> {
               title: const Text('窗口行为'),
               tiles: [
                 SettingsDropdownTile<int>(
-                  leading: Icons.exit_to_app_rounded,
+                  leading: AnikumoIcons.exit_to_app_rounded,
                   title: const Text('关闭窗口时'),
                   description: const Text('设置点击窗口关闭按钮后的行为'),
                   value: _exitBehavior,

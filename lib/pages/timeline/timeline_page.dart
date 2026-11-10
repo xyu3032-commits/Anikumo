@@ -15,6 +15,7 @@ import 'package:anikumo/modules/bangumi/bangumi_item.dart';
 import 'package:anikumo/pages/timeline/timeline_controller.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/utils/anime_season.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 part 'timeline_options.dart';
 part 'timeline_week_selector.dart';
@@ -341,13 +342,13 @@ class _TimelinePageState extends State<TimelinePage> {
                 ),
                 SizedBox(width: inAppBar ? 4 : 12),
                 if (inAppBar)
-                  const Icon(Icons.expand_more_rounded, size: 20)
+                  const Icon(AnikumoIcons.expand_more_rounded, size: 20)
                 else
                   CircleAvatar(
                     radius: 18,
                     backgroundColor: colors.secondaryContainer,
                     foregroundColor: colors.onSecondaryContainer,
-                    child: const Icon(Icons.expand_more_rounded, size: 24),
+                    child: const Icon(AnikumoIcons.expand_more_rounded, size: 24),
                   ),
               ],
             ),
@@ -401,8 +402,8 @@ class _TimelinePageState extends State<TimelinePage> {
               padding: EdgeInsets.symmetric(horizontal: inset),
               child: GeneralEmptyState(
                 icon: filteredOut
-                    ? Icons.filter_alt_off_rounded
-                    : Icons.event_available_rounded,
+                    ? AnikumoIcons.filter_alt_off_rounded
+                    : AnikumoIcons.event_available_rounded,
                 title: filteredOut ? '没有符合筛选的番剧' : '这一天暂无放送',
                 actions: [
                   if (filteredOut)

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:anikumo/bean/widget/editorial_kit.dart';
 import 'package:anikumo/modules/my/watch_stats.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 enum MyDestination {
   theme,
@@ -95,7 +96,7 @@ class _ProfileHead extends StatelessWidget {
               IconButton(
                 tooltip: '全部设置',
                 onPressed: onSettings,
-                icon: const Icon(Icons.tune_rounded),
+                icon: const Icon(AnikumoIcons.tune_rounded),
               ),
             ],
           ),
@@ -208,7 +209,7 @@ class _FeatureRow extends StatelessWidget {
                   ),
                 ),
                 Icon(
-                  Icons.arrow_forward_ios_rounded,
+                  AnikumoIcons.arrow_forward_ios_rounded,
                   size: 14,
                   color: scheme.outline,
                 ),
@@ -240,14 +241,14 @@ class _CompactSpaceLayout extends StatelessWidget {
         _ProfileHead(stats: stats, onSettings: onSettings),
         const SizedBox(height: 18),
         _FeatureRow(
-          icon: Icons.history_rounded,
+          icon: AnikumoIcons.history_rounded,
           title: '历史记录',
           caption:
               stats.watchedBangumiCount == 0 ? '暂无观看记录' : '查看观看记录',
           onTap: () => onOpen(MyDestination.history),
         ),
         _FeatureRow(
-          icon: Icons.download_rounded,
+          icon: AnikumoIcons.download_rounded,
           title: '离线下载',
           caption: stats.downloadTaskCount == 0
               ? '管理离线内容'
@@ -261,28 +262,28 @@ class _CompactSpaceLayout extends StatelessWidget {
         ),
         EditorialIndexRow(
           index: '01',
-          icon: Icons.extension_rounded,
+          icon: AnikumoIcons.extension_rounded,
           title: '规则设置',
           onTap: () => onOpen(MyDestination.rules),
         ),
         const EditorialHairline(),
         EditorialIndexRow(
           index: '02',
-          icon: Icons.palette_rounded,
+          icon: AnikumoIcons.palette_rounded,
           title: '外观设置',
           onTap: () => onOpen(MyDestination.theme),
         ),
         const EditorialHairline(),
         EditorialIndexRow(
           index: '03',
-          icon: Icons.play_circle_rounded,
+          icon: AnikumoIcons.play_circle_rounded,
           title: '播放设置',
           onTap: () => onOpen(MyDestination.player),
         ),
         const EditorialHairline(),
         EditorialIndexRow(
           index: '04',
-          icon: Icons.subtitles_rounded,
+          icon: AnikumoIcons.subtitles_rounded,
           title: '弹幕设置',
           onTap: () => onOpen(MyDestination.danmaku),
         ),
@@ -293,21 +294,21 @@ class _CompactSpaceLayout extends StatelessWidget {
         ),
         EditorialIndexRow(
           index: '01',
-          icon: Icons.cloud_sync_rounded,
+          icon: AnikumoIcons.cloud_sync_rounded,
           title: '同步备份',
           onTap: () => onOpen(MyDestination.sync),
         ),
         const EditorialHairline(),
         EditorialIndexRow(
           index: '02',
-          icon: Icons.cleaning_services_rounded,
+          icon: AnikumoIcons.cleaning_services_rounded,
           title: '存储管理',
           onTap: () => onOpen(MyDestination.storage),
         ),
         const EditorialHairline(),
         EditorialIndexRow(
           index: '03',
-          icon: Icons.info_outline_rounded,
+          icon: AnikumoIcons.info_outline_rounded,
           title: '关于 Anikumo',
           onTap: () => onOpen(MyDestination.about),
         ),
@@ -339,7 +340,7 @@ class _WideSpaceLayout extends StatelessWidget {
           children: [
             Expanded(
               child: _FeatureRow(
-                icon: Icons.history_rounded,
+                icon: AnikumoIcons.history_rounded,
                 title: '历史记录',
                 caption: stats.watchedBangumiCount == 0
                     ? '暂无观看记录'
@@ -349,7 +350,7 @@ class _WideSpaceLayout extends StatelessWidget {
             ),
             Expanded(
               child: _FeatureRow(
-                icon: Icons.download_rounded,
+                icon: AnikumoIcons.download_rounded,
                 title: '离线下载',
                 caption: stats.downloadTaskCount == 0
                     ? '管理离线内容'
@@ -372,14 +373,14 @@ class _WideSpaceLayout extends StatelessWidget {
                 children: [
                   EditorialIndexRow(
                     index: '01',
-                    icon: Icons.extension_rounded,
+                    icon: AnikumoIcons.extension_rounded,
                     title: '规则设置',
                     onTap: () => onOpen(MyDestination.rules),
                   ),
                   const EditorialHairline(),
                   EditorialIndexRow(
                     index: '02',
-                    icon: Icons.palette_rounded,
+                    icon: AnikumoIcons.palette_rounded,
                     title: '外观设置',
                     onTap: () => onOpen(MyDestination.theme),
                   ),
@@ -391,14 +392,14 @@ class _WideSpaceLayout extends StatelessWidget {
                 children: [
                   EditorialIndexRow(
                     index: '03',
-                    icon: Icons.play_circle_rounded,
+                    icon: AnikumoIcons.play_circle_rounded,
                     title: '播放设置',
                     onTap: () => onOpen(MyDestination.player),
                   ),
                   const EditorialHairline(),
                   EditorialIndexRow(
                     index: '04',
-                    icon: Icons.subtitles_rounded,
+                    icon: AnikumoIcons.subtitles_rounded,
                     title: '弹幕设置',
                     onTap: () => onOpen(MyDestination.danmaku),
                   ),
@@ -414,21 +415,21 @@ class _WideSpaceLayout extends StatelessWidget {
         ),
         EditorialIndexRow(
           index: '01',
-          icon: Icons.cloud_sync_rounded,
+          icon: AnikumoIcons.cloud_sync_rounded,
           title: '同步备份',
           onTap: () => onOpen(MyDestination.sync),
         ),
         const EditorialHairline(),
         EditorialIndexRow(
           index: '02',
-          icon: Icons.cleaning_services_rounded,
+          icon: AnikumoIcons.cleaning_services_rounded,
           title: '存储管理',
           onTap: () => onOpen(MyDestination.storage),
         ),
         const EditorialHairline(),
         EditorialIndexRow(
           index: '03',
-          icon: Icons.info_outline_rounded,
+          icon: AnikumoIcons.info_outline_rounded,
           title: '关于 Anikumo',
           onTap: () => onOpen(MyDestination.about),
         ),
@@ -449,7 +450,7 @@ class MySettingsButton extends StatelessWidget {
     return IconButton(
       tooltip: '全部设置',
       onPressed: onTap,
-      icon: const Icon(Icons.tune_rounded),
+      icon: const Icon(AnikumoIcons.tune_rounded),
     );
   }
 }

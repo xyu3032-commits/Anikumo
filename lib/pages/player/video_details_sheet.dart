@@ -10,6 +10,7 @@ import 'package:anikumo/bean/widget/content_section.dart';
 import 'package:anikumo/bean/widget/empty_state_widget.dart';
 import 'package:anikumo/bean/widget/tonal_card.dart';
 import 'package:anikumo/pages/player/player_controller.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 void showVideoDetailsSheet(
   BuildContext context, {
@@ -199,7 +200,7 @@ class _VideoDetailsSheetState extends State<_VideoDetailsSheet>
           ? null
           : IconButton(
               tooltip: '复制$label',
-              icon: const Icon(Icons.content_copy_rounded, size: 18),
+              icon: const Icon(AnikumoIcons.content_copy_rounded, size: 18),
               onPressed: () => _copyToClipboard(context, value),
             ),
       onTap: value.isEmpty ? null : () => _copyToClipboard(context, value),
@@ -243,7 +244,7 @@ class _VideoDetailsSheetState extends State<_VideoDetailsSheet>
               onPressed: logs.isEmpty
                   ? null
                   : () => _copyToClipboard(context, logs.join('\n')),
-              icon: const Icon(Icons.content_copy_rounded, size: 18),
+              icon: const Icon(AnikumoIcons.content_copy_rounded, size: 18),
               label: const Text('复制全部'),
             ),
           ]),
@@ -252,7 +253,7 @@ class _VideoDetailsSheetState extends State<_VideoDetailsSheet>
               child: TonalCard(
             child: logs.isEmpty
                 ? const GeneralEmptyState(
-                    icon: Icons.receipt_long_rounded,
+                    icon: AnikumoIcons.receipt_long_rounded,
                     title: '还没有运行日志',
                     compact: true,
                   )

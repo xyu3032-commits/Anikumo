@@ -109,6 +109,15 @@ class _FakeSource implements NovelSource {
   List<NovelExploreCategory> get exploreCategories => const [];
 
   @override
+  bool get hasDynamicExplore => false;
+
+  @override
+  bool get exploreKindsResolved => true;
+
+  @override
+  Future<void> ensureExploreKinds() async {}
+
+  @override
   Future<List<NovelItem>> search(String key, {int page = 1}) =>
       throw UnimplementedError();
 

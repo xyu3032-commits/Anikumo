@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:anikumo/services/ui/app_extras.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// PIN app-lock gate (batch 15, G10). When a PIN is set, the
 /// app opens on this pad; a correct entry unlocks for the rest
@@ -49,7 +50,7 @@ class _PinLockGateState extends State<PinLockGate> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              Icons.lock_rounded,
+              AnikumoIcons.lock_rounded,
               size: 44,
               color: theme.colorScheme.primary,
             ),

@@ -12,6 +12,7 @@ import 'package:anikumo/pages/plugin_editor/rule_management_widgets.dart';
 import 'package:anikumo/plugins/api_rule_config.dart';
 import 'package:anikumo/plugins/plugins.dart';
 import 'package:anikumo/services/logging/logger.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 const _h8 = SizedBox(height: 8.0);
 const _h12 = SizedBox(height: 12.0);
@@ -153,7 +154,7 @@ class _PluginTestPageState extends State<PluginTestPage> {
       actions: [
         IconButton(
           onPressed: _resetState,
-          icon: const Icon(Icons.restart_alt_rounded),
+          icon: const Icon(AnikumoIcons.restart_alt_rounded),
           tooltip: '重置测试',
         ),
         const SizedBox(width: 8),
@@ -171,7 +172,7 @@ class _PluginTestPageState extends State<PluginTestPage> {
                   RulePageIntro(
                     title: plugin.name,
                     description: '一次测试，检查搜索请求、结果解析和播放线路。',
-                    icon: Icons.science_outlined,
+                    icon: AnikumoIcons.science_outlined,
                   ),
                   const SizedBox(height: 20),
                   RuleSection(
@@ -189,8 +190,8 @@ class _PluginTestPageState extends State<PluginTestPage> {
                                 minimumSize: const Size(132, 48)),
                             onPressed: isTesting ? _resetState : _startTest,
                             icon: Icon(isTesting
-                                ? Icons.stop_rounded
-                                : Icons.play_arrow_rounded),
+                                ? AnikumoIcons.stop_rounded
+                                : AnikumoIcons.play_arrow_rounded),
                             label: Text(isTesting ? '停止测试' : '开始测试'),
                           ),
                         ),
@@ -284,9 +285,9 @@ class _PluginTestPageState extends State<PluginTestPage> {
               borderRadius: BorderRadius.circular(completed ? 20 : 12)),
           child: Center(
               child: completed
-                  ? Icon(Icons.check_rounded, color: foreground)
+                  ? Icon(AnikumoIcons.check_rounded, color: foreground)
                   : failed
-                      ? Icon(Icons.error_outline_rounded, color: foreground)
+                      ? Icon(AnikumoIcons.error_outline_rounded, color: foreground)
                       : Text('$number',
                           style: theme.textTheme.titleMedium
                               ?.copyWith(color: foreground))),
@@ -310,7 +311,7 @@ class _PluginTestPageState extends State<PluginTestPage> {
         decoration: ruleInputDecoration(context,
             label: '测试关键词',
             hint: '输入番剧名称',
-            prefix: const Icon(Icons.search_rounded)),
+            prefix: const Icon(AnikumoIcons.search_rounded)),
         enabled: !isTesting,
         textInputAction: TextInputAction.search,
         onSubmitted: (_) => _startTest(),
@@ -323,7 +324,7 @@ class _PluginTestPageState extends State<PluginTestPage> {
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(Icons.error_outline, color: theme.colorScheme.error, size: 20),
+          Icon(AnikumoIcons.error_outline, color: theme.colorScheme.error, size: 20),
           const SizedBox(width: 12),
           Expanded(
             child:
@@ -402,7 +403,7 @@ class _PluginTestPageState extends State<PluginTestPage> {
                       }
                     }
                   },
-                  icon: const Icon(Icons.copy_rounded, size: 18)),
+                  icon: const Icon(AnikumoIcons.copy_rounded, size: 18)),
             ]),
           ),
           SizedBox(
@@ -473,7 +474,7 @@ class _PluginTestPageState extends State<PluginTestPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(children: [
-            Icon(Icons.warning_amber_outlined,
+            Icon(AnikumoIcons.warning_amber_outlined,
                 color: theme.colorScheme.error, size: 20),
             const SizedBox(width: 8.0),
             Expanded(
@@ -523,7 +524,7 @@ class _PluginTestPageState extends State<PluginTestPage> {
               IconButton(
                 onPressed: isTesting ? null : () => _toggleFragment(i),
                 icon: Icon(
-                  isShowingFragment ? Icons.keyboard_arrow_up : Icons.code,
+                  isShowingFragment ? AnikumoIcons.keyboard_arrow_up : AnikumoIcons.code,
                   size: 18,
                   color: theme.colorScheme.primary,
                 ),

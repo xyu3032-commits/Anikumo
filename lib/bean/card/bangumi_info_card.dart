@@ -6,6 +6,7 @@ import 'package:anikumo/modules/bangumi/bangumi_item.dart';
 import 'package:anikumo/bean/card/network_img_layer.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:skeletonizer/skeletonizer.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 // 视频卡片 - 水平布局
 class BangumiInfoCardV extends StatefulWidget {
@@ -236,7 +237,7 @@ class _BangumiInfoCardVState extends State<BangumiInfoCardV> {
                                                   2
                                               : 0,
                                           itemBuilder: (context, index) => Icon(
-                                            Icons.star_rounded,
+                                            AnikumoIcons.star_rounded,
                                             color: Theme.of(context)
                                                 .colorScheme
                                                 .primary,

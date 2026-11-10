@@ -3,6 +3,7 @@ import 'package:flutter_modular/flutter_modular.dart';
 import 'package:anikumo/bean/settings/settings_detail_scaffold.dart';
 import 'package:anikumo/bean/widget/error_widget.dart';
 import 'package:anikumo/bean/widget/state_presentation.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class RouteErrorPage extends StatelessWidget {
   const RouteErrorPage({
@@ -22,7 +23,7 @@ class RouteErrorPage extends StatelessWidget {
         actions: [
           StateActionButton(
             onPressed: () => context.navigate('/tab/popular/'),
-            icon: Icons.home_outlined,
+            icon: AnikumoIcons.home_outlined,
             text: '返回首页',
           ),
         ],

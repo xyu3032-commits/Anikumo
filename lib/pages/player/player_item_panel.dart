@@ -33,6 +33,7 @@ import 'package:anikumo/utils/format.dart';
 import 'package:anikumo/pages/player/player_transport_bar.dart';
 import 'package:anikumo/pages/player/player_screenshot_controls.dart';
 import 'package:anikumo/pages/player/player_progress_bar.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class PlayerItemPanel extends StatefulWidget {
   const PlayerItemPanel({
@@ -62,6 +63,7 @@ class PlayerItemPanel extends StatefulWidget {
     required this.showSyncPlayPanel,
     required this.pauseForTimedShutdown,
     this.disableAnimations = false,
+    this.showSourceSwitch,
   });
 
   final PlayerController playerController;
@@ -90,6 +92,11 @@ class PlayerItemPanel extends StatefulWidget {
   final VoidCallback showSyncPlayPanel;
   final VoidCallback pauseForTimedShutdown;
   final bool disableAnimations;
+
+  /// Batch 116: switch the playback source from inside the player
+  /// (not just the current source's lines). Null hides the entry
+  /// (offline playback has no sources to switch between).
+  final VoidCallback? showSourceSwitch;
 
   @override
   State<PlayerItemPanel> createState() => _PlayerItemPanelState();
@@ -151,10 +158,6 @@ class _PlayerItemPanelState extends State<PlayerItemPanel> {
     }
 
     widget.keyboardFocus.requestFocus();
-    if (playerController.danmaku.danDanmakus.isEmpty) {
-      AnikumoDialog.showToast(message: '当前剧集不支持弹幕发送的说');
-      return;
-    }
     if (message.length > 100) {
       AnikumoDialog.showToast(message: '弹幕内容过长');
       return;
@@ -179,9 +182,16 @@ class _PlayerItemPanelState extends State<PlayerItemPanel> {
       );
       unawaited(playerController.sendSyncPlayChatMessage(message));
     } else {
-      // This provider has no send API; display a local echo.
+      // The danmaku providers have no send API (batch
+      // 182): echo on screen now, and persist the item
+      // locally so it is still here on the next load of
+      // this episode instead of vanishing with the echo.
       playerController.danmaku.canvasController
           .addDanmaku(DanmakuContentItem(message, selfSend: true));
+      playerController.danmaku.recordSentDanmaku(
+        message,
+        playbackPosition: playerController.playback.currentPosition,
+      );
     }
     textController.clear();
   }
@@ -740,14 +750,14 @@ class _PlayerItemPanelState extends State<PlayerItemPanel> {
           items: _speedItems,
         ),
         _menuButton(
-          child: const Icon(Icons.aspect_ratio_rounded, color: Colors.white),
+          child: const Icon(AnikumoIcons.aspect_ratio_rounded, color: Colors.white),
           tooltip: '视频比例',
           items: _aspectRatioItems,
         ),
         if (widget.onToggleSidePanel != null)
           IconButton(
             color: Colors.white,
-            icon: const Icon(Icons.menu_open_rounded),
+            icon: const Icon(AnikumoIcons.menu_open_rounded),
             tooltip: '选集面板',
             onPressed: widget.onToggleSidePanel,
           ),
@@ -780,7 +790,7 @@ class _PlayerItemPanelState extends State<PlayerItemPanel> {
             ),
             nextEpisode: IconButton(
               color: Colors.white,
-              icon: const Icon(Icons.skip_next_rounded),
+              icon: const Icon(AnikumoIcons.skip_next_rounded),
               tooltip: '下一集',
               onPressed: widget.onNextEpisode,
             ),
@@ -824,8 +834,8 @@ class _PlayerItemPanelState extends State<PlayerItemPanel> {
     return IconButton(
       color: Colors.white,
       icon: Icon(videoPageController.isFullscreen
-          ? Icons.fullscreen_exit_rounded
-          : Icons.fullscreen_rounded),
+          ? AnikumoIcons.fullscreen_exit_rounded
+          : AnikumoIcons.fullscreen_rounded),
       tooltip: videoPageController.isFullscreen ? '退出全屏' : '全屏',
       onPressed: widget.handleFullscreen,
     );
@@ -849,7 +859,7 @@ class _PlayerItemPanelState extends State<PlayerItemPanel> {
             children: [
               IconButton(
                 color: Colors.white,
-                icon: const Icon(Icons.arrow_back_rounded),
+                icon: const Icon(AnikumoIcons.arrow_back_rounded),
                 tooltip: '返回',
                 onPressed: widget.onBackPressed,
               ),
@@ -882,9 +892,12 @@ class _PlayerItemPanelState extends State<PlayerItemPanel> {
                   Platform.isAndroid)
                 // Batch 113: long-press opens the PiP settings (mode,
                 // zone hiding, mute) without leaving the player.
-                GestureDetector(
-                  onLongPress: () => showPipSettingsSheet(context),
-                  child: IconButton(
+                // Batch 116: the long-press lives on the button
+                // itself — a GestureDetector wrapped around it lost
+                // the gesture arena to the player's own recognizers,
+                // so the settings often never opened.
+                IconButton(
+                    onLongPress: () => showPipSettingsSheet(context),
                     onPressed: () async {
                       if (isDesktop()) {
                         if (videoPageController.isPip) {
@@ -909,11 +922,10 @@ class _PlayerItemPanelState extends State<PlayerItemPanel> {
                     },
                     tooltip: '画中画',
                     icon: const Icon(
-                      Icons.picture_in_picture,
+                      AnikumoIcons.picture_in_picture,
                       color: Colors.white,
                     ),
                   ),
-                ),
               if (compact) _buildDanmakuToggleButton(context),
               PlayerPanelHoldCollectButton(
                 acquirePlayerPanelHold: widget.acquirePlayerPanelHold,
@@ -927,7 +939,7 @@ class _PlayerItemPanelState extends State<PlayerItemPanel> {
                     onPressed: toggle,
                     tooltip: '更多选项',
                     icon: const Icon(
-                      Icons.more_vert,
+                      AnikumoIcons.more_vert,
                       color: Colors.white,
                     ),
                   );
@@ -948,6 +960,11 @@ class _PlayerItemPanelState extends State<PlayerItemPanel> {
                     onPressed: widget.showDanmakuSwitch,
                     label: '弹幕切换',
                   ),
+                  if (widget.showSourceSwitch != null)
+                    AnikumoMenuItem(
+                      onPressed: widget.showSourceSwitch!,
+                      label: '切换片源',
+                    ),
                   _playerEnhanceMenuItem,
                   if (compact) _danmakuSettingsMenuItem,
                   AnikumoMenuItem(
@@ -1089,13 +1106,13 @@ class _PlayerItemPanelState extends State<PlayerItemPanel> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.remove_circle_outline),
+                      icon: const Icon(AnikumoIcons.remove_circle_outline),
                       onPressed: value <= 0
                           ? null
                           : () => onChanged(value - 5 < 0 ? 0 : value - 5),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.add_circle_outline),
+                      icon: const Icon(AnikumoIcons.add_circle_outline),
                       onPressed: () =>
                           onChanged(value + 5 > 180 ? 180 : value + 5),
                     ),
@@ -1181,7 +1198,7 @@ class _PlayerItemPanelState extends State<PlayerItemPanel> {
             if (!playerController.panel.lockPanel)
               IconButton(
                 icon: const Icon(
-                  Icons.photo_camera_outlined,
+                  AnikumoIcons.photo_camera_outlined,
                   color: Colors.white,
                 ),
                 tooltip: '截图',
@@ -1190,8 +1207,8 @@ class _PlayerItemPanelState extends State<PlayerItemPanel> {
             IconButton(
               icon: Icon(
                 playerController.panel.lockPanel
-                    ? Icons.lock_outline
-                    : Icons.lock_open,
+                    ? AnikumoIcons.lock_outline
+                    : AnikumoIcons.lock_open,
                 color: Colors.white,
               ),
               tooltip: playerController.panel.lockPanel ? '解锁面板' : '锁定面板',

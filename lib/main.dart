@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:anikumo/app_module.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_modular/flutter_modular.dart';
 import 'package:anikumo/bean/settings/theme_provider.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:anikumo/services/deep_links/app_deep_links.dart';
+import 'package:anikumo/services/storage/cache_budget_trimmer.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/services/download/download_directory_service.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
@@ -39,8 +41,13 @@ void main() async {
   // display width by the cover widgets, so the resident set
   // holds MORE covers in fewer bytes; the old cap mostly
   // bought headroom for a few oversized decodes.
+  // Batch 145: 192 -> 128 MB for long-session memory: still
+  // above the framework default, and the width-capped
+  // decodes mean the working set of covers/pages fits
+  // comfortably — the trimmed headroom was mostly occupied
+  // by pages from chapters read long ago in the session.
   PaintingBinding.instance.imageCache.maximumSizeBytes =
-      192 * 1024 * 1024;
+      128 * 1024 * 1024;
   AppDeepLinks().start();
   registerEchHttpLicenses();
   MediaKit.ensureInitialized();
@@ -113,6 +120,10 @@ void main() async {
   }
   await MeteredNetworkService.refresh();
   ProxyManager.applyProxy();
+  // Batch 145: bound the on-disk image stores by bytes (the
+  // managers only cap object counts). Fire-and-forget IO;
+  // runs before the first frame is even requested.
+  unawaited(trimImageCachesToBudgets());
   runApp(
     ModularApp(
       module: appModule,

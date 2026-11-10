@@ -6,6 +6,7 @@ import 'package:anikumo/repositories/collect_crud_repository.dart';
 import 'package:anikumo/repositories/history_repository.dart';
 import 'package:anikumo/services/library/user_library.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Candidates the user plausibly wants to file away: everything in
 /// their collections, plus everything in their watch history.
@@ -73,7 +74,7 @@ class _BangumiPickerSheetState extends State<_BangumiPickerSheet> {
                 autofocus: true,
                 decoration: InputDecoration(
                   hintText: widget.title,
-                  prefixIcon: const Icon(Icons.search),
+                  prefixIcon: const Icon(AnikumoIcons.search),
                   border: const OutlineInputBorder(),
                   isDense: true,
                 ),

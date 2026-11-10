@@ -7,6 +7,7 @@ import 'package:anikumo/bean/widget/empty_state_widget.dart';
 import 'package:anikumo/bean/widget/loading_indicator.dart';
 import 'package:anikumo/modules/bangumi/episode_item.dart';
 import 'package:anikumo/modules/comments/comment_item.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class EpisodeCommentsView extends StatelessWidget {
   const EpisodeCommentsView({
@@ -69,7 +70,7 @@ class EpisodeCommentsView extends StatelessWidget {
             if (!isLoading && hasError && comments.isEmpty)
               SliverToBoxAdapter(
                 child: GeneralErrorWidget(
-                  icon: Icons.cloud_off_rounded,
+                  icon: AnikumoIcons.cloud_off_rounded,
                   title: '评论暂时未能加载',
                   errMsg: '请检查网络后重试，或切换分集查看讨论。',
                   onRetry: onRefresh,
@@ -79,7 +80,7 @@ class EpisodeCommentsView extends StatelessWidget {
             else if (!isLoading && comments.isEmpty)
               const SliverToBoxAdapter(
                 child: GeneralEmptyState(
-                  icon: Icons.chat_bubble_outline_rounded,
+                  icon: AnikumoIcons.chat_bubble_outline_rounded,
                   title: '本集还没有讨论',
                 ),
               )
@@ -183,8 +184,8 @@ class EpisodeCommentsView extends StatelessWidget {
           style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
           icon: Icon(
               isAscending
-                  ? Icons.arrow_upward_rounded
-                  : Icons.arrow_downward_rounded,
+                  ? AnikumoIcons.arrow_upward_rounded
+                  : AnikumoIcons.arrow_downward_rounded,
               size: 18),
           label: Text(isAscending ? '最早优先' : '最新优先'),
         ),
@@ -206,7 +207,7 @@ class EpisodeCommentsView extends StatelessWidget {
                     color: colors.onSecondaryContainer,
                     semanticsLabel: '正在加载评论',
                   )
-                : const Icon(Icons.refresh_rounded, size: 24),
+                : const Icon(AnikumoIcons.refresh_rounded, size: 24),
           ),
         ),
       ]);
@@ -288,7 +289,7 @@ class _EpisodeHeader extends StatelessWidget {
                       foregroundColor: colors.primary,
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                     ),
-                    icon: const Icon(Icons.video_library_outlined, size: 18),
+                    icon: const Icon(AnikumoIcons.video_library_outlined, size: 18),
                     label: const Text('切换分集'),
                   ),
                 ],

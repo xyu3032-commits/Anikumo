@@ -12,6 +12,7 @@ import 'package:anikumo/modules/character/character_full_item.dart';
 import 'package:anikumo/modules/comments/comment_item.dart';
 import 'package:anikumo/pages/info/character_info_view.dart';
 import 'package:anikumo/request/apis/bangumi_api.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class CharacterPage extends StatefulWidget {
   const CharacterPage({
@@ -180,7 +181,7 @@ class _CharacterPageState extends State<CharacterPage> {
       return const SliverFillRemaining(
         hasScrollBody: false,
         child: GeneralEmptyState(
-          icon: Icons.chat_bubble_outline_rounded,
+          icon: AnikumoIcons.chat_bubble_outline_rounded,
           title: '还没有评论',
         ),
       );

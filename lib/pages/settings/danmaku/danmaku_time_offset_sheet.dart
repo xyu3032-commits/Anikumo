@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:anikumo/bean/dialog/material_bottom_sheet.dart';
 import 'package:anikumo/bean/widget/tonal_card.dart';
 import 'package:anikumo/services/storage/storage.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 const double _minDanmakuTimeOffset = -180;
 const double _maxDanmakuTimeOffset = 180;
@@ -103,7 +104,7 @@ class _DanmakuTimeOffsetSheetState extends State<DanmakuTimeOffsetSheet> {
                       onPressed: _offset > _minDanmakuTimeOffset
                           ? () => _updateOffset(_offset - 1)
                           : null,
-                      icon: const Icon(Icons.remove_rounded),
+                      icon: const Icon(AnikumoIcons.remove_rounded),
                     ),
                     Expanded(
                         child: FittedBox(
@@ -119,7 +120,7 @@ class _DanmakuTimeOffsetSheetState extends State<DanmakuTimeOffsetSheet> {
                       onPressed: _offset < _maxDanmakuTimeOffset
                           ? () => _updateOffset(_offset + 1)
                           : null,
-                      icon: const Icon(Icons.add_rounded),
+                      icon: const Icon(AnikumoIcons.add_rounded),
                     ),
                   ]),
                   const SizedBox(height: 16),

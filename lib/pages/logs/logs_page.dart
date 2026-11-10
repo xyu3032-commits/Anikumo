@@ -10,6 +10,7 @@ import 'package:anikumo/bean/settings/settings_detail_scaffold.dart';
 import 'package:anikumo/bean/widget/empty_state_widget.dart';
 import 'package:anikumo/bean/widget/error_widget.dart';
 import 'package:anikumo/bean/widget/loading_indicator.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class LogsPage extends StatefulWidget {
   const LogsPage({super.key});
@@ -178,14 +179,14 @@ class _LogsPageState extends State<LogsPage> {
       return GeneralErrorWidget(
         title: '无法读取日志',
         errMsg: '请稍后重新加载。',
-        icon: Icons.receipt_long_rounded,
+        icon: AnikumoIcons.receipt_long_rounded,
         onRetry: _loadLogs,
       );
     }
 
     if (_logLines.isEmpty) {
       return const GeneralEmptyState(
-        icon: Icons.receipt_long_rounded,
+        icon: AnikumoIcons.receipt_long_rounded,
         title: '还没有日志记录',
       );
     }
@@ -228,14 +229,14 @@ class _LogsPageState extends State<LogsPage> {
           heroTag: null,
           onPressed: _clearLogs,
           tooltip: '清空日志',
-          child: const Icon(Icons.clear_all),
+          child: const Icon(AnikumoIcons.clear_all),
         ),
         const SizedBox(width: 15),
         FloatingActionButton(
           heroTag: null,
           onPressed: _copyLogs,
           tooltip: '复制日志',
-          child: const Icon(Icons.copy),
+          child: const Icon(AnikumoIcons.copy),
         ),
       ],
     );

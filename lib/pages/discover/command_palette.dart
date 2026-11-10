@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:anikumo/services/hub/command_registry.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// 命令面板： type a few characters, jump straight to a feature.
 /// Matching is pure (see command_registry); this widget is only the
@@ -29,7 +30,7 @@ Future<void> showCommandPalette(BuildContext context) {
                       autofocus: true,
                       decoration: const InputDecoration(
                         hintText: '输入功能名，如 备份 / 排行 / 弹幕',
-                        prefixIcon: Icon(Icons.search_rounded),
+                        prefixIcon: Icon(AnikumoIcons.search_rounded),
                         border: OutlineInputBorder(),
                       ),
                       onChanged: (value) =>
@@ -45,7 +46,7 @@ Future<void> showCommandPalette(BuildContext context) {
                               final command = results[index];
                               return ListTile(
                                 leading: const Icon(
-                                    Icons.arrow_forward_rounded),
+                                    AnikumoIcons.arrow_forward_rounded),
                                 title: Text(command.title),
                                 onTap: () {
                                   Navigator.of(sheetContext).pop();

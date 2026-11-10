@@ -4,6 +4,7 @@ import 'package:anikumo/bean/widget/empty_state_widget.dart';
 import 'package:anikumo/bean/widget/error_widget.dart';
 import 'package:anikumo/modules/bangumi/bangumi_interest.dart';
 import 'package:anikumo/modules/comments/comment_item.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class InfoCommentsView extends StatelessWidget {
   const InfoCommentsView({
@@ -120,7 +121,7 @@ class InfoCommentsView extends StatelessWidget {
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: GeneralEmptyState(
-                    icon: Icons.chat_bubble_outline_rounded,
+                    icon: AnikumoIcons.chat_bubble_outline_rounded,
                     title: '暂无吐槽',
                     actions: [
                       TextButton(
@@ -171,7 +172,7 @@ class InfoCommentsView extends StatelessWidget {
       child: Row(children: [
         Expanded(child: Text(editing ? '编辑' : _writeReviewLabel)),
         const SizedBox(width: 8),
-        const Icon(Icons.chevron_right_rounded, size: 20),
+        const Icon(AnikumoIcons.chevron_right_rounded, size: 20),
       ]),
     );
   }

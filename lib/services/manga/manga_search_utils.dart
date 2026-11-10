@@ -351,6 +351,32 @@ List<MangaItem> shuffledMangaItems(List<MangaItem> items) =>
   );
 }
 
+/// Batch 188: end-of-list decisions take TWO consecutive
+/// dud pages (empty, or nothing new on them), not one.
+/// A single replayed or flaked page used to latch "no
+/// more content" for the whole grid session while the
+/// source still had pages left — a refresh re-armed and
+/// showed them. One dud is forgiven (the caller advances
+/// past it); two in a row is the source proving the
+/// listing is over. Any page with new items resets the
+/// count.
+class MangaEndOfList {
+  int _duds = 0;
+
+  /// Records one fetched page; returns whether more
+  /// pages should be attempted.
+  bool record({required bool addedNew}) {
+    if (addedNew) {
+      _duds = 0;
+      return true;
+    }
+    _duds++;
+    return _duds < 2;
+  }
+
+  void reset() => _duds = 0;
+}
+
 /// Verifies that a manga can actually be read from its source
 /// (it has at least one readable chapter). Results are cached
 /// per session; the check powers the search pages' auto-hide of

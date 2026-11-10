@@ -4,6 +4,7 @@ import 'package:anikumo/bean/glass/glass_surface.dart';
 import 'package:anikumo/repositories/history_repository.dart';
 import 'package:anikumo/services/stats/achievements.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// 观看成就： milestones over the local watch history — episodes,
 /// hours, distinct titles and active days. Unlocked first, then the
@@ -31,7 +32,7 @@ class AchievementsPage extends StatelessWidget {
             strong: true,
             child: Row(
               children: [
-                Icon(Icons.emoji_events_rounded,
+                Icon(AnikumoIcons.emoji_events_rounded,
                     color: theme.colorScheme.primary),
                 const SizedBox(width: 12),
                 Expanded(
@@ -54,8 +55,8 @@ class AchievementsPage extends StatelessWidget {
                   children: [
                     Icon(
                       achievement.unlocked
-                          ? Icons.verified_rounded
-                          : Icons.lock_outline_rounded,
+                          ? AnikumoIcons.verified_rounded
+                          : AnikumoIcons.lock_outline_rounded,
                       color: achievement.unlocked
                           ? theme.colorScheme.primary
                           : theme.colorScheme.outline,

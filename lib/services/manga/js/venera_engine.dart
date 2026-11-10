@@ -99,14 +99,11 @@ class VeneraEngine {
   /// JSON result (Map / List / null).
   Future<dynamic> call(String kind, Map<String, dynamic> args) {
     if (_disposed) {
-      return Future<dynamic>.error(
-        StateError('JS 源已被卸载：$sourceKey'),
-      );
+      return Future<dynamic>.error(StateError('JS 源已被卸载：$sourceKey'));
     }
     _activeCalls++;
     if (!_serialKinds.contains(kind)) {
-      return _callInner(kind, args)
-          .whenComplete(() => _activeCalls--);
+      return _callInner(kind, args).whenComplete(() => _activeCalls--);
     }
     final run = _callTail.then((_) => _callInner(kind, args));
     _callTail = run.then<void>((_) {}, onError: (_) {});
@@ -125,8 +122,9 @@ class VeneraEngine {
     // other source's in-flight calls down with it: one
     // concrete shape of "sometimes readable, sometimes
     // not". A truly wedged call still dies at the cap.
-    final timeout =
-        kind == 'login' ? const Duration(seconds: 180) : const Duration(seconds: 60);
+    final timeout = kind == 'login'
+        ? const Duration(seconds: 180)
+        : const Duration(seconds: 60);
     return _callInnerBody(kind, args).timeout(
       timeout,
       onTimeout: () async {
@@ -145,12 +143,9 @@ class VeneraEngine {
         // fails. (A user slowly typing a login captcha also
         // stops being an engine-kill offence: the loop is
         // free while the call waits on the UI channel.)
-        final reset =
-            await QjsEngineHost.instance.probeAndKillIfWedged();
+        final reset = await QjsEngineHost.instance.probeAndKillIfWedged();
         throw TimeoutException(
-          reset
-              ? 'JS 源调用超时（$kind），引擎卡死已重置'
-              : 'JS 源调用超时（$kind）',
+          reset ? 'JS 源调用超时（$kind），引擎卡死已重置' : 'JS 源调用超时（$kind）',
         );
       },
     );
@@ -158,22 +153,156 @@ class VeneraEngine {
 
   Future<dynamic> _callInnerBody(String kind, Map<String, dynamic> args) async {
     try {
-      return await _callOnce(kind, args);
+      final result = await _callOnce(kind, args);
+      _consecutiveCallFailures = 0;
+      return result;
     } catch (e) {
-      if (!_isHostDeath(e)) rethrow;
-      // Batch 43 (self-repair): the shared isolate died
-      // under this call — another source's timeout killed
-      // it, or the runtime hit a fatal. That is a HOST
-      // failure, not a source answer: a fresh isolate plus
-      // re-registration makes the very same call viable, so
-      // retry it exactly once before surfacing anything.
-      _registerFuture = null;
-      return _callOnce(kind, args);
+      if (_isHostDeath(e)) {
+        // Batch 43 (self-repair): the shared isolate died
+        // under this call — another source's timeout killed
+        // it, or the runtime hit a fatal. That is a HOST
+        // failure, not a source answer: a fresh isolate plus
+        // re-registration makes the very same call viable, so
+        // retry it exactly once before surfacing anything.
+        // Batch 154: the retry now forces a clean
+        // re-registration — just clearing the cached future
+        // was not enough when the runtime had lost the
+        // instance but the host's code map still
+        // short-circuited registration, so 'source not
+        // initialized' repeated on every later call too.
+        final result = await _callOnce(kind, args, forceRegister: true);
+        _consecutiveCallFailures = 0;
+        return result;
+      }
+      // Batch 154: not a host failure — maybe a poisoned
+      // init (see _tryInitHeal). One heal + retry at most.
+      if (await _tryInitHeal()) {
+        return _callOnce(kind, args);
+      }
+      // Batch 186: not an init failure either — count it
+      // toward the streak heal (expired session state).
+      _consecutiveCallFailures++;
+      if (await _tryStreakHeal()) {
+        try {
+          return await _callOnce(kind, args);
+        } catch (_) {
+          // Batch 188: a fresh instance with fresh init
+          // still could not serve the call — the shared
+          // runtime itself is jammed, not this source's
+          // session. Escalate once to a full host reset
+          // before surfacing the failure.
+          if (await _tryHostResetHeal()) {
+            return _callOnce(kind, args);
+          }
+          rethrow;
+        }
+      }
+      rethrow;
     }
   }
 
-  Future<dynamic> _callOnce(String kind, Map<String, dynamic> args) async {
-    await _ensureRegistered();
+  int _consecutiveCallFailures = 0;
+  DateTime? _lastStreakHealAt;
+
+  /// Batch 186: the streak heal. A source whose session
+  /// state expires mid-run — a token or API domain list
+  /// fetched at init and cached on the instance — fails
+  /// EVERY call while its init state still reads 'ok', so
+  /// the batch-154 heal never fires; only force-quitting
+  /// the app (a fresh instance, a fresh init) recovered
+  /// it. That is the standing shape of "manga dies after
+  /// long reading, JS source errors until I force-quit".
+  /// Three consecutive failures now force one clean
+  /// re-registration (fresh instance, init runs again,
+  /// tokens/domains refetch) and retry the call. The
+  /// cooldown keeps a genuinely dead SITE from paying a
+  /// re-registration on every failing call.
+  Future<bool> _tryStreakHeal() async {
+    if (!shouldAttemptStreakHeal(
+      failures: _consecutiveCallFailures,
+      lastAttemptAt: _lastStreakHealAt,
+      now: DateTime.now(),
+    )) {
+      return false;
+    }
+    _lastStreakHealAt = DateTime.now();
+    _consecutiveCallFailures = 0;
+    try {
+      await _ensureRegistered(force: true);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static DateTime? _lastHostResetAt;
+
+  /// Batch 188: the last-resort heal. Kills the shared
+  /// QuickJS host; the retried call respawns it and every
+  /// source re-registers (the batch-43 path). Other
+  /// sources' in-flight calls fail with the host-death
+  /// error and retry through their own heals.
+  Future<bool> _tryHostResetHeal() async {
+    if (!shouldAttemptHostReset(
+      lastAttemptAt: _lastHostResetAt,
+      now: DateTime.now(),
+    )) {
+      return false;
+    }
+    _lastHostResetAt = DateTime.now();
+    try {
+      QjsEngineHost.instance.kill();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  DateTime? _lastInitHealAt;
+
+  /// Batch 154: the init-failure heal. A source whose async
+  /// init() fails inside the runtime (a network hiccup while
+  /// it fetched its config — jm's API domain list is the
+  /// standing example) used to stay broken for the whole
+  /// process: registration had already reported success,
+  /// because init errors are only warnings in the runtime,
+  /// so nothing ever re-ran init — only force-quitting the
+  /// app recovered it (the user's report: JS sources error
+  /// out, force-quit and re-enter fixes it). When a call
+  /// fails and the runtime says this source's init failed,
+  /// force one clean re-registration (fresh instance, init
+  /// runs again) and report whether the caller should
+  /// retry. The cooldown keeps a source whose init fails
+  /// benignly — while its calls fail for site reasons —
+  /// from paying a re-registration on every failing call,
+  /// and still lets a later call heal once the network is
+  /// back, with no restart.
+  Future<bool> _tryInitHeal() async {
+    try {
+      final host = QjsEngineHost.instance;
+      final init = await host.initState(sourceKey);
+      if (!shouldAttemptInitHeal(
+        initState: init.state,
+        lastAttemptAt: _lastInitHealAt,
+        now: DateTime.now(),
+      )) {
+        return false;
+      }
+      _lastInitHealAt = DateTime.now();
+      await _ensureRegistered(force: true);
+      final after = await host.initState(sourceKey);
+      return after.state != 'failed';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<dynamic> _callOnce(
+    String kind,
+    Map<String, dynamic> args, {
+    bool forceRegister = false,
+  }) async {
+    await _ensureRegistered(force: forceRegister);
     final text = await QjsEngineHost.instance.execute(sourceKey, kind, args);
     if (text.isEmpty || text == 'null' || text == 'undefined') return null;
     return jsonDecode(text);
@@ -201,22 +330,32 @@ class VeneraEngine {
     return _ensureRegistered();
   }
 
-  Future<void> _ensureRegistered() {
+  /// Batch 191: force a clean re-registration so the
+  /// runtime re-reads the persisted KV (used after the
+  /// app writes a source setting from its own UI — the
+  /// isolate only sees KV as its registration seed).
+  Future<void> refreshRegistration() {
+    if (_disposed) return Future<void>.value();
+    return _ensureRegistered(force: true);
+  }
+
+  Future<void> _ensureRegistered({bool force = false}) {
     final host = QjsEngineHost.instance;
-    if (_registerFuture != null && _hostGeneration != host.generation) {
+    if (force ||
+        (_registerFuture != null && _hostGeneration != host.generation)) {
       _registerFuture = null;
     }
     return _registerFuture ??= host
-        .register(sourceKey, code)
+        .register(sourceKey, code, force: force)
         .then<void>((_) {
           _hostGeneration = host.generation;
         })
         .catchError((Object e) {
-      // A failed registration must not be cached — the next
-      // call retries (batch 31's init rule, kept).
-      _registerFuture = null;
-      throw e;
-    });
+          // A failed registration must not be cached — the next
+          // call retries (batch 31's init rule, kept).
+          _registerFuture = null;
+          throw e;
+        });
   }
 
   void dispose() {
@@ -296,11 +435,77 @@ class VeneraEngine {
       final pending = _pendingCookies;
       _pendingCookies = null;
       if (pending == null) return;
-      unawaited(
-        GStorage.putSetting(SettingsKeys.mangaJsCookiesJson, pending),
-      );
+      unawaited(GStorage.putSetting(SettingsKeys.mangaJsCookiesJson, pending));
     });
   }
+}
+
+/// Batch 154: parses the host's init-state reply
+/// ({'state': ..., 'error': ...} as JSON). Anything
+/// unreadable maps to 'none' — no information, never a
+/// failure verdict.
+({String state, String error}) parseJsInitState(String text) {
+  try {
+    final decoded = jsonDecode(text);
+    if (decoded is Map) {
+      return (
+        state: decoded['state']?.toString() ?? 'none',
+        error: decoded['error']?.toString() ?? '',
+      );
+    }
+  } catch (_) {}
+  return (state: 'none', error: '');
+}
+
+/// Batch 154 heal policy (pure): a failed call earns a
+/// forced clean re-registration only when the runtime
+/// says this source's init failed, and only once per
+/// cooldown — a source whose init fails benignly while
+/// its calls fail for site reasons must not pay a
+/// re-registration on every failing call, and a source
+/// whose init keeps failing must get another chance once
+/// the network recovers, without an app restart.
+bool shouldAttemptInitHeal({
+  required String initState,
+  required DateTime? lastAttemptAt,
+  required DateTime now,
+  Duration cooldown = const Duration(seconds: 30),
+}) {
+  if (initState != 'failed') return false;
+  if (lastAttemptAt == null) return true;
+  return now.difference(lastAttemptAt) >= cooldown;
+}
+
+/// Batch 186: whether a run of consecutive call failures
+/// should trigger a forced re-registration (see
+/// [VeneraEngine._tryStreakHeal]). Below the threshold a
+/// failure is just a failure (a dead chapter, a site
+/// hiccup); at it, the pattern says the instance itself
+/// is stale. The cooldown bounds how often a persistently
+/// failing source pays for the attempt.
+/// Batch 188: pure predicate for the host-reset heal —
+/// at most one full runtime reset per [cooldown] across
+/// ALL sources (the timestamp is static): a reset costs
+/// every other source its in-flight call, so it must
+/// stay rare even when several sources are failing.
+bool shouldAttemptHostReset({
+  required DateTime? lastAttemptAt,
+  required DateTime now,
+  Duration cooldown = const Duration(minutes: 3),
+}) {
+  if (lastAttemptAt == null) return true;
+  return now.difference(lastAttemptAt) >= cooldown;
+}
+
+bool shouldAttemptStreakHeal({
+  required int failures,
+  required DateTime? lastAttemptAt,
+  required DateTime now,
+  Duration cooldown = const Duration(seconds: 90),
+}) {
+  if (failures < 3) return false;
+  if (lastAttemptAt == null) return true;
+  return now.difference(lastAttemptAt) >= cooldown;
 }
 
 /// The UI-isolate side of the shared engine: owns the isolate,
@@ -345,8 +550,7 @@ class QjsEngineHost {
   Future<void> _start() async {
     _libraryCache ??= (await rootBundle.loadString(
       'assets/venera/_venera_.js',
-    ))
-        .replaceFirst('let console = {', 'console = {');
+    )).replaceFirst('let console = {', 'console = {');
     final receive = ReceivePort();
     _receive = receive;
     final ready = Completer<void>();
@@ -383,9 +587,7 @@ class QjsEngineHost {
         if (message[2] == true) {
           completer.complete(message[3]?.toString() ?? '');
         } else {
-          completer.completeError(
-            StateError('JS 源调用失败：${message[3]}'),
-          );
+          completer.completeError(StateError('JS 源调用失败：${message[3]}'));
         }
       case 'persist':
         final libKey = message[1]?.toString() ?? '';
@@ -485,11 +687,19 @@ class QjsEngineHost {
   /// Registers [code] under [jsKey] in the shared runtime and
   /// returns the source instance's own key. Re-registering
   /// with changed code restarts the isolate (a class cannot
-  /// be redeclared inside one QuickJS context).
-  Future<String> register(String jsKey, String code) async {
+  /// be redeclared inside one QuickJS context). [force]
+  /// (batch 154) re-registers even when the code is
+  /// unchanged: the old instance is dropped and the file
+  /// evaluates fresh, so the source's init() runs again —
+  /// the heal for a poisoned init.
+  Future<String> register(
+    String jsKey,
+    String code, {
+    bool force = false,
+  }) async {
     await _ensureStarted();
     final existing = _registeredCode[jsKey];
-    if (existing == code) return _instanceKeys[jsKey] ?? jsKey;
+    if (!force && existing == code) return _instanceKeys[jsKey] ?? jsKey;
     if (existing != null) {
       // Code changed under a live key: the old instance is
       // dropped and the new file registers fresh (the IIFE
@@ -520,13 +730,23 @@ class QjsEngineHost {
     }
   }
 
+  /// Batch 154: asks the runtime how [jsKey]'s init()
+  /// ended — 'ok', 'pending', 'failed', or 'none' when the
+  /// runtime has no record (never registered, or the host
+  /// restarted mid-check). 'none' is no information, not a
+  /// failure verdict; unreadable replies land there too.
+  Future<({String state, String error})> initState(String jsKey) async {
+    try {
+      final text = await _task(['initState', jsKey]);
+      return parseJsInitState(text);
+    } catch (_) {
+      return (state: 'none', error: '');
+    }
+  }
+
   /// Runs one dispatcher call for a registered source and
   /// returns the dispatcher's JSON string.
-  Future<String> execute(
-    String jsKey,
-    String kind,
-    Map<String, dynamic> args,
-  ) {
+  Future<String> execute(String jsKey, String kind, Map<String, dynamic> args) {
     return _task(['call', jsKey, kind, jsonEncode(args)]);
   }
 }
@@ -559,11 +779,7 @@ final Map<int, img.Image> _anikumoImageRegistry = <int, img.Image>{};
 int _anikumoImageSeq = 0;
 
 String _anikumoImageReply({required bool ok, Object? v, String? fmt}) {
-  return jsonEncode(<String, Object?>{
-    'ok': ok,
-    'v': v,
-    'fmt': ?fmt,
-  });
+  return jsonEncode(<String, Object?>{'ok': ok, 'v': v, 'fmt': ?fmt});
 }
 
 String _sniffImageFormat(List<int> bytes) {
@@ -666,7 +882,9 @@ String _anikumoImageOpSync(String payload) {
       case 'emptyImage':
         return _anikumoImageReply(
           ok: true,
-          v: register(img.Image(width: intOf('width'), height: intOf('height'))),
+          v: register(
+            img.Image(width: intOf('width'), height: intOf('height')),
+          ),
         );
       case 'releaseAll':
         _anikumoImageRegistry.clear();
@@ -784,7 +1002,30 @@ Future<void> _qjsHandleTask(
     try {
       qjs.evaluate(
         'delete globalThis.__anikumoSources[${jsonEncode(message[1])}];'
-        'delete globalThis.__anikumoKvByKey[${jsonEncode(message[1])}];',
+        'delete globalThis.__anikumoKvByKey[${jsonEncode(message[1])}];'
+        'delete (globalThis.__anikumoInitState || {})'
+        '[${jsonEncode(message[1])}];'
+        'delete (globalThis.__anikumoInitWarnings || {})'
+        '[${jsonEncode(message[1])}];'
+        'delete (globalThis.__anikumoInitPromises || {})'
+        '[${jsonEncode(message[1])}];'
+        // Batch 188: also drop this source's token
+        // chains — re-registering (every heal path does)
+        // must not leave a poisoned paged chain behind
+        // for the fresh instance to trip over.
+        '(function (key) {'
+        '  var chains = globalThis.__anikumoTokenChains || {};'
+        '  var locks = globalThis.__anikumoChainLocks || {};'
+        '  var order = globalThis.__anikumoChainOrder || [];'
+        '  Object.keys(chains).forEach(function (ck) {'
+        '    if (ck.split(":")[1] === key) {'
+        '      delete chains[ck];'
+        '      delete locks[ck];'
+        '      var i = order.indexOf(ck);'
+        '      if (i >= 0) order.splice(i, 1);'
+        '    }'
+        '  });'
+        '})(${jsonEncode(message[1])});',
       );
     } catch (_) {}
     return;
@@ -835,6 +1076,25 @@ Future<void> _qjsHandleTask(
         ' || ${jsonEncode(jsKey)}',
       );
       uiPort.send(['result', id, true, instanceKey.toString()]);
+    } else if (kind == 'initState') {
+      // Batch 154: report how this source's init() ended
+      // inside the runtime, plus the recorded failure text
+      // — the UI side's heal decision reads it.
+      final jsKey = message[2] as String;
+      final state = qjs.evaluate(
+        '(globalThis.__anikumoInitState || {})[${jsonEncode(jsKey)}]'
+        ' || "none"',
+      );
+      final warning = qjs.evaluate(
+        '(globalThis.__anikumoInitWarnings || {})[${jsonEncode(jsKey)}]'
+        ' || ""',
+      );
+      uiPort.send([
+        'result',
+        id,
+        true,
+        jsonEncode({'state': '$state', 'error': '$warning'}),
+      ]);
     } else if (kind == 'call') {
       final jsKey = message[2] as String;
       final callKind = message[3] as String;

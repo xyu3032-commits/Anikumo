@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:anikumo/modules/bangumi/episode_item.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class EpisodeCommentsPicker extends StatelessWidget {
   const EpisodeCommentsPicker({
@@ -86,8 +87,8 @@ class EpisodeCommentsPicker extends StatelessWidget {
                               )),
                       trailing: Icon(
                         selected
-                            ? Icons.check_circle_rounded
-                            : Icons.chevron_right_rounded,
+                            ? AnikumoIcons.check_circle_rounded
+                            : AnikumoIcons.chevron_right_rounded,
                         color:
                             selected ? colors.primary : colors.onSurfaceVariant,
                       ),

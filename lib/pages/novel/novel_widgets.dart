@@ -7,6 +7,7 @@ import 'package:anikumo/bean/theme/violet_glass.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 
 import '../../models/novel_item.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Open a novel's detail page (zone route).
 void openNovelDetail(BuildContext context, NovelItem item) {
@@ -40,7 +41,7 @@ class NovelCover extends StatelessWidget {
               width: width,
               height: height,
               color: theme.colorScheme.surfaceContainerHighest,
-              child: const Icon(Icons.auto_stories_outlined),
+              child: const Icon(AnikumoIcons.auto_stories_outlined),
             )
           : CachedNetworkImage(
               imageUrl: url,
@@ -62,7 +63,7 @@ class NovelCover extends StatelessWidget {
                 width: width,
                 height: height,
                 color: theme.colorScheme.surfaceContainerHighest,
-                child: const Icon(Icons.broken_image_outlined),
+                child: const Icon(AnikumoIcons.broken_image_outlined),
               ),
             ),
     );

@@ -28,6 +28,7 @@ import 'package:anikumo/services/manga/manga_library.dart';
 import 'package:anikumo/services/manga/manga_api.dart';
 import 'package:anikumo/utils/constants.dart';
 import 'package:anikumo/utils/error_message.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 typedef MangaReaderArgs = ({
   MangaItem manga,
@@ -528,7 +529,7 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
                           IconButton(
                             tooltip: '返回',
                             onPressed: () => context.pop(),
-                            icon: const Icon(Icons.arrow_back_rounded,
+                            icon: const Icon(AnikumoIcons.arrow_back_rounded,
                                 color: Colors.white),
                           ),
                           const Spacer(),
@@ -536,8 +537,8 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
                             onPressed: _toggleFavorite,
                             icon: Icon(
                               _isFavorite
-                                  ? Icons.favorite_rounded
-                                  : Icons.favorite_border_rounded,
+                                  ? AnikumoIcons.favorite_rounded
+                                  : AnikumoIcons.favorite_border_rounded,
                               color: _isFavorite
                                   ? VioletGlass.lavender
                                   : Colors.white,
@@ -703,8 +704,8 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
             onPressed: _loadingChapters || _chapters.isEmpty ? null : _resume,
             icon: Icon(
               _progress == null
-                  ? Icons.menu_book_rounded
-                  : Icons.play_arrow_rounded,
+                  ? AnikumoIcons.menu_book_rounded
+                  : AnikumoIcons.play_arrow_rounded,
             ),
             label: Text(
               _progress == null
@@ -740,7 +741,7 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
               child: Row(
                 children: [
                   Icon(
-                    Icons.swap_horiz_rounded,
+                    AnikumoIcons.swap_horiz_rounded,
                     size: 16,
                     color: theme.colorScheme.primary,
                   ),
@@ -774,8 +775,8 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
                     }),
                 icon: Icon(
                   _descending
-                      ? Icons.arrow_downward_rounded
-                      : Icons.arrow_upward_rounded,
+                      ? AnikumoIcons.arrow_downward_rounded
+                      : AnikumoIcons.arrow_upward_rounded,
                   size: 16,
                 ),
                 label: Text(_descending ? '最新在前' : '从头看起'),
@@ -873,8 +874,8 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
                             duration: const Duration(milliseconds: 180),
                             child: Icon(
                               downloaded
-                                  ? Icons.download_done_rounded
-                                  : Icons.download_outlined,
+                                  ? AnikumoIcons.download_done_rounded
+                                  : AnikumoIcons.download_outlined,
                               key: ValueKey(downloaded),
                               size: 20,
                             ),
@@ -884,7 +885,7 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
                               downloaded ? null : () => _downloadChapter(chapter),
                         );
                       }),
-                    const Icon(Icons.chevron_right_rounded),
+                    const Icon(AnikumoIcons.chevron_right_rounded),
                   ],
                 ),
                 onTap: () =>
@@ -897,7 +898,7 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
                 '展开全部 ${displayedChapters.length} 章',
                 style: TextStyle(color: theme.colorScheme.primary),
               ),
-              trailing: const Icon(Icons.expand_more),
+              trailing: const Icon(AnikumoIcons.expand_more),
               onTap: () => setState(() => _showAllChapters = true),
             ),
           if (_pairedAnime.isNotEmpty) ...[
@@ -1065,10 +1066,10 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
                       duration: const Duration(milliseconds: 150),
                       child: Icon(
                       stars >= i
-                          ? Icons.star_rounded
+                          ? AnikumoIcons.star_rounded
                           : stars >= i - 0.5
-                              ? Icons.star_half_rounded
-                              : Icons.star_border_rounded,
+                              ? AnikumoIcons.star_half_rounded
+                              : AnikumoIcons.star_border_rounded,
                         color: theme.colorScheme.primary,
                         size: 30,
                       ),

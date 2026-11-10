@@ -6,15 +6,16 @@ import 'package:anikumo/bean/widget/state_presentation.dart';
 import 'package:anikumo/pages/settings/sync/sync_settings_widgets.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/services/sync/bangumi_sync_service.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 enum _SyncStatus {
-  unconnected('未连接', Icons.link_off_rounded),
-  unconfigured('未配置', Icons.settings_outlined),
-  connecting('正在连接', Icons.sync_rounded),
-  connectionError('连接异常', Icons.error_outline_rounded),
-  enabled('已开启', Icons.check_circle_outline_rounded),
-  disabled('已关闭', Icons.pause_circle_outline_rounded),
-  contentRequired('待选择内容', Icons.tune_rounded);
+  unconnected('未连接', AnikumoIcons.link_off_rounded),
+  unconfigured('未配置', AnikumoIcons.settings_outlined),
+  connecting('正在连接', AnikumoIcons.sync_rounded),
+  connectionError('连接异常', AnikumoIcons.error_outline_rounded),
+  enabled('已开启', AnikumoIcons.check_circle_outline_rounded),
+  disabled('已关闭', AnikumoIcons.pause_circle_outline_rounded),
+  contentRequired('待选择内容', AnikumoIcons.tune_rounded);
 
   const _SyncStatus(this.label, this.icon);
 
@@ -63,7 +64,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
                 service: 'Bangumi',
                 description: '与 Bangumi 保持相同的追番状态。',
                 content: '想看 · 在看 · 看过 · 搁置 · 抛弃',
-                icon: Icons.bookmarks_rounded,
+                icon: AnikumoIcons.bookmarks_rounded,
                 color: colors.secondaryContainer,
                 onColor: colors.onSecondaryContainer,
                 status: bangumi.isConnecting
@@ -83,7 +84,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
                 service: 'WebDAV',
                 description: '通过自己的云盘，在其他设备接着看。',
                 content: '观看记录 · 收藏 · 弹幕屏蔽词',
-                icon: Icons.devices_rounded,
+                icon: AnikumoIcons.devices_rounded,
                 color: colors.tertiaryContainer,
                 onColor: colors.onTertiaryContainer,
                 status: !hasServer
@@ -100,7 +101,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
             return SyncPageBody(
               children: [
                 const SyncPageIntro(
-                  icon: Icons.sync_rounded,
+                  icon: AnikumoIcons.sync_rounded,
                   title: '让追番保持同步',
                   description: '选择需要的服务，也可以同时使用。',
                 ),
@@ -205,7 +206,7 @@ class _SyncServiceCard extends StatelessWidget {
           StateActionButton.tonal(
             onPressed: onPressed,
             text: action,
-            icon: Icons.arrow_forward_rounded,
+            icon: AnikumoIcons.arrow_forward_rounded,
           ),
         ],
       ),

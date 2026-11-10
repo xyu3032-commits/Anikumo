@@ -13,6 +13,7 @@ import 'package:anikumo/services/manga/manga_sources.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/utils/constants.dart';
 import 'package:anikumo/utils/error_message.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 void _noop() {}
 
@@ -87,7 +88,7 @@ class _MangaExploreTabState extends State<MangaExploreTab> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  Icons.extension_off_rounded,
+                  AnikumoIcons.extension_off_rounded,
                   size: 44,
                   color: theme.colorScheme.outline,
                 ),
@@ -108,7 +109,7 @@ class _MangaExploreTabState extends State<MangaExploreTab> {
                 const SizedBox(height: 16),
                 FilledButton.icon(
                   onPressed: () => context.pushNamed('/manga/sources'),
-                  icon: const Icon(Icons.add_link_rounded, size: 18),
+                  icon: const Icon(AnikumoIcons.add_link_rounded, size: 18),
                   label: const Text('去导入漫画源'),
                 ),
               ],
@@ -172,7 +173,7 @@ class _MangaExploreTabState extends State<MangaExploreTab> {
                 return ChoiceChip(
                   avatar: failed
                       ? Icon(
-                          Icons.cloud_off,
+                          AnikumoIcons.cloud_off,
                           size: 14,
                           color: theme.colorScheme.error,
                         )
@@ -262,6 +263,9 @@ class _MangaSourceGridState extends State<MangaSourceGrid> {
   bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = true;
+  // Batch 188: two consecutive dud pages end the list,
+  // not one (see MangaEndOfList).
+  final _endOfList = MangaEndOfList();
   bool _loadMoreFailed = false;
   String? _errorText;
 
@@ -323,6 +327,7 @@ class _MangaSourceGridState extends State<MangaSourceGrid> {
         _loading = false;
         _errorText = null;
         _nextPage = 2;
+        _endOfList.reset();
         _loadMoreFailed = false;
         // Only an EMPTY first page proves there is nothing
         // more; a short page is just the source's page size.
@@ -360,7 +365,9 @@ class _MangaSourceGridState extends State<MangaSourceGrid> {
       );
       setState(() {
         _items.addAll(shuffledMangaItems(batch.additions));
-        _hasMore = batch.hasMore;
+        _hasMore = _endOfList.record(
+          addedNew: batch.additions.isNotEmpty,
+        );
         _nextPage++;
       });
     } catch (_) {
@@ -443,7 +450,7 @@ class _MangaSourceGridState extends State<MangaSourceGrid> {
             child: SizedBox(
               height: constraints.maxHeight,
               child: GeneralEmptyState(
-                icon: Icons.cloud_off_rounded,
+                icon: AnikumoIcons.cloud_off_rounded,
                 title: _errorText != null ? '加载失败' : '这个源暂时没有内容',
                 actions: [
                   if (_errorText != null)

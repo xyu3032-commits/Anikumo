@@ -12,7 +12,8 @@
   <a href="https://github.com/xyu3032-commits/Anikumo/issues">反馈</a> ·
   <a href="docs/用户手册.md">用户手册</a> ·
   <a href="docs/常见问题.md">常见问题</a> ·
-  <a href="docs/免责手册.md">免责手册</a>
+  <a href="docs/免责手册.md">免责手册</a> ·
+  <a href="docs/墨源-MoYuan-手册.md">墨源手册</a>
 </p>
 
 <p align="center">
@@ -164,6 +165,7 @@ A：记下设备型号、系统版本、App 版本和复现步骤，到 [Issues]
 - [用户手册](docs/用户手册.md)——安装、频道总览、动漫 / 漫画 / 小说用法、跨区搜索、备份与 WebDAV、设置
 - [常见问题](docs/常见问题.md)——安装更新、播放阅读、数据同步等常见问题解答
 - [免责手册](docs/免责手册.md)——要点速览 + 免责说明原文（与 App 首次启动显示的文本一致）+ 补充说明
+- [墨源 MoYuan 手册](docs/墨源-MoYuan-手册.md)——小说区自研 JS 引擎的说明：使用方法、兼容范围与开源信息
 
 ## 致谢
 

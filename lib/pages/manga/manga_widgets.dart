@@ -8,6 +8,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:anikumo/bean/widget/motion_kit.dart';
 import 'package:anikumo/modules/manga/manga_item.dart';
 import 'package:anikumo/services/manga/manga_image_pipeline.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Shared building blocks for the manga zone's own visual language:
 /// taller covers, denser rails, status dots — deliberately distinct
@@ -50,7 +51,7 @@ class MangaCover extends StatelessWidget {
       width: width,
       height: height,
       color: theme.colorScheme.surfaceContainerHighest,
-      child: const Icon(Icons.broken_image_outlined),
+      child: const Icon(AnikumoIcons.broken_image_outlined),
     );
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
@@ -59,7 +60,7 @@ class MangaCover extends StatelessWidget {
               width: width,
               height: height,
               color: theme.colorScheme.surfaceContainerHighest,
-              child: const Icon(Icons.menu_book_outlined),
+              child: const Icon(AnikumoIcons.menu_book_outlined),
             )
           : url.startsWith('file://')
               // Batch 102: local (imported) books carry their
@@ -263,7 +264,7 @@ class MangaRailCard extends StatelessWidget {
                         ? Container(
                             color: theme.colorScheme.surfaceContainerHighest,
                             child: const Center(
-                              child: Icon(Icons.menu_book_outlined),
+                              child: Icon(AnikumoIcons.menu_book_outlined),
                             ),
                           )
                         : item.coverUrl.startsWith('file://')
@@ -280,7 +281,7 @@ class MangaRailCard extends StatelessWidget {
                                   color: theme.colorScheme
                                       .surfaceContainerHighest,
                                   child: const Center(
-                                    child: Icon(Icons.broken_image_outlined),
+                                    child: Icon(AnikumoIcons.broken_image_outlined),
                                   ),
                                 ),
                               )
@@ -307,7 +308,7 @@ class MangaRailCard extends StatelessWidget {
                                           .surfaceContainerHighest,
                                       child: const Center(
                                         child:
-                                            Icon(Icons.broken_image_outlined),
+                                            Icon(AnikumoIcons.broken_image_outlined),
                                       ),
                                     ),
                                   )
@@ -341,7 +342,7 @@ class MangaRailCard extends StatelessWidget {
                             errorWidget: (context, _, _) => Container(
                               color: theme.colorScheme.surfaceContainerHighest,
                               child: const Center(
-                                child: Icon(Icons.broken_image_outlined),
+                                child: Icon(AnikumoIcons.broken_image_outlined),
                               ),
                             ),
                           ),
@@ -462,7 +463,7 @@ class MangaListRow extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.chevron_right_rounded, color: theme.colorScheme.outline),
+            Icon(AnikumoIcons.chevron_right_rounded, color: theme.colorScheme.outline),
           ],
         ),
       ),

@@ -9,6 +9,7 @@ import 'package:anikumo/modules/bangumi/sync_priority.dart';
 import 'package:anikumo/pages/settings/sync/sync_settings_widgets.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/services/sync/bangumi_sync_service.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 enum _BangumiAction { verify, connect, sync }
 
@@ -166,7 +167,7 @@ class _BangumiSyncPageState extends State<BangumiSyncPage> {
                 maxWidth: 720,
                 children: [
                   const SyncPageIntro(
-                    icon: Icons.bookmarks_rounded,
+                    icon: AnikumoIcons.bookmarks_rounded,
                     title: 'Bangumi',
                     description: '同步想看、在看、看过等追番状态。',
                   ),
@@ -175,7 +176,7 @@ class _BangumiSyncPageState extends State<BangumiSyncPage> {
                   StateActionButton(
                     onPressed: enabled && configured && !_busy ? _sync : null,
                     text: _action == _BangumiAction.sync ? '正在同步追番…' : '立即同步追番',
-                    icon: Icons.sync_rounded,
+                    icon: AnikumoIcons.sync_rounded,
                   ),
                   if (message != null)
                     SyncFeedback(
@@ -188,7 +189,7 @@ class _BangumiSyncPageState extends State<BangumiSyncPage> {
                     child: ExpansionTile(
                       shape: const Border(),
                       collapsedShape: const Border(),
-                      leading: const Icon(Icons.tune_rounded),
+                      leading: const Icon(AnikumoIcons.tune_rounded),
                       title: const Text('同步偏好'),
                       subtitle: Text('状态冲突时：${priority.label}'),
                       tilePadding: const EdgeInsets.symmetric(
@@ -260,7 +261,7 @@ class _BangumiSyncPageState extends State<BangumiSyncPage> {
             margin: EdgeInsets.zero,
             tiles: [
               SettingsTile.switchTile(
-                leading: Icons.sync_rounded,
+                leading: AnikumoIcons.sync_rounded,
                 title: const Text('自动同步追番'),
                 description:
                     Text(configured ? '修改追番状态时同步到 Bangumi' : '请先连接 Bangumi 账号'),
@@ -305,7 +306,7 @@ class _BangumiSyncPageState extends State<BangumiSyncPage> {
           collapsedShape: const Border(),
           tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
           childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          leading: const Icon(Icons.account_circle_outlined),
+          leading: const Icon(AnikumoIcons.account_circle_outlined),
           title: Text(configured ? 'Bangumi 账号' : '连接 Bangumi 账号'),
           subtitle: Text(_bangumi.initialized
               ? _bangumi.username
@@ -338,8 +339,8 @@ class _BangumiSyncPageState extends State<BangumiSyncPage> {
                   onPressed: () =>
                       setState(() => _passwordVisible = !_passwordVisible),
                   icon: Icon(_passwordVisible
-                      ? Icons.visibility_off_rounded
-                      : Icons.visibility_rounded),
+                      ? AnikumoIcons.visibility_off_rounded
+                      : AnikumoIcons.visibility_rounded),
                 ),
               ),
             ),
@@ -351,13 +352,13 @@ class _BangumiSyncPageState extends State<BangumiSyncPage> {
               children: [
                 TextButton.icon(
                   onPressed: _busy ? null : _getToken,
-                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                  icon: const Icon(AnikumoIcons.open_in_new_rounded, size: 18),
                   label: const Text('获取授权码'),
                 ),
                 StateActionButton.tonal(
                   onPressed: _busy ? null : _saveToken,
                   text: _action == _BangumiAction.verify ? '正在验证…' : '验证并保存',
-                  icon: Icons.check_rounded,
+                  icon: AnikumoIcons.check_rounded,
                 ),
               ],
             ),

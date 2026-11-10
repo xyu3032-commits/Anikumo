@@ -7,6 +7,7 @@ import 'package:anikumo/bean/widget/empty_state_widget.dart';
 import 'package:anikumo/bean/widget/image_preview.dart';
 import 'package:anikumo/bean/widget/tonal_card.dart';
 import 'package:anikumo/modules/character/character_full_item.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class CharacterInfoView extends StatelessWidget {
   const CharacterInfoView({
@@ -185,7 +186,7 @@ class CharacterInfoView extends StatelessWidget {
               const SizedBox(height: 24),
               const TonalCard(
                 child: GeneralEmptyState(
-                  icon: Icons.person_outline_rounded,
+                  icon: AnikumoIcons.person_outline_rounded,
                   title: '暂无人物资料',
                   compact: true,
                 ),
@@ -233,7 +234,7 @@ class _CharacterPortrait extends StatelessWidget {
         child: SizedBox(
           height: 160,
           child: GeneralEmptyState(
-            icon: Icons.person_outline_rounded,
+            icon: AnikumoIcons.person_outline_rounded,
             title: '暂无人物图片',
             compact: true,
           ),
@@ -275,7 +276,7 @@ class _CharacterPortrait extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.zoom_in_rounded,
+                      Icon(AnikumoIcons.zoom_in_rounded,
                           size: 20, color: colors.primary),
                       const SizedBox(width: 8),
                       Flexible(

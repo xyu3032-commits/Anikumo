@@ -4,6 +4,7 @@ import 'package:anikumo/bean/settings/settings_list.dart';
 import 'package:anikumo/bean/widget/split_list_row.dart';
 import 'package:anikumo/services/network/metered_network_service.dart';
 import 'package:anikumo/services/player/low_memory_mode.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class LowMemoryModeSettingsTile extends StatelessWidget {
   const LowMemoryModeSettingsTile({super.key});
@@ -12,11 +13,11 @@ class LowMemoryModeSettingsTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return _ModeBuilder(builder: (context, mode, isMetered) {
       return SettingsTile(
-        leading: Icons.data_saver_on_rounded,
+        leading: AnikumoIcons.data_saver_on_rounded,
         title: const Text('低内存模式'),
         description: Text(mode.statusDescription(isMetered)),
         value: Text(mode.label),
-        trailing: const Icon(Icons.chevron_right_rounded),
+        trailing: const Icon(AnikumoIcons.chevron_right_rounded),
         onPressed: (_) => AnikumoDialog.show<void>(
           builder: (_) => const _LowMemoryModeDialog(),
         ),
@@ -79,8 +80,8 @@ class _LowMemoryModeDialogState extends State<_LowMemoryModeDialog> {
                     children: [
                       Icon(
                         enabled
-                            ? Icons.data_saver_on_rounded
-                            : Icons.data_usage_rounded,
+                            ? AnikumoIcons.data_saver_on_rounded
+                            : AnikumoIcons.data_usage_rounded,
                         color: foreground,
                       ),
                       const SizedBox(width: 12),

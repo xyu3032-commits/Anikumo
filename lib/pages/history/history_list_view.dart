@@ -4,6 +4,7 @@ import 'package:anikumo/bean/widget/empty_state_widget.dart';
 import 'package:anikumo/bean/widget/state_presentation.dart';
 import 'package:anikumo/modules/history/history_module.dart';
 import 'package:anikumo/pages/history/history_list_query.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class HistoryListView extends StatefulWidget {
   const HistoryListView({
@@ -122,13 +123,13 @@ class _HistoryListViewState extends State<HistoryListView> {
                             textInputAction: TextInputAction.search,
                             decoration: InputDecoration(
                               hintText: '搜索番剧、别名或来源',
-                              prefixIcon: const Icon(Icons.search_rounded),
+                              prefixIcon: const Icon(AnikumoIcons.search_rounded),
                               suffixIcon: _query.isEmpty
                                   ? null
                                   : IconButton(
                                       tooltip: '清除搜索',
                                       onPressed: _clearSearch,
-                                      icon: const Icon(Icons.close_rounded),
+                                      icon: const Icon(AnikumoIcons.close_rounded),
                                     ),
                               filled: true,
                               fillColor: colors.surfaceContainerHigh,
@@ -265,7 +266,7 @@ class _HistoryListViewState extends State<HistoryListView> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (selected) ...[
-                      Icon(Icons.check_rounded,
+                      Icon(AnikumoIcons.check_rounded,
                           size: 18, color: colors.onSecondaryContainer),
                       const SizedBox(width: 8),
                     ],
@@ -289,7 +290,7 @@ class _HistoryListViewState extends State<HistoryListView> {
 
   Widget _emptyState(bool filtered) {
     return GeneralEmptyState(
-      icon: filtered ? Icons.search_off_rounded : Icons.history_rounded,
+      icon: filtered ? AnikumoIcons.search_off_rounded : AnikumoIcons.history_rounded,
       title: filtered ? '没有找到相关记录' : '还没有观看记录',
       actions: [
         if (filtered)

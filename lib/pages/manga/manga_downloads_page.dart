@@ -7,6 +7,7 @@ import 'package:anikumo/modules/manga/manga_item.dart';
 import 'package:anikumo/pages/manga/manga_widgets.dart';
 import 'package:anikumo/services/manga/manga_downloads.dart';
 import 'package:anikumo/services/manga/manga_extras.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Downloaded chapters (batch 15, M1): list, open, delete.
 class MangaDownloadsPage extends StatefulWidget {
@@ -52,7 +53,7 @@ class _MangaDownloadsPageState extends State<MangaDownloadsPage> {
         actions: [
           if (_entries.isNotEmpty)
             IconButton(
-              icon: const Icon(Icons.delete_sweep_outlined),
+              icon: const Icon(AnikumoIcons.delete_sweep_outlined),
               tooltip: '清空全部下载',
               onPressed: () async {
                 await MangaDownloadStore.clearAll();
@@ -97,7 +98,7 @@ class _MangaDownloadsPageState extends State<MangaDownloadsPage> {
                           '${_entries[i].pageCount} 页 · ${_entries[i].source}',
                         ),
                         trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline),
+                          icon: const Icon(AnikumoIcons.delete_outline),
                           tooltip: '删除这一话',
                           onPressed: () async {
                             await MangaDownloadStore.deleteEntry(_entries[i]);

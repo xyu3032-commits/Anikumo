@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:material_color_utilities/material_color_utilities.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class PaletteCard extends StatefulWidget {
   final Color color;
@@ -73,7 +74,7 @@ class _PaletteCardState extends State<PaletteCard> {
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  Icons.check_rounded,
+                  AnikumoIcons.check_rounded,
                   color: Theme.of(context).colorScheme.surfaceContainerLow,
                   size: 12,
                 ),

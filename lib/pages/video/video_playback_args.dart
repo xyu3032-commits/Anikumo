@@ -19,12 +19,38 @@ class OnlineVideoPlaybackArgs extends VideoPlaybackArgs {
     required this.title,
     required this.src,
     required this.roads,
+    this.initialEpisode,
+    this.initialRoad,
   });
 
   final Plugin plugin;
   final String title;
   final String src;
   final List<Road> roads;
+
+  /// Batch 127: an explicit episode pick (the info page's
+  /// quick episode selector). When set, the player starts at
+  /// this episode instead of resuming history, and the mini
+  /// session never resumes over it — the pick is deliberate.
+  final int? initialEpisode;
+  final int? initialRoad;
+}
+
+/// Batch 127: resolves an explicit episode pick against the
+/// loaded roads' episode counts. Returns null when there is
+/// no pick or the pick is out of range — the caller then
+/// falls back to history resume.
+({int episode, int road})? resolveInitialEpisode({
+  required int? initialEpisode,
+  required int? initialRoad,
+  required List<int> roadLengths,
+}) {
+  if (initialEpisode == null || roadLengths.isEmpty) return null;
+  final road = (initialRoad ?? 0).clamp(0, roadLengths.length - 1);
+  if (initialEpisode < 1 || initialEpisode > roadLengths[road]) {
+    return null;
+  }
+  return (episode: initialEpisode, road: road);
 }
 
 class OfflineVideoPlaybackArgs extends VideoPlaybackArgs {

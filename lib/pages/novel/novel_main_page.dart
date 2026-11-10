@@ -6,13 +6,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:anikumo/utils/error_message.dart';
 import 'package:anikumo/bean/widget/floating_capsule_nav.dart';
+import 'package:anikumo/bean/widget/zone_switcher.dart';
 import 'package:anikumo/bean/widget/empty_state_widget.dart';
 import 'package:anikumo/bean/widget/violet_components.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 
 import '../../models/novel_item.dart';
+import 'novel_cabinets_page.dart';
+import '../../services/novel/novel_features.dart';
 import '../../services/novel/novel_library.dart';
+import '../../services/novel/moyuan_host.dart';
 import '../../services/novel/novel_source.dart';
 import '../../services/novel/novel_sources.dart';
 import '../../services/ui/app_extras.dart';
@@ -21,6 +25,7 @@ import '../../services/storage/storage.dart';
 import 'novel_explore_tab.dart';
 import 'novel_sources_tab.dart';
 import 'novel_widgets.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// The 小说专区 shell: five tabs over a cross-fading stack
 /// (same construction as the manga zone — lazy mount, no
@@ -33,12 +38,33 @@ class NovelMainPage extends StatefulWidget {
 }
 
 class _NovelMainPageState extends State<NovelMainPage> {
+  @override
+  void initState() {
+    super.initState();
+    // Batch 192: warm the novel engine shortly after the
+    // zone's first frame settles — the first search used
+    // to pay the whole engine startup on the tap itself.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future<void>.delayed(const Duration(milliseconds: 400),
+          () async {
+        try {
+          await MoyuanHost.instance.ensureStarted();
+          await MoyuanHost.instance.syncSourcesIfChanged();
+        } catch (_) {
+          // Warm-up is best-effort; real calls retry.
+        }
+      });
+    });
+  }
+
   int _index = 0;
   final Set<int> _visited = {0};
 
   late final _tabs = const [
     NovelHomeTab(),
     NovelFavoritesTab(),
+    // Batch 124: the cabinets tab, mirroring the manga zone.
+    NovelCabinetsTab(),
     NovelExploreTab(),
     NovelSourcesTab(),
     NovelSettingsTab(),
@@ -78,28 +104,33 @@ class _NovelMainPageState extends State<NovelMainPage> {
         },
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
+            icon: Icon(AnikumoIcons.home_outlined),
+            selectedIcon: Icon(AnikumoIcons.home),
             label: '首页',
           ),
           NavigationDestination(
-            icon: Icon(Icons.bookmark_outline),
-            selectedIcon: Icon(Icons.bookmark),
+            icon: Icon(AnikumoIcons.bookmark_outline),
+            selectedIcon: Icon(AnikumoIcons.bookmark),
             label: '收藏',
           ),
           NavigationDestination(
-            icon: Icon(Icons.explore_outlined),
-            selectedIcon: Icon(Icons.explore),
+            icon: Icon(AnikumoIcons.auto_stories_outlined),
+            selectedIcon: Icon(AnikumoIcons.auto_stories),
+            label: '书柜',
+          ),
+          NavigationDestination(
+            icon: Icon(AnikumoIcons.explore_outlined),
+            selectedIcon: Icon(AnikumoIcons.explore),
             label: '探索',
           ),
           NavigationDestination(
-            icon: Icon(Icons.library_books_outlined),
-            selectedIcon: Icon(Icons.library_books),
+            icon: Icon(AnikumoIcons.library_books_outlined),
+            selectedIcon: Icon(AnikumoIcons.library_books),
             label: '书源',
           ),
           NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
+            icon: Icon(AnikumoIcons.settings_outlined),
+            selectedIcon: Icon(AnikumoIcons.settings),
             label: '设置',
           ),
         ],
@@ -156,20 +187,40 @@ class _NovelHomeTabState extends State<NovelHomeTab> {
                 // back).
                 IconButton(
                   tooltip: '返回动漫区',
-                  icon: const Icon(Icons.arrow_back_rounded),
+                  icon: const Icon(AnikumoIcons.arrow_back_rounded),
                   onPressed: () => context.pop(),
                 ),
+                // Batch 131: the zone's own title is the
+                // switcher entry (with the swap glyph as its
+                // affordance), same idea as the anime zone's
+                // ANIME mark.
                 Expanded(
-                  child: Text(
-                    '小说',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w900,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () =>
+                        showZoneSwitcher(context, current: AppZone.novel),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '小说',
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Icon(
+                          AnikumoIcons.unfold_more_rounded,
+                          size: 17,
+                          color: theme.colorScheme.outline,
+                        ),
+                      ],
                     ),
                   ),
                 ),
                 IconButton(
                   tooltip: '搜索小说',
-                  icon: const Icon(Icons.search),
+                  icon: const Icon(AnikumoIcons.search),
                   onPressed: () => context.pushNamed('/novel/search'),
                 ),
               ],
@@ -249,7 +300,7 @@ class _NovelHomeTabState extends State<NovelHomeTab> {
                 child: Row(
                   children: [
                     Icon(
-                      Icons.menu_book_outlined,
+                      AnikumoIcons.menu_book_outlined,
                       size: 18,
                       color: theme.colorScheme.outline,
                     ),
@@ -292,7 +343,7 @@ class _NovelHomeTabState extends State<NovelHomeTab> {
             const Padding(
               padding: EdgeInsets.fromLTRB(24, 56, 24, 32),
               child: GeneralEmptyState(
-                icon: Icons.menu_book_outlined,
+                icon: AnikumoIcons.menu_book_outlined,
                 title: '还没有书源',
                 actions: [
                   Text(
@@ -419,17 +470,46 @@ class _SourceSectionState extends State<_SourceSection> {
   final Set<int> _inFlight = {};
   List<NovelItem> _items = const [];
 
+  /// Batch 173: fetchable categories only — group header
+  /// kinds carry no URL and are skipped on this surface.
+  List<NovelExploreCategory> get _itemsOnly => [
+        for (final c in widget.source.exploreCategories)
+          if (!c.isHeader) c,
+      ];
+
   @override
   void initState() {
     super.initState();
+    // Batch 173: script-declared categories resolve
+    // asynchronously; restart clean once they land.
+    widget.source.ensureExploreKinds();
+    NovelSource.kindsRevision.addListener(_onKindsResolved);
+    _ensure(0);
+  }
+
+  @override
+  void dispose() {
+    NovelSource.kindsRevision.removeListener(_onKindsResolved);
+    super.dispose();
+  }
+
+  void _onKindsResolved() {
+    if (!mounted || !widget.source.exploreKindsResolved) return;
+    _cache.clear();
+    _errors.clear();
+    _inFlight.clear();
+    _items = const [];
+    _categoryIndex = 0;
+    setState(() {});
     _ensure(0);
   }
 
   Future<void> _ensure(int index) async {
+    if (!widget.source.exploreKindsResolved) return;
     if (_cache.containsKey(index) || _inFlight.contains(index)) {
       return;
     }
-    final categories = widget.source.exploreCategories;
+    final categories = _itemsOnly;
     if (index < 0 || index >= categories.length) return;
     _inFlight.add(index);
     if (mounted) setState(() {});
@@ -483,7 +563,7 @@ class _SourceSectionState extends State<_SourceSection> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final categories = widget.source.exploreCategories;
+    final categories = _itemsOnly;
     final selectedError = _errors[_categoryIndex];
     final loadingSelected = _inFlight.contains(_categoryIndex);
     final selectedLoaded = _cache.containsKey(_categoryIndex);
@@ -491,6 +571,21 @@ class _SourceSectionState extends State<_SourceSection> {
     // entirely (they stay visible, badged, in 书源).
     if (NovelSources.isDead(widget.source.id)) {
       return const SizedBox.shrink();
+    }
+    // Batch 173: dynamic categories still resolving —
+    // a slim loading row instead of fetching the bogus
+    // static entry.
+    if (!widget.source.exploreKindsResolved) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          NovelSectionHeader(title: widget.source.name),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
+            child: LinearProgressIndicator(minHeight: 2),
+          ),
+        ],
+      );
     }
     // Batch 46: failed with nothing to show -> one slim
     // collapsed row until the user expands it.
@@ -500,7 +595,7 @@ class _SourceSectionState extends State<_SourceSection> {
         child: Row(
           children: [
             Icon(
-              Icons.cloud_off_outlined,
+              AnikumoIcons.cloud_off_outlined,
               size: 18,
               color: theme.colorScheme.outline,
             ),
@@ -525,7 +620,7 @@ class _SourceSectionState extends State<_SourceSection> {
             TextButton(onPressed: _retry, child: const Text('重试')),
             IconButton(
               tooltip: '展开',
-              icon: const Icon(Icons.expand_more),
+              icon: const Icon(AnikumoIcons.expand_more),
               onPressed: () => setState(() => _userExpanded = true),
             ),
           ],
@@ -721,7 +816,7 @@ class _NovelFavoritesTabState extends State<NovelFavoritesTab> {
           const NovelSectionHeader(title: '我的收藏'),
           if (favorites.isEmpty)
             const GeneralEmptyState(
-              icon: Icons.collections_bookmark_outlined,
+              icon: AnikumoIcons.collections_bookmark_outlined,
               title: '还没有收藏，去探索里找本书吧',
               compact: true,
             )
@@ -738,7 +833,7 @@ class _NovelFavoritesTabState extends State<NovelFavoritesTab> {
           ),
           if (progress.isEmpty)
             const GeneralEmptyState(
-              icon: Icons.history_rounded,
+              icon: AnikumoIcons.history_rounded,
               title: '暂无阅读记录',
               compact: true,
             )
@@ -749,7 +844,7 @@ class _NovelFavoritesTabState extends State<NovelFavoritesTab> {
                 subtitle: '读到 ${entry.chapterTitle}',
                 trailing: IconButton(
                   tooltip: '删除记录',
-                  icon: const Icon(Icons.delete_outline_rounded),
+                  icon: const Icon(AnikumoIcons.delete_outline_rounded),
                   onPressed: () => _deleteHistory(entry),
                 ),
               ),
@@ -795,11 +890,34 @@ class _NovelSettingsTabState extends State<NovelSettingsTab> {
           ),
           const NovelSectionHeader(title: '下载'),
           ListTile(
-            leading: const Icon(Icons.download_rounded),
+            leading: const Icon(AnikumoIcons.download_rounded),
             title: const Text('下载管理'),
             subtitle: const Text('已下载章节 · 离线阅读 · 占用空间'),
-            trailing: const Icon(Icons.chevron_right, size: 18),
+            trailing: const Icon(AnikumoIcons.chevron_right, size: 18),
             onTap: () => context.pushNamed('/novel/downloads'),
+          ),
+          const NovelSectionHeader(title: '扩展功能'),
+          ListTile(
+            leading: const Icon(AnikumoIcons.storefront_rounded),
+            title: const Text('功能仓库'),
+            subtitle: const Text('可选功能 · 按需安装或卸载'),
+            trailing: const Icon(AnikumoIcons.chevron_right, size: 18),
+            onTap: () => context.pushNamed('/novel/features'),
+          ),
+          ValueListenableBuilder<int>(
+            valueListenable: NovelFeatures.revision,
+            builder: (context, _, _) =>
+                NovelFeatures.isInstalled(NovelFeatures.localBooksId)
+                    ? ListTile(
+                        leading:
+                            const Icon(AnikumoIcons.library_books_rounded),
+                        title: const Text('本地书架'),
+                        subtitle: const Text('导入的 EPUB / TXT 书籍'),
+                        trailing:
+                            const Icon(AnikumoIcons.chevron_right, size: 18),
+                        onTap: () => context.pushNamed('/novel/local'),
+                      )
+                    : const SizedBox.shrink(),
           ),
           const NovelSectionHeader(title: '书源引擎'),
           Padding(
@@ -849,11 +967,13 @@ class _NovelFeaturedBannerState extends State<_NovelFeaturedBanner> {
     super.initState();
     _load();
     NovelSources.revision.addListener(_load);
+    NovelSource.kindsRevision.addListener(_load);
   }
 
   @override
   void dispose() {
     NovelSources.revision.removeListener(_load);
+    NovelSource.kindsRevision.removeListener(_load);
     _timer?.cancel();
     _controller.dispose();
     super.dispose();
@@ -862,15 +982,27 @@ class _NovelFeaturedBannerState extends State<_NovelFeaturedBanner> {
   Future<void> _load() async {
     final source = NovelSources.activeOrNull();
     if (source == null) return;
+    // Batch 173: wait for script-declared categories
+    // instead of fetching the bogus static entry.
+    if (source.hasDynamicExplore && !source.exploreKindsResolved) {
+      source.ensureExploreKinds();
+      return;
+    }
     final marker = '${source.id}|${source.exploreCategories.length}';
     if (marker == _loadedFor || source.exploreCategories.isEmpty) {
       return;
     }
+    // Group headers carry no URL — the banner previews
+    // the first fetchable category.
+    final firstCategory = source.exploreCategories
+        .where((c) => !c.isHeader)
+        .firstOrNull;
+    if (firstCategory == null) return;
     _loadedFor = marker;
     try {
       final items = await _HomeExploreCache.fetch(
         source,
-        source.exploreCategories.first,
+        firstCategory,
       );
       if (!mounted) return;
       final withCovers = [
@@ -1017,7 +1149,7 @@ class _NovelFeaturedBannerState extends State<_NovelFeaturedBanner> {
                                       onPressed: () =>
                                           openNovelDetail(context, item),
                                       icon: const Icon(
-                                        Icons.menu_book_rounded,
+                                        AnikumoIcons.menu_book_rounded,
                                         size: 18,
                                       ),
                                       label: const Text('开始阅读'),

@@ -12,6 +12,7 @@ import 'package:anikumo/modules/collect/collect_type.dart';
 import 'package:anikumo/repositories/collect_repository.dart';
 import 'package:anikumo/request/apis/bangumi_api.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// 今日上新 (hub 区一）: today's slice of the weekly broadcast calendar,
 /// with the shows the user is actually following pulled out on top.
@@ -80,7 +81,7 @@ class _TodayPageState extends State<TodayPage> {
                 )
               : _items.isEmpty
                   ? const GeneralEmptyState(
-                      icon: Icons.event_busy_outlined,
+                      icon: AnikumoIcons.event_busy_outlined,
                       title: '今天没有新番播出',
                     )
                   : CustomScrollView(
@@ -100,7 +101,7 @@ class _TodayPageState extends State<TodayPage> {
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.today_rounded, size: 28),
+                                  const Icon(AnikumoIcons.today_rounded, size: 28),
                                   const SizedBox(width: 12),
                                   Column(
                                     crossAxisAlignment:

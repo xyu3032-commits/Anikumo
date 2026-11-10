@@ -11,6 +11,7 @@ import 'package:anikumo/services/manga/manga_sources.dart';
 import 'package:anikumo/models/novel_item.dart';
 import 'package:anikumo/pages/novel/novel_widgets.dart';
 import 'package:anikumo/services/novel/novel_sources.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// The animated 全部 / 动漫 / 漫画 segmented switch shared by the
 /// anime search page and the manga search page. Selection slides
@@ -26,10 +27,10 @@ class CrossSearchModeSwitch extends StatelessWidget {
   final ValueChanged<CrossSearchMode> onChanged;
 
   static const _icons = {
-    CrossSearchMode.all: Icons.dashboard_rounded,
-    CrossSearchMode.anime: Icons.smart_display_rounded,
-    CrossSearchMode.manga: Icons.menu_book_rounded,
-    CrossSearchMode.novel: Icons.import_contacts_rounded,
+    CrossSearchMode.all: AnikumoIcons.dashboard_rounded,
+    CrossSearchMode.anime: AnikumoIcons.smart_display_rounded,
+    CrossSearchMode.manga: AnikumoIcons.menu_book_rounded,
+    CrossSearchMode.novel: AnikumoIcons.import_contacts_rounded,
   };
 
   @override
@@ -325,7 +326,7 @@ class NovelResultsSliver extends StatelessWidget {
                   ),
                 ),
                 Icon(
-                  Icons.chevron_right,
+                  AnikumoIcons.chevron_right,
                   size: 18,
                   color: theme.colorScheme.outline,
                 ),

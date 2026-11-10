@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../../models/novel_item.dart';
 import 'novel_source.dart';
 import 'package:anikumo/services/cross_search_trio.dart';
@@ -162,8 +164,15 @@ if (toc.isNotEmpty) return candidate;
 return null;
 }
 
+/// Test seam (null in production): overrides source
+/// resolution so the session caches can be exercised
+/// without the JS engine.
+static NovelSource Function(NovelItem item)? debugSourceResolver;
+
 static NovelSource sourceFor(NovelItem item) =>
-NovelSources.byId(item.source)?? NovelSources.active();
+    debugSourceResolver?.call(item) ??
+    NovelSources.byId(item.source) ??
+    NovelSources.active();
 
 static Future<NovelItem> bookInfo(NovelItem item) =>
     retryTransient(() => sourceFor(item).bookInfo(item));
@@ -172,21 +181,118 @@ static Future<NovelItem> bookInfo(NovelItem item) =>
 // fetching the TOC page is two round trips; bound the pair
 // so the detail page lands in its error state instead of
 // spinning forever on a wedged site.
-static Future<List<NovelChapter>> chapters(NovelItem item) =>
-    // Batch 43: one automatic retry on transient flakes
-    // (LegadoHttp already retries bare timeouts internally;
-    // this layer covers connection resets and friends).
-    retryTransient(
-      () => sourceFor(item)
-          .chapters(item)
-          .timeout(const Duration(seconds: 60)),
-    );
+// ---- Batch 192: session caches -------------------------
+// Chapter lists and chapter contents are re-asked
+// constantly (detail -> reader, chapter back-and-forth)
+// and every ask re-ran the whole engine + network path
+// on the UI isolate — the main novel-side jank source.
+// Cache both for the session; any source install /
+// remove / update bumps NovelSources.revision and
+// empties the caches.
+static int _cacheRevision = -1;
+static final Map<String, List<NovelChapter>> _chaptersCache = {};
+static final Map<String, Future<NovelContentResult>> _contentCache =
+    {};
+
+static void _syncCaches() {
+  final revision = NovelSources.revision.value;
+  if (revision != _cacheRevision) {
+    _cacheRevision = revision;
+    _chaptersCache.clear();
+    _contentCache.clear();
+  }
+}
+
+/// Warm a chapter's content in the session cache (the
+/// reader calls this for the next chapter after a
+/// successful load). Errors are swallowed; failed
+/// futures evict themselves, so a later real load of
+/// the same chapter retries the source.
+static void prefetchContent(NovelItem item, NovelChapter chapter) {
+  unawaited(contentDetailed(item, chapter).then(
+    (_) {},
+    onError: (_) {},
+  ));
+}
+
+static Future<List<NovelChapter>> chapters(
+  NovelItem item, {
+  bool fresh = false,
+}) async {
+  _syncCaches();
+  final key = item.storageKey;
+  if (!fresh) {
+    final cached = _chaptersCache[key];
+    if (cached != null) return cached;
+  }
+  final chapters = await retryTransient(
+    () => sourceFor(item)
+        .chapters(item)
+        .timeout(const Duration(seconds: 60)),
+  );
+  // An empty list usually marks a transient source
+  // state; do not pin it for the session.
+  if (chapters.isNotEmpty) {
+    if (_chaptersCache.length >= 32) {
+      _chaptersCache.remove(_chaptersCache.keys.first);
+    }
+    _chaptersCache[key] = chapters;
+  }
+  return chapters;
+}
 
 static Future<List<NovelBlock>> content(
 NovelItem item,
 NovelChapter chapter,
 ) =>
 sourceFor(item).content(item, chapter);
+
+/// Batch 184: content with the completeness signal, for
+/// the reader's chapter-end state. Only definition-backed
+/// sources can know about truncation; every other source
+/// returns its blocks unflagged.
+static Future<NovelContentResult> contentDetailed(
+NovelItem item,
+NovelChapter chapter,
+) {
+  // Batch 192: session-cached and single-flight — the
+  // reader's next-chapter prefetch and a real load of
+  // the same chapter share one engine + network pass.
+  _syncCaches();
+  final key = '${item.storageKey}::${chapter.url}';
+  final cached = _contentCache[key];
+  if (cached != null) return cached;
+  final future = _fetchContentDetailed(item, chapter);
+  if (_contentCache.length >= 16) {
+    _contentCache.remove(_contentCache.keys.first);
+  }
+  _contentCache[key] = future;
+  // Only successful, readable results stay cached; a
+  // failure or an empty chapter evicts itself so the
+  // next attempt retries the source.
+  future.then((result) {
+    if (!novelBlocksHaveContent(result.blocks) &&
+        identical(_contentCache[key], future)) {
+      _contentCache.remove(key);
+    }
+  }, onError: (_) {
+    if (identical(_contentCache[key], future)) {
+      _contentCache.remove(key);
+    }
+  });
+  return future;
+}
+
+static Future<NovelContentResult> _fetchContentDetailed(
+NovelItem item,
+NovelChapter chapter,
+) async {
+final source = sourceFor(item);
+if (source is LegadoNovelSource) {
+return source.contentDetailed(item, chapter);
+}
+return NovelContentResult(await source.content(item, chapter));
+}
 
 /// The item's source headers (User-Agent etc.) for the
 /// reader's WebView mode.

@@ -13,6 +13,7 @@ import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/services/player/pip_utils.dart';
 import 'package:anikumo/bean/settings/settings_list.dart';
 import 'package:anikumo/utils/device.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class PlayerSettingsPage extends StatefulWidget {
   const PlayerSettingsPage({super.key});
@@ -261,7 +262,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
             title: Text('解码与渲染'),
             tiles: [
               SettingsTile.switchTile(
-                leading: Icons.memory_rounded,
+                leading: AnikumoIcons.memory_rounded,
                 onToggle: (value) async {
                   hAenable = value ?? !hAenable;
                   await GStorage.putSetting<bool>(
@@ -272,7 +273,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 initialValue: hAenable,
               ),
               SettingsTile(
-                leading: Icons.developer_board_rounded,
+                leading: AnikumoIcons.developer_board_rounded,
                 onPressed: (_) async {
                   await context.pushNamed('/settings/player/decoder');
                 },
@@ -281,7 +282,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
               ),
               if (Platform.isAndroid) ...[
                 SettingsTile(
-                  leading: Icons.tv_rounded,
+                  leading: AnikumoIcons.tv_rounded,
                   onPressed: (_) async {
                     await context.pushNamed('/settings/player/renderer');
                   },
@@ -292,7 +293,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
               const LowMemoryModeSettingsTile(),
               if (Platform.isAndroid) ...[
                 SettingsTile.switchTile(
-                  leading: Icons.graphic_eq_rounded,
+                  leading: AnikumoIcons.graphic_eq_rounded,
                   onToggle: (value) async {
                     androidEnableOpenSLES = value ?? !androidEnableOpenSLES;
                     await GStorage.putSetting<bool>(
@@ -306,7 +307,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 ),
               ],
               SettingsTile(
-                leading: Icons.auto_awesome_rounded,
+                leading: AnikumoIcons.auto_awesome_rounded,
                 onPressed: (_) async {
                   context.pushNamed('/settings/player/super');
                 },
@@ -318,7 +319,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
             title: Text('播放行为'),
             tiles: [
               SettingsTile.switchTile(
-                leading: Icons.headphones_rounded,
+                leading: AnikumoIcons.headphones_rounded,
                 onToggle: (value) async {
                   backgroundPlayback = value ?? !backgroundPlayback;
                   await GStorage.putSetting<bool>(
@@ -330,7 +331,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 initialValue: backgroundPlayback,
               ),
               SettingsTile.switchTile(
-                leading: Icons.history_rounded,
+                leading: AnikumoIcons.history_rounded,
                 onToggle: (value) async {
                   playResume = value ?? !playResume;
                   await GStorage.putSetting<bool>(
@@ -342,7 +343,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 initialValue: playResume,
               ),
               SettingsTile.switchTile(
-                leading: Icons.playlist_play_rounded,
+                leading: AnikumoIcons.playlist_play_rounded,
                 onToggle: (value) async {
                   autoPlayNext = value ?? !autoPlayNext;
                   await GStorage.putSetting<bool>(
@@ -355,13 +356,14 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
               ),
               if (Platform.isAndroid)
                 SettingsTile.switchTile(
-                  leading: Icons.picture_in_picture_alt_rounded,
+                  leading: AnikumoIcons.picture_in_picture_alt_rounded,
                   onToggle: (value) async {
                     androidAutoEnterPIP = value ?? !androidAutoEnterPIP;
                     await GStorage.putSetting<bool>(
                         SettingsKeys.androidAutoEnterPIP, androidAutoEnterPIP);
-                    await PipUtils.setAndroidAutoEnterPIPEnabled(
-                        androidAutoEnterPIP);
+                    // Batch 116: single effective-value sync (in-app
+                    // mini mode forces the native flag off).
+                    await PipUtils.syncAndroidAutoEnterPIP();
                     setState(() {});
                   },
                   title: Text('自动进入画中画'),
@@ -370,7 +372,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 ),
               if (!isDesktop())
                 SettingsTile(
-                  leading: Icons.picture_in_picture_rounded,
+                  leading: AnikumoIcons.picture_in_picture_rounded,
                   onPressed: (_) async {
                     await showPipSettingsSheet(context);
                     setState(() {});
@@ -379,7 +381,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                   description: Text('应用内小窗、进入漫画/小说时隐藏与静音'),
                 ),
               SettingsTile.switchTile(
-                leading: Icons.block_rounded,
+                leading: AnikumoIcons.block_rounded,
                 onToggle: (value) async {
                   forceAdBlocker = value ?? !forceAdBlocker;
                   await GStorage.putSetting<bool>(
@@ -391,7 +393,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 initialValue: forceAdBlocker,
               ),
               SettingsTile.switchTile(
-                leading: Icons.animation_rounded,
+                leading: AnikumoIcons.animation_rounded,
                 onToggle: (value) async {
                   playerDisableAnimations = value ?? !playerDisableAnimations;
                   await GStorage.putSetting<bool>(
@@ -405,7 +407,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
               ),
               if (!isDesktop())
                 SettingsTile.switchTile(
-                  leading: Icons.swipe_vertical_rounded,
+                  leading: AnikumoIcons.swipe_vertical_rounded,
                   onToggle: (value) async {
                     brightnessVolumeGesture = value ?? !brightnessVolumeGesture;
                     await GStorage.putSetting<bool>(
@@ -418,7 +420,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                   initialValue: brightnessVolumeGesture,
                 ),
               SettingsTile.switchTile(
-                leading: Icons.visibility_off_rounded,
+                leading: AnikumoIcons.visibility_off_rounded,
                 onToggle: (value) async {
                   privateMode = value ?? !privateMode;
                   await GStorage.putSetting<bool>(
@@ -435,7 +437,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
             title: Text('播放增强'),
             tiles: [
               SettingsDropdownTile<String>(
-                leading: Icons.memory_rounded,
+                leading: AnikumoIcons.memory_rounded,
                 title: const Text('缓冲档位'),
                 description: const Text('流畅优先使用大缓冲；省流限制缓冲大小'),
                 value: bufferProfile,
@@ -454,7 +456,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 },
               ),
               SettingsDropdownTile<int>(
-                leading: Icons.skip_next_rounded,
+                leading: AnikumoIcons.skip_next_rounded,
                 title: const Text('默认跳过片头'),
                 description: const Text('每集开始自动跳过的秒数，可按番单独设置'),
                 value: defaultOpSkipSeconds,
@@ -477,7 +479,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 },
               ),
               SettingsDropdownTile<int>(
-                leading: Icons.skip_previous_rounded,
+                leading: AnikumoIcons.skip_previous_rounded,
                 title: const Text('默认跳过片尾'),
                 description: const Text('片尾剩余秒数内自动连播下一集'),
                 value: defaultEdSkipSeconds,
@@ -499,7 +501,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 },
               ),
               SettingsTile.switchTile(
-                leading: Icons.alt_route_rounded,
+                leading: AnikumoIcons.alt_route_rounded,
                 onToggle: (value) async {
                   autoSwitchRoad = value ?? !autoSwitchRoad;
                   await GStorage.putSetting<bool>(
@@ -516,7 +518,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
             title: Text('诊断'),
             tiles: [
               SettingsTile.switchTile(
-                leading: Icons.error_outline_rounded,
+                leading: AnikumoIcons.error_outline_rounded,
                 onToggle: (value) async {
                   showPlayerError = value ?? !showPlayerError;
                   await GStorage.putSetting<bool>(
@@ -528,7 +530,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 initialValue: showPlayerError,
               ),
               SettingsTile.switchTile(
-                leading: Icons.bug_report_rounded,
+                leading: AnikumoIcons.bug_report_rounded,
                 onToggle: (value) async {
                   playerDebugMode = value ?? !playerDebugMode;
                   await GStorage.putSetting<bool>(
@@ -540,7 +542,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 initialValue: playerDebugMode,
               ),
               SettingsDropdownTile<int>(
-                leading: Icons.receipt_long_rounded,
+                leading: AnikumoIcons.receipt_long_rounded,
                 title: const Text('日志等级'),
                 description: const Text('播放器内部日志等级'),
                 value: playerLogLevel,
@@ -554,7 +556,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
             title: Text('播放参数'),
             tiles: [
               SettingsSliderTile(
-                leading: Icons.speed_rounded,
+                leading: AnikumoIcons.speed_rounded,
                 title: Text('默认倍速'),
                 value: defaultPlaySpeed,
                 min: 0.25,
@@ -565,7 +567,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                     double.parse(value.toStringAsFixed(2))),
               ),
               SettingsSliderTile(
-                leading: Icons.fast_forward_rounded,
+                leading: AnikumoIcons.fast_forward_rounded,
                 title: Text('长按倍速'),
                 description: Text('长按屏幕或按住方向键时的倍速'),
                 value: defaultShortcutForwardPlaySpeed,
@@ -577,7 +579,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                     double.parse(value.toStringAsFixed(2))),
               ),
               SettingsSliderTile(
-                leading: Icons.swap_horiz_rounded,
+                leading: AnikumoIcons.swap_horiz_rounded,
                 title: Text('方向键跳转'),
                 description: Text('左右方向键的快进/快退秒数'),
                 value: playerArrowKeySkipTime.toDouble(),
@@ -598,7 +600,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 },
               ),
               SettingsTile(
-                leading: Icons.skip_next_rounded,
+                leading: AnikumoIcons.skip_next_rounded,
                 onPressed: (_) async {
                   await updateButtonSkipTime();
                 },
@@ -607,7 +609,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 value: Text('$playerButtonSkipTime 秒'),
               ),
               SettingsSliderTile(
-                leading: Icons.timer_rounded,
+                leading: AnikumoIcons.timer_rounded,
                 title: Text('控制栏消失时间'),
                 description: Text('播放控制器自动隐藏前的停留时长'),
                 value: playerControllerLayerDisappearSeconds,
@@ -619,7 +621,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 onChanged: updatePlayerControllerLayerDisappearSeconds,
               ),
               SettingsDropdownTile<PlayerAspectRatio>(
-                leading: Icons.aspect_ratio_rounded,
+                leading: AnikumoIcons.aspect_ratio_rounded,
                 title: const Text('默认视频比例'),
                 value: defaultAspectRatioMode,
                 options: {
@@ -632,7 +634,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           SettingsSection(
             tiles: [
               SettingsTile(
-                leading: Icons.settings_backup_restore_rounded,
+                leading: AnikumoIcons.settings_backup_restore_rounded,
                 onPressed: (_) => resetPlayerSettings(),
                 title: Text('恢复默认设置'),
                 description: Text('将播放相关设置恢复为默认值'),

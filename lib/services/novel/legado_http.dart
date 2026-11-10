@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io' as io;
 
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 
 import '../storage/storage.dart';
 import 'legado_gbk.dart';
@@ -31,14 +32,33 @@ class LegadoResponse {
 class LegadoHttp {
   LegadoHttp._();
 
-  static final Dio _dio = Dio(
-    BaseOptions(
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 25),
-      responseType: ResponseType.bytes,
-      validateStatus: (_) => true,
-    ),
-  );
+  static final Dio _dio = _buildDio();
+
+  /// Batch 161: this used to be the only HTTP client in
+  /// the app still verifying certificates. Source sites
+  /// routinely ship broken chains and the app-wide stack
+  /// (and the reference reader) accepts them; the mismatch
+  /// killed sources like 速读谷 with
+  /// CERTIFICATE_VERIFY_FAILED while the same site opened
+  /// fine everywhere else in the app.
+  static Dio _buildDio() {
+    final dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 25),
+        responseType: ResponseType.bytes,
+        validateStatus: (_) => true,
+      ),
+    );
+    dio.httpClientAdapter = IOHttpClientAdapter(
+      createHttpClient: () {
+        final client = io.HttpClient();
+        client.badCertificateCallback = (_, _, _) => true;
+        return client;
+      },
+    );
+    return dio;
+  }
 
   static const defaultUa =
       'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 '
@@ -151,6 +171,16 @@ class LegadoHttp {
     if (changed) await _saveJar();
   }
 
+  /// Batch 157: a copy of the whole jar (domain → name →
+  /// value), handed to the JS bridge so rule scripts can
+  /// read cookies through the `cookie` object (Legado
+  /// sources read session tokens like a CSRF cookie out of
+  /// URL templates — `{{cookie.getKey(url, "_csrfToken")}}`).
+  static Map<String, Map<String, String>> jarSnapshot() => {
+        for (final e in _jar.entries)
+          e.key: Map<String, String>.of(e.value),
+      };
+
   /// Imports cookies harvested elsewhere (the WebView
   /// login page) under [host].
   static Future<void> importCookies(
@@ -231,11 +261,30 @@ class LegadoHttp {
     final charset = (options['charset']?.toString() ?? '').toLowerCase();
     final gbk = charset.contains('gb');
     var url = rawUrl;
-    var body = options['body']?.toString();
+    // Batch 165: a body written as a JSON value (Map/List)
+    // is a JSON body in the source format's semantics —
+    // encode it as JSON and declare the type. Stringifying
+    // it produced a Dart literal no endpoint can parse,
+    // and JSON content APIs answered with an error body
+    // that read back as a silently empty page.
+    final rawBody = options['body'];
+    var body = rawBody?.toString();
+    if (rawBody is Map || rawBody is List) {
+      body = jsonEncode(rawBody);
+      if (!headers.keys.any((k) => k.toLowerCase() == 'content-type')) {
+        headers['Content-Type'] = 'application/json';
+      }
+    }
     if (gbk) {
       await Gb2312.ensureLoaded();
-      url = Gb2312.percentEncodeNonAscii(url);
-      if (body != null) body = Gb2312.percentEncodeNonAscii(body);
+      // Batch 165: template filling already percent-encoded
+      // the keyword as UTF-8, and percentEncodeNonAscii
+      // cannot see through ASCII escapes — recover the
+      // characters first so they can be encoded as GBK.
+      url = Gb2312.percentEncodeNonAscii(Gb2312.decodeUtf8PercentRuns(url));
+      if (body != null) {
+        body = Gb2312.percentEncodeNonAscii(Gb2312.decodeUtf8PercentRuns(body));
+      }
     }
     return fetchRaw(
       url,

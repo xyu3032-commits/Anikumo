@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:anikumo/pages/onboarding/onboarding_step_layout.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class UpdateSourceStep extends StatelessWidget {
   const UpdateSourceStep({
@@ -14,7 +15,7 @@ class UpdateSourceStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) => OnboardingStepLayout(
         leading: const OnboardingStepIcon(
-          icon: Icons.system_update_rounded,
+          icon: AnikumoIcons.system_update_rounded,
           shape: OnboardingIconShape.cookie,
         ),
         title: '以你的方式更新',
@@ -28,7 +29,7 @@ class UpdateSourceStep extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _OptionCard(
-                icon: Icons.rocket_launch_rounded,
+                icon: AnikumoIcons.rocket_launch_rounded,
                 title: 'GitHub',
                 description: '在应用内检查并获取新版本，适合大多数用户。',
                 value: true,
@@ -37,7 +38,7 @@ class UpdateSourceStep extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               _OptionCard(
-                icon: Icons.storefront_rounded,
+                icon: AnikumoIcons.storefront_rounded,
                 title: 'F-Droid',
                 description: '由 F-Droid 商店管理更新，应用内不再自动检查。',
                 value: false,

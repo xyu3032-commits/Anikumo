@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class RulePageIntro extends StatelessWidget {
   const RulePageIntro({
@@ -153,7 +154,7 @@ class RuleAddGuide extends StatelessWidget {
                   title: Text(option.title),
                   subtitle: Text(option.subtitle),
                   trailing:
-                      const Icon(Icons.arrow_forward_rounded, size: 20),
+                      const Icon(AnikumoIcons.arrow_forward_rounded, size: 20),
                   onTap: option.onTap,
                 ),
               ),

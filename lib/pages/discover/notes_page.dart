@@ -8,6 +8,7 @@ import 'package:anikumo/modules/bangumi/bangumi_item.dart';
 import 'package:anikumo/pages/discover/bangumi_picker.dart';
 import 'package:anikumo/services/library/user_library.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// 番剧笔记 (hub 区二）: short private notes attached to bangumis —
 /// 「第 8 集封神」「等第二季一起看」 — stored locally, never synced.
@@ -98,18 +99,18 @@ class _NotesPageState extends State<NotesPage> {
           IconButton(
             tooltip: '写笔记',
             onPressed: _addNote,
-            icon: const Icon(Icons.add),
+            icon: const Icon(AnikumoIcons.add),
           ),
         ],
       ),
       body: entries.isEmpty
           ? GeneralEmptyState(
-              icon: Icons.sticky_note_2_outlined,
+              icon: AnikumoIcons.sticky_note_2_outlined,
               title: '还没有笔记',
               actions: [
                 StateActionButton.tonal(
                   onPressed: _addNote,
-                  icon: Icons.add,
+                  icon: AnikumoIcons.add,
                   text: '写第一条笔记',
                 ),
               ],
@@ -128,7 +129,7 @@ class _NotesPageState extends State<NotesPage> {
                   tileColor:
                       Theme.of(context).colorScheme.surfaceContainerLow,
                   leading: item == null
-                      ? const Icon(Icons.movie_outlined)
+                      ? const Icon(AnikumoIcons.movie_outlined)
                       : ClipRRect(
                           borderRadius: BorderRadius.circular(6),
                           child: NetworkImgLayer(
@@ -152,7 +153,7 @@ class _NotesPageState extends State<NotesPage> {
                   trailing: IconButton(
                     tooltip: '删除笔记',
                     onPressed: () => _deleteNote(entry.key),
-                    icon: const Icon(Icons.delete_outline),
+                    icon: const Icon(AnikumoIcons.delete_outline),
                   ),
                   onTap: () => _editNote(entry.key, initial: entry.value),
                 );

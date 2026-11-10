@@ -66,4 +66,28 @@ class DanmakuClient {
       throw await NetworkErrorMapper.mapException(e);
     }
   }
+
+  /// Batch 163: unsigned GET for endpoints that do not
+  /// use the credential signature (the built-in service
+  /// authenticates by its URL, not by headers).
+  Future<dynamic> getPlain(
+    String url, {
+    Map<String, dynamic>? queryParameters,
+    CancelToken? cancelToken,
+  }) async {
+    try {
+      final response = await DioFactory.apiDio.get(
+        url,
+        queryParameters: queryParameters,
+        options: Options(headers: {
+          'user-agent': getRandomUA(),
+          'referer': '',
+        }),
+        cancelToken: cancelToken,
+      );
+      return response.data;
+    } on DioException catch (e) {
+      throw await NetworkErrorMapper.mapException(e);
+    }
+  }
 }

@@ -4,6 +4,7 @@ import 'package:anikumo/bean/settings/settings_detail_scaffold.dart';
 import 'package:anikumo/bean/settings/settings_list.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/services/update/auto_updater.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class UpdateSettingsPage extends StatefulWidget {
   const UpdateSettingsPage({super.key});
@@ -23,7 +24,7 @@ class _UpdateSettingsPageState extends State<UpdateSettingsPage> {
               title: const Text('启动时检查更新'),
               tiles: [
                 SettingsTile.switchTile(
-                  leading: Icons.update_rounded,
+                  leading: AnikumoIcons.update_rounded,
                   title: const Text('应用更新'),
                   initialValue: _autoUpdate,
                   onToggle: (value) {
@@ -40,7 +41,7 @@ class _UpdateSettingsPageState extends State<UpdateSettingsPage> {
               ),
               tiles: [
                 SettingsTile(
-                  leading: Icons.system_update_rounded,
+                  leading: AnikumoIcons.system_update_rounded,
                   title: const Text('检查更新'),
                   description: const Text('查看 GitHub 上有没有新版本'),
                   onPressed: (_) {

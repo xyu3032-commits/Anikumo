@@ -137,11 +137,79 @@ class NovelImageBlock extends NovelBlock {
   final Map<String, String> headers;
 }
 
+/// Batch 184: a chapter's content plus its completeness
+/// signal. [possiblyTruncated] means the engine stopped
+/// following the chapter's own pagination before it ran
+/// out (its page cap), so the blocks are real but the
+/// chapter may continue beyond them — the reader must not
+/// present such a chapter as verified-complete.
+class NovelContentResult {
+  const NovelContentResult(this.blocks, {this.possiblyTruncated = false});
+
+  final List<NovelBlock> blocks;
+  final bool possiblyTruncated;
+}
+
+/// Batch 184: does this block list carry anything a
+/// reader can actually read? A list of whitespace-only
+/// paragraphs is not content — treating list non-emptiness
+/// as success is what let blank chapters render as a bare
+/// chapter-end marker. Shared by the reader (empty-state
+/// decision) and downloads (refusing to cache blank or
+/// garbage chapters).
+bool novelBlocksHaveContent(List<NovelBlock> blocks) => blocks.any(
+      (b) => switch (b) {
+        NovelTextBlock(:final text) => text.trim().isNotEmpty,
+        NovelImageBlock(:final url) => url.isNotEmpty,
+      },
+    );
+
 /// A named explore section of a source (from its exploreUrl
 /// declaration).
 class NovelExploreCategory {
-  const NovelExploreCategory({required this.title, required this.url});
+  const NovelExploreCategory({
+    required this.title,
+    required this.url,
+    this.flexBasis,
+    this.flexGrow,
+  });
 
   final String title;
   final String url;
+
+  /// Batch 173: the kind's declared layout hints
+  /// (style.layout_flexBasisPercent / layout_flexGrow) —
+  /// dynamic explore scripts size group headers at 1.0 and
+  /// item chips at 0.25, typically.
+  final double? flexBasis;
+  final double? flexGrow;
+
+  /// A kind with no URL is a group header row in the
+  /// reference, not a fetchable category.
+  bool get isHeader => url.isEmpty;
+
+  static double? _num(dynamic v) =>
+      v is num ? v.toDouble() : double.tryParse(v?.toString() ?? '');
+
+  /// Build categories from decoded kind objects (the
+  /// shape dynamic explore scripts return and static JSON
+  /// declarations use). Entries keep their order; entries
+  /// with an empty title are dropped, empty-URL entries
+  /// stay as headers.
+  static List<NovelExploreCategory> listFromKinds(List<dynamic> kinds) {
+    final out = <NovelExploreCategory>[];
+    for (final e in kinds) {
+      if (e is! Map) continue;
+      final title = e['title']?.toString() ?? '';
+      if (title.isEmpty) continue;
+      final style = e['style'];
+      out.add(NovelExploreCategory(
+        title: title,
+        url: e['url']?.toString() ?? '',
+        flexBasis: style is Map ? _num(style['layout_flexBasisPercent']) : null,
+        flexGrow: style is Map ? _num(style['layout_flexGrow']) : null,
+      ));
+    }
+    return out;
+  }
 }

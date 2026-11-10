@@ -13,6 +13,7 @@ import 'package:anikumo/bean/settings/settings_list.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:anikumo/utils/device.dart';
 import 'package:anikumo/utils/theme.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class ThemeSettingsPage extends StatefulWidget {
   const ThemeSettingsPage({super.key});
@@ -135,7 +136,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
             title: Text('外观'),
             tiles: [
               SettingsDropdownTile<String>(
-                leading: Icons.dark_mode_rounded,
+                leading: AnikumoIcons.dark_mode_rounded,
                 title: const Text('深色模式'),
                 value: defaultThemeMode,
                 fallbackLabel: '跟随系统',
@@ -143,7 +144,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                 onChanged: updateTheme,
               ),
               SettingsTile(
-                leading: Icons.palette_rounded,
+                leading: AnikumoIcons.palette_rounded,
                 enabled: !useDynamicColor,
                 onPressed: (_) async {
                   AnikumoDialog.show(builder: (context) {
@@ -194,7 +195,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                 title: Text('配色方案'),
               ),
               SettingsTile.switchTile(
-                leading: Icons.colorize_rounded,
+                leading: AnikumoIcons.colorize_rounded,
                 enabled: !Platform.isIOS,
                 onToggle: (value) async {
                   useDynamicColor = value ?? !useDynamicColor;
@@ -207,7 +208,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                 initialValue: useDynamicColor,
               ),
               SettingsTile.switchTile(
-                leading: Icons.font_download_rounded,
+                leading: AnikumoIcons.font_download_rounded,
                 onToggle: (value) async {
                   useSystemFont = value ?? !useSystemFont;
                   await GStorage.putSetting(
@@ -233,7 +234,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
             title: Text('显示'),
             tiles: [
               SettingsTile.switchTile(
-                leading: Icons.contrast_rounded,
+                leading: AnikumoIcons.contrast_rounded,
                 onToggle: (value) async {
                   oledEnhance = value ?? !oledEnhance;
                   await GStorage.putSetting(
@@ -252,7 +253,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
               title: Text('窗口'),
               tiles: [
                 SettingsTile.switchTile(
-                  leading: Icons.web_asset_rounded,
+                  leading: AnikumoIcons.web_asset_rounded,
                   onToggle: (value) async {
                     showWindowButton = value ?? !showWindowButton;
                     await GStorage.putSetting(
@@ -270,7 +271,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
               title: Text('屏幕'),
               tiles: [
                 SettingsTile(
-                  leading: Icons.sixty_fps_rounded,
+                  leading: AnikumoIcons.sixty_fps_rounded,
                   onPressed: (_) async {
                     context.pushNamed('/settings/theme/display');
                   },

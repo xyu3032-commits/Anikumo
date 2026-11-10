@@ -2,6 +2,7 @@ import 'package:anikumo/utils/tap_debouncer.dart';
 import 'package:flutter/material.dart';
 import 'package:anikumo/bean/card/network_img_layer.dart';
 import 'package:anikumo/modules/bangumi/bangumi_item.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Batch 44: the anime zone's editorial design kit —
 /// 「番组编辑部」. Shared by the redesigned shell and tab
@@ -72,7 +73,7 @@ class EditorialSectionHeader extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(actionLabel!),
-                      const Icon(Icons.arrow_forward, size: 16),
+                      const Icon(AnikumoIcons.arrow_forward, size: 16),
                     ],
                   ),
                 ),
@@ -202,7 +203,7 @@ class EditorialHero extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               const Icon(
-                                Icons.star_rounded,
+                                AnikumoIcons.star_rounded,
                                 size: 13,
                                 color: Colors.amber,
                               ),
@@ -396,7 +397,7 @@ class _EditorialHeroCarouselState extends State<EditorialHeroCarousel> {
 
 /// A leaderboard row: giant outlined numeral, poster thumb,
 /// title + meta, score at the trailing edge.
-class EditorialRankRow extends StatelessWidget {
+class EditorialRankRow extends StatefulWidget {
   const EditorialRankRow({
     super.key,
     required this.rank,
@@ -418,15 +419,36 @@ class EditorialRankRow extends StatelessWidget {
   final bool enableHero;
 
   @override
+  State<EditorialRankRow> createState() => _EditorialRankRowState();
+}
+
+class _EditorialRankRowState extends State<EditorialRankRow> {
+  // Batch 135: press feedback for the Top rows — the row
+  // eases down a touch while pressed, so a tap feels
+  // physical before the route (and hero flight) starts.
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final title = item.nameCn.isNotEmpty ? item.nameCn : item.name;
-    return InkWell(
+    final title = widget.item.nameCn.isNotEmpty ? widget.item.nameCn : widget.item.name;
+    return AnimatedScale(
+      scale: _pressed && !MediaQuery.disableAnimationsOf(context)
+          ? 0.97
+          : 1,
+      duration: const Duration(milliseconds: 130),
+      curve: Curves.easeOut,
+      child: InkWell(
       // Batch 58: rapid double taps must not stack the
       // detail route twice.
+      onHighlightChanged: (highlighted) {
+        if (highlighted != _pressed) {
+          setState(() => _pressed = highlighted);
+        }
+      },
       onTap: () {
-        if (TapDebouncer.accept('info:${item.id}')) onTap();
+        if (TapDebouncer.accept('info:${widget.item.id}')) widget.onTap();
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -437,10 +459,10 @@ class EditorialRankRow extends StatelessWidget {
                 SizedBox(
                   width: 52,
                   child: Text(
-                    rank.toString().padLeft(2, '0'),
+                    widget.rank.toString().padLeft(2, '0'),
                     style: theme.textTheme.headlineLarge?.copyWith(
                       fontWeight: FontWeight.w900,
-                      color: rank <= 3
+                      color: widget.rank <= 3
                           ? scheme.primary
                           : scheme.onSurface.withValues(alpha: 0.28),
                       height: 1,
@@ -449,26 +471,26 @@ class EditorialRankRow extends StatelessWidget {
                 ),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: enableHero
+                  child: widget.enableHero
                       ? Hero(
                           transitionOnUserGestures: true,
                           flightShuttleBuilder:
                               NetworkImgLayer.heroFlightShuttleBuilder,
-                          tag: item.id,
+                          tag: widget.item.id,
                           child: NetworkImgLayer(
-                            src: item.images['medium'] ??
-                                item.images['large'] ??
+                            src: widget.item.images['medium'] ??
+                                widget.item.images['large'] ??
                                 '',
-                            fallbackSrc: item.images['common'],
+                            fallbackSrc: widget.item.images['common'],
                             width: 46,
                             height: 62,
                           ),
                         )
                       : NetworkImgLayer(
-                          src: item.images['medium'] ??
-                              item.images['large'] ??
+                          src: widget.item.images['medium'] ??
+                              widget.item.images['large'] ??
                               '',
-                          fallbackSrc: item.images['common'],
+                          fallbackSrc: widget.item.images['common'],
                           width: 46,
                           height: 62,
                         ),
@@ -489,9 +511,9 @@ class EditorialRankRow extends StatelessWidget {
                       const SizedBox(height: 3),
                       Text(
                         [
-                          if (item.airDate.length >= 4)
-                            item.airDate.substring(0, 4),
-                          if (item.votes > 0) '${item.votes} 人评分',
+                          if (widget.item.airDate.length >= 4)
+                            widget.item.airDate.substring(0, 4),
+                          if (widget.item.votes > 0) '${widget.item.votes} 人评分',
                         ].join(' · '),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -502,9 +524,9 @@ class EditorialRankRow extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (item.ratingScore > 0)
+                if (widget.item.ratingScore > 0)
                   Text(
-                    item.ratingScore.toStringAsFixed(1),
+                    widget.item.ratingScore.toStringAsFixed(1),
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w800,
                       color: scheme.primary,
@@ -512,7 +534,7 @@ class EditorialRankRow extends StatelessWidget {
                   ),
               ],
             ),
-            if (showDivider) ...[
+            if (widget.showDivider) ...[
               const SizedBox(height: 10),
               Container(
                 height: 1,
@@ -521,6 +543,7 @@ class EditorialRankRow extends StatelessWidget {
             ],
           ],
         ),
+      ),
       ),
     );
   }
@@ -626,7 +649,7 @@ class _EditorialIndexRowState extends State<EditorialIndexRow> {
               const SizedBox(width: 6),
             ],
             Icon(
-              Icons.arrow_forward_ios_rounded,
+              AnikumoIcons.arrow_forward_ios_rounded,
               size: 14,
               color: scheme.outline,
             ),

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import 'package:anikumo/services/manga/js/js_manga_source.dart';
+import 'package:anikumo/services/manga/manga_api.dart';
 import 'package:anikumo/services/manga/js/venera_engine.dart';
 import 'package:anikumo/services/manga/legado_manga_source.dart';
 import 'package:anikumo/services/manga/local_manga_source.dart';
@@ -44,6 +45,28 @@ class MangaSources {
   /// so content refreshes by itself; this only notifies
   /// listeners.
   static void notifyRegistryChanged() => _bump();
+
+  /// Batch 122: drops the memoized entry/installed lists.
+  ///
+  /// The memos key on the stored JSON string, but [installed]
+  /// checks its own cache BEFORE re-reading the string — so a
+  /// write that landed after the last read was invisible until
+  /// some other call happened to re-read the string first:
+  /// the first source imported in a session did not show up
+  /// anywhere until the app restarted (a second import, whose
+  /// installer re-read the string, unblocked both). Every
+  /// writer of the registry JSON must invalidate explicitly.
+  static void _invalidateInstalled() {
+    _entriesRaw = null;
+    _installedCache = null;
+  }
+
+  /// For writers outside this class (backup restore writes
+  /// the registry JSON directly): invalidate + notify.
+  static void invalidateInstalledCaches() {
+    _invalidateInstalled();
+    _bump();
+  }
 
   // ---- downloaded JS sources (Venera format) ----
 
@@ -223,10 +246,18 @@ class MangaSources {
     required String version,
     required String fileName,
     required String code,
+    String? origin,
   }) async {
     if (VeneraEngine.extractClassName(code) == null) {
       throw const FormatException('不是有效的 JS 源文件');
     }
+    // Batch 190: remember where this source's file came
+    // from (its download URL) so the update checker can
+    // re-read it later. An install without an origin
+    // (local file, pasted code, an update applied by the
+    // checker itself passes one explicitly) keeps the
+    // previously recorded origin.
+    final effectiveOrigin = origin ?? originOfKey(key);
     final entries = [
       for (final existing in installedJsEntries())
         if (existing['key'] != key) existing,
@@ -236,13 +267,21 @@ class MangaSources {
         'version': version,
         'fileName': fileName,
         'code': code,
+        if (effectiveOrigin != null) 'origin': effectiveOrigin,
       },
     ];
     await GStorage.putSetting(
       SettingsKeys.mangaJsSourcesJson,
       jsonEncode(entries),
     );
+    _invalidateInstalled();
     _bump();
+    // Batch 185: the facade's memoized results are keyed
+    // by source id, not by source code — a reinstalled or
+    // updated source kept serving its predecessor's cached
+    // searches/chapters/pages until the TTLs expired
+    // (clearCaches existed but had no call sites).
+    MangaApi.clearCaches();
   }
 
   /// Batch 45: reads a Venera source's own metadata (the
@@ -284,7 +323,11 @@ class MangaSources {
   /// the metadata comes from the code itself. Returns the
   /// extracted metadata so the caller can confirm by name.
   static Future<({String key, String name, String version})>
-      installCustomJs(String code, {String fileName = ''}) async {
+      installCustomJs(
+    String code, {
+    String fileName = '',
+    String? origin,
+  }) async {
     if (VeneraEngine.extractClassName(code) == null) {
       throw const FormatException('不是有效的 JS 源文件（没有找到源类）');
     }
@@ -295,8 +338,50 @@ class MangaSources {
       version: meta.version,
       fileName: fileName.isNotEmpty ? fileName : '${meta.key}.js',
       code: code,
+      origin: origin,
     );
     return meta;
+  }
+
+  /// Batch 190: the recorded download URL of an installed
+  /// source's file, when it was installed from one.
+  static String? originOfKey(String key) {
+    for (final entry in installedJsEntries()) {
+      if (entry['key'] == key) {
+        final origin = entry['origin'];
+        if (origin is String && origin.isNotEmpty) return origin;
+      }
+    }
+    return null;
+  }
+
+  /// Batch 190: repository (index) URLs the user has
+  /// imported sources from, in the order they were added.
+  static List<String> sourceRepositories() {
+    final raw = GStorage.getSetting(SettingsKeys.mangaSourceRepos);
+    if (raw.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return [
+          for (final e in decoded)
+            if (e is String && e.isNotEmpty) e,
+        ];
+      }
+    } catch (_) {}
+    return const [];
+  }
+
+  /// Batch 190: remember a repository URL (deduplicated).
+  static Future<void> addSourceRepository(String url) async {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return;
+    final repos = sourceRepositories();
+    if (repos.contains(trimmed)) return;
+    await GStorage.putSetting(
+      SettingsKeys.mangaSourceRepos,
+      jsonEncode([...repos, trimmed]),
+    );
   }
 
   // ---- Batch 47: pinned sources (mirror of the novel
@@ -407,33 +492,57 @@ class MangaSources {
     return (added: added, mangaCount: mangaCount);
   }
 
-  static Future<void> removeInstalled(String id) async {
-    // Batch 67: an adapted Legado source is removed from
-    // the novel registry it lives in.
-    final novelId = LegadoMangaSource.novelIdOf(id);
-    if (novelId != null) {
-      await NovelSources.removeImported(novelId);
+  /// Batch 159: removes a whole set of installed sources
+  /// in one pass per store — the JS registry blob (which
+  /// embeds every source's full code) is re-encoded ONCE
+  /// for the whole set instead of once per source, and the
+  /// adapted entries go through the novel registry's own
+  /// batch removal. Deleting several sources used to pay
+  /// the full blob encode + decode per source and stalled
+  /// the management page. Returns how many were removed.
+  static Future<int> removeInstalledBatch(Set<String> ids) async {
+    if (ids.isEmpty) return 0;
+    var removed = 0;
+    final novelIds = <String>{};
+    final jsIds = <String>{};
+    for (final id in ids) {
+      final novelId = LegadoMangaSource.novelIdOf(id);
+      if (novelId != null) {
+        novelIds.add(novelId);
+      } else if (id.startsWith('js:')) {
+        jsIds.add(id);
+      }
+    }
+    if (novelIds.isNotEmpty) {
+      removed += await NovelSources.removeImportedBatch(novelIds);
+    }
+    if (jsIds.isNotEmpty) {
+      final before = installedJsEntries();
+      final entries = [
+        for (final existing in before)
+          if (!jsIds.contains('js:${existing['key']}')) existing,
+      ];
+      removed += before.length - entries.length;
+      await GStorage.putSetting(
+        SettingsKeys.mangaJsSourcesJson,
+        jsonEncode(entries),
+      );
+      _invalidateInstalled();
+    }
+    if (removed > 0) {
       _bump();
-      if (GStorage.getSetting(SettingsKeys.mangaActiveSource) == id) {
+      MangaApi.clearCaches();
+      // If the active source went away, fall back to the
+      // first remaining one (or none).
+      if (ids.contains(GStorage.getSetting(SettingsKeys.mangaActiveSource))) {
         final rest = all();
         await setActive(rest.isEmpty ? '' : rest.first.id);
       }
-      return;
     }
-    final entries = [
-      for (final existing in installedJsEntries())
-        if ('js:${existing['key']}' != id) existing,
-    ];
-    await GStorage.putSetting(
-      SettingsKeys.mangaJsSourcesJson,
-      jsonEncode(entries),
-    );
-    _bump();
-    if (GStorage.getSetting(SettingsKeys.mangaActiveSource) == id) {
-      // Fall back to the first remaining source (or none).
-      await setActive(
-        entries.isEmpty ? '' : 'js:${entries.first['key']}',
-      );
-    }
+    return removed;
+  }
+
+  static Future<void> removeInstalled(String id) async {
+    await removeInstalledBatch({id});
   }
 }

@@ -8,6 +8,7 @@ import 'package:anikumo/pages/settings/sync/sync_settings_widgets.dart';
 import 'package:anikumo/services/logging/logger.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/services/sync/webdav.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class WebDavServerPage extends StatefulWidget {
   const WebDavServerPage({super.key});
@@ -76,7 +77,7 @@ class _WebDavServerPageState extends State<WebDavServerPage> {
             maxWidth: 640,
             children: [
               const SyncPageIntro(
-                icon: Icons.dns_rounded,
+                icon: AnikumoIcons.dns_rounded,
                 title: '连接 WebDAV',
                 description: '填写云盘或服务器提供的连接信息。',
               ),
@@ -139,8 +140,8 @@ class _WebDavServerPageState extends State<WebDavServerPage> {
                             onPressed: () => setState(
                                 () => _passwordVisible = !_passwordVisible),
                             icon: Icon(_passwordVisible
-                                ? Icons.visibility_off_rounded
-                                : Icons.visibility_rounded),
+                                ? AnikumoIcons.visibility_off_rounded
+                                : AnikumoIcons.visibility_rounded),
                           ),
                         ),
                       ),
@@ -151,7 +152,7 @@ class _WebDavServerPageState extends State<WebDavServerPage> {
               StateActionButton(
                 onPressed: _busy ? null : _save,
                 text: _busy ? '正在测试连接…' : '保存并测试',
-                icon: Icons.cloud_done_rounded,
+                icon: AnikumoIcons.cloud_done_rounded,
               ),
               if (_message != null)
                 SyncFeedback(message: _message!, error: _failed, busy: _busy),

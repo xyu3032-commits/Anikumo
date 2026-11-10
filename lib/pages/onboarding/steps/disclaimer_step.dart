@@ -5,6 +5,7 @@ import 'package:anikumo/bean/widget/loading_indicator.dart';
 import 'package:anikumo/bean/widget/tonal_card.dart';
 import 'package:anikumo/pages/onboarding/onboarding_step_layout.dart';
 import 'package:anikumo/services/logging/logger.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// First-launch disclaimer (batch 55 polish). The legal
 /// text itself is unchanged and still comes verbatim from
@@ -55,7 +56,7 @@ class _DisclaimerStepState extends State<DisclaimerStep> {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     return OnboardingStepLayout(
-      leading: const OnboardingStepIcon(icon: Icons.waving_hand_rounded),
+      leading: const OnboardingStepIcon(icon: AnikumoIcons.waving_hand_rounded),
       title: '欢迎来到 Anikumo',
       child: TonalCard(
         padding: const EdgeInsets.all(24),
@@ -76,7 +77,7 @@ class _DisclaimerStepState extends State<DisclaimerStep> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(children: [
-          Icon(Icons.description_outlined, color: colors.primary),
+          Icon(AnikumoIcons.description_outlined, color: colors.primary),
           const SizedBox(width: 12),
           Expanded(
             child: Text('免责声明',
@@ -153,7 +154,7 @@ class _DisclaimerStepState extends State<DisclaimerStep> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.info_outline_rounded,
+                Icon(AnikumoIcons.info_outline_rounded,
                     size: 20, color: colors.onSecondaryContainer),
                 const SizedBox(width: 10),
                 Expanded(
@@ -189,17 +190,17 @@ class _DisclaimerStepState extends State<DisclaimerStep> {
     final textTheme = Theme.of(context).textTheme;
     const points = [
       (
-        Icons.code_rounded,
+        AnikumoIcons.code_rounded,
         '免费开源',
         '本软件免费获取和使用；若是付费买来的，请向卖家索赔。',
       ),
       (
-        Icons.privacy_tip_outlined,
+        AnikumoIcons.privacy_tip_outlined,
         '不收集个人信息',
         '不会收集、存储或使用你的个人信息。',
       ),
       (
-        Icons.balance_rounded,
+        AnikumoIcons.balance_rounded,
         '合法使用 · 责任自负',
         '仅供学习交流；请遵守法律法规，使用行为与结果由你自行承担。',
       ),

@@ -6,6 +6,7 @@ import 'package:anikumo/services/network/proxy_utils.dart';
 import 'package:anikumo/services/network/proxy_manager.dart';
 import 'package:anikumo/request/core/dio_factory.dart';
 import 'package:anikumo/request/core/network_config.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class ProxyEditorPage extends StatefulWidget {
   const ProxyEditorPage({super.key});
@@ -132,7 +133,7 @@ class _ProxyEditorPageState extends State<ProxyEditorPage> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: saveAndTest,
-        icon: const Icon(Icons.save),
+        icon: const Icon(AnikumoIcons.save),
         label: const Text('保存并测试'),
       ),
     );

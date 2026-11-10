@@ -4,6 +4,7 @@ import 'package:anikumo/bean/widget/anikumo_menu.dart';
 import 'package:anikumo/modules/bangumi/bangumi_item.dart';
 import 'package:anikumo/modules/collect/collect_type.dart';
 import 'package:anikumo/pages/collect/collect_controller.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class CollectButton extends StatefulWidget {
   const CollectButton({
@@ -39,12 +40,12 @@ class _CollectButtonState extends State<CollectButton> {
       type == CollectType.none ? '未追' : type.label;
 
   IconData _iconFor(CollectType type) => switch (type) {
-    CollectType.none => Icons.favorite_border,
-    CollectType.watching => Icons.favorite,
-    CollectType.planToWatch => Icons.star_rounded,
-    CollectType.onHold => Icons.pending_actions,
-    CollectType.watched => Icons.done,
-    CollectType.abandoned => Icons.heart_broken,
+    CollectType.none => AnikumoIcons.favorite_border,
+    CollectType.watching => AnikumoIcons.favorite,
+    CollectType.planToWatch => AnikumoIcons.star_rounded,
+    CollectType.onHold => AnikumoIcons.pending_actions,
+    CollectType.watched => AnikumoIcons.done,
+    CollectType.abandoned => AnikumoIcons.heart_broken,
   };
 
   Future<void> _selectType(CollectType type) async {

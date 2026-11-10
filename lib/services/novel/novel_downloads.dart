@@ -154,7 +154,10 @@ class NovelDownloadStore {
     } catch (e) {
       throw StateError('这一章的内容抓取失败：$e');
     }
-    if (blocks.isEmpty) {
+    // Batch 184: whitespace-only or otherwise unreadable
+    // block lists are not content either — never cache a
+    // blank chapter and call it downloaded.
+    if (!novelBlocksHaveContent(blocks)) {
       throw StateError('这一章没有抓到内容（源规则可能用到了暂不支持的写法）');
     }
     final entry = NovelDownloadEntry(

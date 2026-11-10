@@ -20,6 +20,7 @@ import 'package:anikumo/plugins/plugins.dart';
 import 'package:anikumo/plugins/plugins_controller.dart';
 import 'package:anikumo/services/logging/logger.dart';
 import 'package:anikumo/services/plugin/plugin_import_parser.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class PluginViewPage extends StatefulWidget {
   const PluginViewPage({super.key, required this.controller});
@@ -163,7 +164,7 @@ class _PluginViewPageState extends State<PluginViewPage> {
               ? IconButton(
                   tooltip: '退出多选',
                   onPressed: _leaveSelection,
-                  icon: const Icon(Icons.close_rounded))
+                  icon: const Icon(AnikumoIcons.close_rounded))
               : null,
           actions: [
             if (_selecting)
@@ -172,13 +173,13 @@ class _PluginViewPageState extends State<PluginViewPage> {
                 onPressed: _selected.isEmpty || _deleting
                     ? null
                     : () => _delete(Set.of(_selected)),
-                icon: const Icon(Icons.delete_outline_rounded),
+                icon: const Icon(AnikumoIcons.delete_outline_rounded),
               )
             else
               IconButton(
                 tooltip: '批量选择',
                 onPressed: () => setState(() => _selecting = true),
-                icon: const Icon(Icons.checklist_rounded),
+                icon: const Icon(AnikumoIcons.checklist_rounded),
               ),
             const SizedBox(width: 8),
           ],
@@ -211,13 +212,13 @@ class _PluginViewPageState extends State<PluginViewPage> {
                         RulePageIntro(
                           title: '我的规则',
                           description: '管理你的番剧来源。拖动调整搜索顺序，点按规则进行编辑。',
-                          icon: Icons.extension_rounded,
+                          icon: AnikumoIcons.extension_rounded,
                           actions: [
                             FilledButton.icon(
                                 style: FilledButton.styleFrom(
                                     minimumSize: const Size(120, 48)),
                                 onPressed: _add,
-                                icon: const Icon(Icons.add_rounded),
+                                icon: const Icon(AnikumoIcons.add_rounded),
                                 label: const Text('添加规则')),
                             OutlinedButton.icon(
                                 style: OutlinedButton.styleFrom(
@@ -225,7 +226,7 @@ class _PluginViewPageState extends State<PluginViewPage> {
                                 onPressed: () => context.pushNamed(
                                     '/settings/plugin/repository'),
                                 icon: const Icon(
-                                    Icons.inventory_2_outlined),
+                                    AnikumoIcons.inventory_2_outlined),
                                 label: const Text('规则仓库')),
                           ],
                         ),
@@ -235,13 +236,13 @@ class _PluginViewPageState extends State<PluginViewPage> {
                           onChanged: (_) => setState(() {}),
                           decoration: ruleInputDecoration(context,
                               hint: '搜索名称或站点',
-                              prefix: const Icon(Icons.search_rounded),
+                              prefix: const Icon(AnikumoIcons.search_rounded),
                               suffix: query.isEmpty
                                   ? null
                                   : IconButton(
                                       tooltip: '清除搜索',
                                       onPressed: () => setState(_search.clear),
-                                      icon: const Icon(Icons.close_rounded))),
+                                      icon: const Icon(AnikumoIcons.close_rounded))),
                         ),
                         const SizedBox(height: 12),
                         Wrap(
@@ -279,7 +280,7 @@ class _PluginViewPageState extends State<PluginViewPage> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               const GeneralEmptyState(
-                                icon: Icons.extension_rounded,
+                                icon: AnikumoIcons.extension_rounded,
                                 title: '还没有安装规则',
                                 compact: true,
                               ),
@@ -289,21 +290,21 @@ class _PluginViewPageState extends State<PluginViewPage> {
                               // right where a new user lands.
                               RuleAddGuide(options: [
                                 RuleAddOption(
-                                  icon: Icons.content_paste_rounded,
+                                  icon: AnikumoIcons.content_paste_rounded,
                                   title: '从剪贴板导入',
                                   subtitle: '粘贴规则链接或 JSON，链接会自动下载',
                                   onTap: () =>
                                       _runAddSource(RuleAddSource.clipboard),
                                 ),
                                 RuleAddOption(
-                                  icon: Icons.file_open_outlined,
+                                  icon: AnikumoIcons.file_open_outlined,
                                   title: '从文件导入',
                                   subtitle: '读取本地 JSON 规则文件',
                                   onTap: () =>
                                       _runAddSource(RuleAddSource.file),
                                 ),
                                 RuleAddOption(
-                                  icon: Icons.edit_note_rounded,
+                                  icon: AnikumoIcons.edit_note_rounded,
                                   title: '新建规则',
                                   subtitle: '从模板开始编写',
                                   onTap: () =>
@@ -314,7 +315,7 @@ class _PluginViewPageState extends State<PluginViewPage> {
                           )
                         : visible.isEmpty
                             ? GeneralEmptyState(
-                                icon: Icons.search_off_rounded,
+                                icon: AnikumoIcons.search_off_rounded,
                                 title: '没有符合条件的规则',
                                 actions: [
                                   StateActionButton.tonal(
@@ -374,7 +375,7 @@ class _PluginViewPageState extends State<PluginViewPage> {
                                 index: index,
                                 child: const SizedBox.square(
                                     dimension: 48,
-                                    child: Icon(Icons.drag_indicator_rounded)),
+                                    child: Icon(AnikumoIcons.drag_indicator_rounded)),
                               ),
                             ),
                         ]),
@@ -397,7 +398,7 @@ class _PluginViewPageState extends State<PluginViewPage> {
         builder: (context, toggle) => IconButton(
             tooltip: '${plugin.name} 的更多操作',
             onPressed: toggle,
-            icon: const Icon(Icons.more_horiz_rounded)),
+            icon: const Icon(AnikumoIcons.more_horiz_rounded)),
         menuChildren: [
           AnikumoMenuItem(
               onPressed: () => context.pushNamed('/settings/plugin/editor',

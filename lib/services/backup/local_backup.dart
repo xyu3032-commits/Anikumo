@@ -385,7 +385,7 @@ class LocalBackup {
         SettingsKeys.mangaJsSourcesJson,
         data.mangaJsSourcesJson,
       );
-      MangaSources.notifyRegistryChanged();
+      MangaSources.invalidateInstalledCaches();
     }
     if (data.novelSourcesJson.isNotEmpty) {
       await GStorage.putSetting(

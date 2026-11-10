@@ -8,6 +8,7 @@ import 'package:photo_view/photo_view_gallery.dart';
 import 'package:anikumo/bean/widget/loading_indicator.dart';
 import 'package:anikumo/bean/widget/media_error_widget.dart';
 import 'package:anikumo/utils/device.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class ImageViewerRouteArgs {
   ImageViewerRouteArgs({
@@ -209,7 +210,7 @@ class _ImageViewerState extends State<ImageViewer> {
               ),
               child: IconButton(
                 onPressed: _closePreview,
-                icon: const Icon(Icons.close, color: Colors.white),
+                icon: const Icon(AnikumoIcons.close, color: Colors.white),
               ),
             ),
           ),
@@ -240,7 +241,7 @@ class _ImageViewerState extends State<ImageViewer> {
               bottom: 0,
               child: Center(
                 child: _buildNavButton(
-                  icon: Icons.chevron_left,
+                  icon: AnikumoIcons.chevron_left,
                   onPressed: _currentIndex > 0 ? _goToPreviousImage : null,
                 ),
               ),
@@ -251,7 +252,7 @@ class _ImageViewerState extends State<ImageViewer> {
               bottom: 0,
               child: Center(
                 child: _buildNavButton(
-                  icon: Icons.chevron_right,
+                  icon: AnikumoIcons.chevron_right,
                   onPressed: _currentIndex < widget.imageUrls.length - 1
                       ? _goToNextImage
                       : null,
@@ -267,7 +268,7 @@ class _ImageViewerState extends State<ImageViewer> {
   Widget _buildErrorWidget() => const MediaErrorWidget(
         title: '图片加载失败',
         errMsg: '请检查网络连接，返回后重新打开图片。',
-        icon: Icons.broken_image_outlined,
+        icon: AnikumoIcons.broken_image_outlined,
       );
 
   Widget _buildSingleImage() {

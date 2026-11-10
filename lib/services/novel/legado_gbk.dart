@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
@@ -111,6 +112,63 @@ class Gb2312 {
       }
     }
     return out;
+  }
+
+  /// Batch 165: undo UTF-8 percent-encoding for runs of
+  /// non-ASCII bytes — %E6%96%97 becomes the character it
+  /// encodes again, so [percentEncodeNonAscii] can then
+  /// encode it as GBK. Runs that are not valid UTF-8 (a
+  /// definition's own preset GBK bytes such as %CB%D1,
+  /// plain ASCII escapes such as %20) are left untouched.
+  static String decodeUtf8PercentRuns(String input) {
+    int? hexByteAt(int at) {
+      if (at + 2 >= input.length || input[at] != '%') return null;
+      final hi = int.tryParse(input[at + 1], radix: 16);
+      final lo = int.tryParse(input[at + 2], radix: 16);
+      if (hi == null || lo == null) return null;
+      return hi * 16 + lo;
+    }
+
+    final out = StringBuffer();
+    var i = 0;
+    while (i < input.length) {
+      final first = hexByteAt(i);
+      if (first != null && first >= 0x80) {
+        // Collect the maximal run of non-ASCII %XX bytes.
+        final bytes = <int>[];
+        var j = i;
+        while (true) {
+          final b = hexByteAt(j);
+          if (b == null || b < 0x80) break;
+          bytes.add(b);
+          j += 3;
+        }
+        // Decode the longest valid UTF-8 prefix; re-emit
+        // any undecodable tail bytes verbatim.
+        var consumed = 0;
+        var decoded = '';
+        for (var end = bytes.length; end > 0; end--) {
+          try {
+            decoded = utf8.decode(bytes.sublist(0, end));
+            consumed = end;
+            break;
+          } catch (_) {}
+        }
+        if (consumed > 0) {
+          out.write(decoded);
+          for (var k = consumed; k < bytes.length; k++) {
+            out.write('%');
+            out.write(
+                bytes[k].toRadixString(16).toUpperCase().padLeft(2, '0'));
+          }
+          i = j;
+          continue;
+        }
+      }
+      out.write(input[i]);
+      i++;
+    }
+    return out.toString();
   }
 
   /// Percent-encode the non-ASCII characters of a form body

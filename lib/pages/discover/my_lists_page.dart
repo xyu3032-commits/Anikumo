@@ -11,6 +11,7 @@ import 'package:anikumo/pages/discover/bangumi_picker.dart';
 import 'package:anikumo/services/library/user_library.dart';
 import 'package:anikumo/services/share/share_builders.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// 我的榜单 (hub 区二）: user-created lists over their own collections
 /// and history — e.g. 「本季度神作」「补番计划」 — stored locally as
@@ -88,18 +89,18 @@ class _MyListsPageState extends State<MyListsPage> {
           IconButton(
             tooltip: '新建榜单',
             onPressed: _createList,
-            icon: const Icon(Icons.add),
+            icon: const Icon(AnikumoIcons.add),
           ),
         ],
       ),
       body: _lists.isEmpty
           ? GeneralEmptyState(
-              icon: Icons.list_alt_outlined,
+              icon: AnikumoIcons.list_alt_outlined,
               title: '还没有自建榜单',
               actions: [
                 StateActionButton.tonal(
                   onPressed: _createList,
-                  icon: Icons.add,
+                  icon: AnikumoIcons.add,
                   text: '新建榜单',
                 ),
               ],
@@ -127,7 +128,7 @@ class _MyListsPageState extends State<MyListsPage> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.list_alt_rounded),
+                      const Icon(AnikumoIcons.list_alt_rounded),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
@@ -150,9 +151,9 @@ class _MyListsPageState extends State<MyListsPage> {
                       IconButton(
                         tooltip: '删除榜单',
                         onPressed: () => _deleteList(list),
-                        icon: const Icon(Icons.delete_outline),
+                        icon: const Icon(AnikumoIcons.delete_outline),
                       ),
-                      const Icon(Icons.chevron_right),
+                      const Icon(AnikumoIcons.chevron_right),
                     ],
                   ),
                 );
@@ -239,7 +240,7 @@ class _ListDetailPageState extends State<_ListDetailPage> {
       return Scaffold(
         appBar: const SysAppBar(title: Text('榜单')),
         body: const GeneralEmptyState(
-          icon: Icons.list_alt_outlined,
+          icon: AnikumoIcons.list_alt_outlined,
           title: '这个榜单不存在了',
         ),
       );
@@ -255,28 +256,28 @@ class _ListDetailPageState extends State<_ListDetailPage> {
           IconButton(
             tooltip: '分享为文本',
             onPressed: _shareAsText,
-            icon: const Icon(Icons.share_outlined),
+            icon: const Icon(AnikumoIcons.share_outlined),
           ),
           IconButton(
             tooltip: _editing ? '完成' : '编辑条目',
             onPressed: () => setState(() => _editing = !_editing),
-            icon: Icon(_editing ? Icons.done : Icons.edit_outlined),
+            icon: Icon(_editing ? AnikumoIcons.done : AnikumoIcons.edit_outlined),
           ),
           IconButton(
             tooltip: '添加番剧',
             onPressed: _addItem,
-            icon: const Icon(Icons.add),
+            icon: const Icon(AnikumoIcons.add),
           ),
         ],
       ),
       body: items.isEmpty
           ? GeneralEmptyState(
-              icon: Icons.playlist_add_outlined,
+              icon: AnikumoIcons.playlist_add_outlined,
               title: '榜单还是空的',
               actions: [
                 StateActionButton.tonal(
                   onPressed: _addItem,
-                  icon: Icons.add,
+                  icon: AnikumoIcons.add,
                   text: '从追番/历史中添加',
                 ),
               ],
@@ -306,7 +307,7 @@ class _ListDetailPageState extends State<_ListDetailPage> {
                         child: IconButton.filledTonal(
                           tooltip: '从榜单移除',
                           onPressed: () => _removeItem(item.id),
-                          icon: const Icon(Icons.close, size: 18),
+                          icon: const Icon(AnikumoIcons.close, size: 18),
                         ),
                       ),
                   ],

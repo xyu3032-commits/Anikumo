@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:anikumo/bean/widget/content_section.dart';
 import 'package:anikumo/bean/widget/split_list_row.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 enum _TileKind { plain, toggle, radio }
 
@@ -209,7 +210,7 @@ class SettingsCategoryTile extends StatelessWidget {
               ),
             ),
             Icon(
-              Icons.chevron_right_rounded,
+              AnikumoIcons.chevron_right_rounded,
               color: colorScheme.onSurfaceVariant,
             ),
           ],

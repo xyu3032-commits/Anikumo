@@ -3,6 +3,7 @@ import 'package:anikumo/bean/dialog/dialog_helper.dart';
 import 'package:anikumo/bean/settings/settings_dropdown_tile.dart';
 import 'package:anikumo/modules/danmaku/danmaku_ch_convert.dart';
 import 'package:anikumo/services/storage/storage.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 extension _ConversionLabel on DanmakuChConvert {
   String get label => switch (this) {
@@ -48,7 +49,7 @@ class _DanmakuChConvertTileState extends State<DanmakuChConvertTile> {
           GStorage.getSetting(SettingsKeys.danmakuChConvert),
         );
         return SettingsDropdownTile<DanmakuChConvert>(
-          leading: Icons.translate_rounded,
+          leading: AnikumoIcons.translate_rounded,
           title: const Text('简繁转换'),
           description: const Text('下次联网加载弹幕时生效，已缓存弹幕保留下载时的文字'),
           enabled: !_saving,

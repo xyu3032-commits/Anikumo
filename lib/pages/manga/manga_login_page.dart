@@ -5,6 +5,7 @@ import '../../bean/dialog/dialog.dart';
 import '../../services/manga/manga_source.dart';
 import '../../services/manga/manga_sources.dart';
 import '../../utils/error_message.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Batch 74: sign in to a JS manga source's own account.
 ///
@@ -139,7 +140,7 @@ class _MangaLoginPageState extends State<MangaLoginPage> {
             )
           else if (_probeError != null) ...[
             Icon(
-              Icons.error_outline,
+              AnikumoIcons.error_outline,
               size: 40,
               color: theme.colorScheme.error,
             ),
@@ -151,7 +152,7 @@ class _MangaLoginPageState extends State<MangaLoginPage> {
             FilledButton.tonal(onPressed: _probe, child: const Text('重试')),
           ] else if (_info == null) ...[
             Icon(
-              Icons.account_circle_outlined,
+              AnikumoIcons.account_circle_outlined,
               size: 40,
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -166,7 +167,7 @@ class _MangaLoginPageState extends State<MangaLoginPage> {
             ),
           ] else if (_info!.isLoggedIn) ...[
             Icon(
-              Icons.verified_user_outlined,
+              AnikumoIcons.verified_user_outlined,
               size: 40,
               color: theme.colorScheme.primary,
             ),
@@ -221,8 +222,8 @@ class _MangaLoginPageState extends State<MangaLoginPage> {
                 suffixIcon: IconButton(
                   icon: Icon(
                     _obscurePassword
-                        ? Icons.visibility_outlined
-                        : Icons.visibility_off_outlined,
+                        ? AnikumoIcons.visibility_outlined
+                        : AnikumoIcons.visibility_off_outlined,
                   ),
                   onPressed: () =>
                       setState(() => _obscurePassword = !_obscurePassword),

@@ -4,13 +4,14 @@ import 'package:anikumo/bean/widget/loading_indicator.dart';
 import 'package:anikumo/bean/widget/state_presentation.dart';
 import 'package:anikumo/modules/bangumi/sync_priority.dart';
 import 'package:anikumo/modules/collect/collect_sync_plan.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 enum CollectSyncDestination { webDavSettings, bangumiSettings }
 
 enum CollectSyncStep {
-  webDav('WebDAV 收藏', '合并本地与云端收藏', Icons.cloud_sync_rounded),
-  bangumi('Bangumi 状态', '同步追番状态', Icons.bookmarks_rounded),
-  upload('回传 WebDAV', '上传合并后的收藏', Icons.cloud_upload_rounded);
+  webDav('WebDAV 收藏', '合并本地与云端收藏', AnikumoIcons.cloud_sync_rounded),
+  bangumi('Bangumi 状态', '同步追番状态', AnikumoIcons.bookmarks_rounded),
+  upload('回传 WebDAV', '上传合并后的收藏', AnikumoIcons.cloud_upload_rounded);
 
   const CollectSyncStep(this._title, this._description, this._icon);
 
@@ -192,10 +193,10 @@ class _CollectSyncDialogState extends State<CollectSyncDialog> {
                 : StateIconBadge(
                     key: ValueKey((_finished, failed)),
                     icon: failed
-                        ? Icons.sync_problem_rounded
+                        ? AnikumoIcons.sync_problem_rounded
                         : _finished
-                            ? Icons.done_all_rounded
-                            : Icons.sync_rounded,
+                            ? AnikumoIcons.done_all_rounded
+                            : AnikumoIcons.sync_rounded,
                     size: 64,
                     iconSize: 32,
                     backgroundColor: failed
@@ -272,8 +273,8 @@ class _CollectSyncDialogState extends State<CollectSyncDialog> {
                         ? () => Navigator.of(context).pop()
                         : _start,
                     icon: _finished
-                        ? (failed ? Icons.refresh_rounded : Icons.check_rounded)
-                        : Icons.sync_rounded,
+                        ? (failed ? AnikumoIcons.refresh_rounded : AnikumoIcons.check_rounded)
+                        : AnikumoIcons.sync_rounded,
                     text: _finished ? (failed ? '重新同步' : '完成') : '开始同步',
                   ),
               ],
@@ -293,12 +294,12 @@ class _CollectSyncDialogState extends State<CollectSyncDialog> {
       CollectSyncDestination.webDavSettings => (
           'WebDAV',
           '设置服务器，开启收藏同步',
-          Icons.cloud_sync_rounded
+          AnikumoIcons.cloud_sync_rounded
         ),
       CollectSyncDestination.bangumiSettings => (
           'Bangumi',
           '连接账号，开启状态同步',
-          Icons.bookmarks_rounded
+          AnikumoIcons.bookmarks_rounded
         ),
     };
     return Material(
@@ -311,7 +312,7 @@ class _CollectSyncDialogState extends State<CollectSyncDialog> {
         leading: Icon(icon, color: colors.primary),
         title: Text(title, style: theme.textTheme.titleSmall),
         subtitle: Text(description),
-        trailing: const Icon(Icons.chevron_right_rounded),
+        trailing: const Icon(AnikumoIcons.chevron_right_rounded),
         onTap: () => Navigator.of(context).pop(destination),
       ),
     );
@@ -338,9 +339,9 @@ class _CollectSyncDialogState extends State<CollectSyncDialog> {
       _StepStatus.skipped => '已跳过',
     };
     final icon = switch (state.status) {
-      _StepStatus.succeeded => Icons.check_circle_rounded,
-      _StepStatus.failed => Icons.error_outline_rounded,
-      _StepStatus.skipped => Icons.remove_circle_outline_rounded,
+      _StepStatus.succeeded => AnikumoIcons.check_circle_rounded,
+      _StepStatus.failed => AnikumoIcons.error_outline_rounded,
+      _StepStatus.skipped => AnikumoIcons.remove_circle_outline_rounded,
       _ => state.step._icon,
     };
     return Semantics(
@@ -401,7 +402,7 @@ class _CollectSyncDialogState extends State<CollectSyncDialog> {
                         ),
                         onPressed: () =>
                             Navigator.of(context).pop(state.step._settings),
-                        icon: const Icon(Icons.settings_rounded, size: 18),
+                        icon: const Icon(AnikumoIcons.settings_rounded, size: 18),
                         label: const Text('检查设置'),
                       ),
                     ],

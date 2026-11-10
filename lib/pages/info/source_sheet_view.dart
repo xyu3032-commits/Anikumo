@@ -33,6 +33,8 @@ enum _SourceDisplay { preview, expanded, collapsed }
 
 class _SourceSheetView extends StatefulWidget {
   const _SourceSheetView({
+    this.pickedEpisode,
+    this.onBackToEpisodes,
     required this.keyword,
     required this.groups,
     required this.firstResultSource,
@@ -46,6 +48,15 @@ class _SourceSheetView extends StatefulWidget {
   });
 
   final String keyword;
+  /// Batch 137: in the episode-first flow, the episode the
+  /// viewer already picked (the list below chooses its
+  /// source/line); null in the classic source-first mode.
+  final int? pickedEpisode;
+
+  /// Batch 137: back to the episode grid (episode-first flow
+  /// only); renders the slim context bar above the header.
+  final VoidCallback? onBackToEpisodes;
+
   final List<_SourceSearchGroup> groups;
   final String? firstResultSource;
   final ValueChanged<String> onSourceSearch;
@@ -54,7 +65,10 @@ class _SourceSheetView extends StatefulWidget {
   final ValueChanged<String> onVerify;
   final ValueChanged<String> onOpenBrowser;
   final void Function(String sourceName, SearchItem result) onPlay;
-  final VoidCallback onClose;
+
+  /// Batch 149: null in the embedded （选集 tab) mode — there
+  /// is no sheet to close, so the header shows no ✕.
+  final VoidCallback? onClose;
 
   @override
   State<_SourceSheetView> createState() => _SourceSheetViewState();
@@ -130,6 +144,28 @@ class _SourceSheetViewState extends State<_SourceSheetView> {
       backgroundColor: Colors.transparent,
       body: Column(
         children: [
+          if (widget.onBackToEpisodes != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 6, 16, 0),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(AnikumoIcons.arrow_back_rounded, size: 20),
+                    tooltip: '重选集数',
+                    onPressed: widget.onBackToEpisodes,
+                  ),
+                  Expanded(
+                    child: Text(
+                      '已选第${widget.pickedEpisode}集 · 下面选来源和线路',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium
+                          ?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           MaterialBottomSheetHeader(
             title: '播放来源',
             description: pending > 0
@@ -232,7 +268,7 @@ class _SourceSheetViewState extends State<_SourceSheetView> {
                                 turns: collapsed ? 0 : 0.5,
                                 duration: duration,
                                 curve: splitListMotionCurve,
-                                child: Icon(Icons.expand_more_rounded,
+                                child: Icon(AnikumoIcons.expand_more_rounded,
                                     size: 20, color: colors.onSurfaceVariant),
                               ),
                             ],
@@ -276,7 +312,7 @@ class _SourceSheetViewState extends State<_SourceSheetView> {
           PluginSearchStatus.success ||
           PluginSearchStatus.noResult =>
             GeneralEmptyState(
-              icon: Icons.search_off_rounded,
+              icon: AnikumoIcons.search_off_rounded,
               title: '没有找到匹配结果',
               compact: true,
               actions: [
@@ -336,8 +372,8 @@ class _SourceSheetViewState extends State<_SourceSheetView> {
                     const SizedBox(width: 8),
                     Icon(
                       showAll
-                          ? Icons.unfold_less_rounded
-                          : Icons.expand_more_rounded,
+                          ? AnikumoIcons.unfold_less_rounded
+                          : AnikumoIcons.expand_more_rounded,
                       size: 20,
                       color: primary,
                     ),
@@ -357,7 +393,7 @@ class _SourceSheetViewState extends State<_SourceSheetView> {
           animated: true,
           builder: (context, toggle) => IconButton(
             tooltip: '${group.name} 的更多操作',
-            icon: const Icon(Icons.more_horiz_rounded, size: 20),
+            icon: const Icon(AnikumoIcons.more_horiz_rounded, size: 20),
             onPressed: toggle,
           ),
           menuChildren: [
@@ -407,7 +443,7 @@ class _SourceSheetViewState extends State<_SourceSheetView> {
                       )),
                 ),
                 const SizedBox(width: 16),
-                Icon(Icons.play_arrow_rounded,
+                Icon(AnikumoIcons.play_arrow_rounded,
                     color: theme.colorScheme.primary),
               ],
             ),
@@ -439,14 +475,14 @@ class _SourceSheetViewState extends State<_SourceSheetView> {
     final colors = theme.colorScheme;
     final (icon, title, hint, action, onAction) = requiresVerification
         ? (
-            Icons.verified_user_outlined,
+            AnikumoIcons.verified_user_outlined,
             '需要验证',
             '完成网站验证后继续检索。',
             '进行验证',
             () => widget.onVerify(sourceName),
           )
         : (
-            Icons.error_outline_rounded,
+            AnikumoIcons.error_outline_rounded,
             '检索失败',
             '可以重试，或打开网站检查是否可用。',
             '重试',
@@ -500,6 +536,399 @@ class _SourceSheetViewState extends State<_SourceSheetView> {
                 child: const Text('打开网站'),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Batch 134: the brief holding view while the episode
+/// picker auto-loads the remembered (or first available)
+/// line. Manual source picking stays one tap away.
+class _EpisodeAutoLoadView extends StatelessWidget {
+  const _EpisodeAutoLoadView({
+    required this.onManual,
+    required this.onClose,
+    this.label = '正在准备选集…',
+  });
+
+  final VoidCallback onManual;
+
+  /// Batch 149: null when embedded in the 选集 tab (no ✕).
+  final VoidCallback? onClose;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SafeArea(
+      child: SizedBox(
+        height: 250,
+        child: Column(
+          children: [
+            if (onClose != null)
+              Row(
+                children: [
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(AnikumoIcons.close_rounded),
+                    tooltip: '关闭',
+                    onPressed: onClose,
+                  ),
+                ],
+              ),
+            const SizedBox(height: 18),
+            const LoadingIndicator(),
+            const SizedBox(height: 16),
+            Text(
+              label,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 6),
+            TextButton(
+              onPressed: onManual,
+              child: const Text('手动选择来源'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Batch 134: full-card placeholder for an episode card
+/// whose image is missing or failed to load.
+Widget _episodeImageFallback(ThemeData theme) {
+  return Container(
+    color: theme.colorScheme.surfaceContainerHigh,
+    alignment: Alignment.center,
+    child: Icon(
+      AnikumoIcons.movie_outlined,
+      size: 26,
+      color: theme.colorScheme.onSurfaceVariant,
+    ),
+  );
+}
+
+/// Batch 137: the episode-first picker. The grid opens the
+/// sheet — no source or line has been chosen yet — so every
+/// entry is built from source-independent metadata: the
+/// Bangumi title, the TMDB still when matched, and the
+/// newest record's watched fill. Tapping an episode moves
+/// on to choosing its source and line.
+class _EpisodePickerView extends StatelessWidget {
+  const _EpisodePickerView({
+    required this.title,
+    required this.episodeCount,
+    required this.coverUrl,
+    required this.episodeTitles,
+    required this.stills,
+    required this.watched,
+    required this.onEpisode,
+    required this.onClose,
+  });
+
+  final String title;
+  final int episodeCount;
+  final String coverUrl;
+  final Map<int, String> episodeTitles;
+
+  /// Batch 129: TMDB stills by episode number (may be empty).
+  final Map<int, TmdbEpisodeStill> stills;
+
+  /// Batch 134/137: watched durations by episode number from
+  /// the newest history record (empty when never watched).
+  final Map<int, Duration> watched;
+  final ValueChanged<int> onEpisode;
+
+  /// Batch 149: null when embedded in the 选集 tab (no ✕).
+  final VoidCallback? onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 4, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      Text(
+                        '共 $episodeCount 集 · 先选集，再选线路',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (onClose != null)
+                  IconButton(
+                    icon: const Icon(AnikumoIcons.close_rounded),
+                    tooltip: '关闭',
+                    onPressed: onClose,
+                  ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: GridView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                childAspectRatio: 2.35,
+              ),
+              itemCount: episodeCount,
+              itemBuilder: (context, index) {
+                final episode = index + 1;
+                // Batch 129: a TMDB still beats the series
+                // cover; the Bangumi title still beats TMDB's
+                // episode name; air date rides along as a meta
+                // line when TMDB has it.
+                final still = stills[episode];
+                final cardImage = (still != null && still.imageUrl.isNotEmpty)
+                    ? still.imageUrl
+                    : coverUrl;
+                final subtitle = episodeTitles[episode] ??
+                    (still != null && still.name.isNotEmpty
+                        ? still.name
+                        : '');
+                // Batch 134: the runtime sits beside the
+                // episode number (with the watched position);
+                // the meta line keeps only the air date.
+                final meta = still == null ? '' : still.airDate;
+                final watchedDuration = watched[episode];
+                final totalMinutes = still?.runtimeMinutes ?? 0;
+                final fraction = watchedDuration == null
+                    ? 0.0
+                    : watchFraction(watchedDuration, totalMinutes);
+                final durationLabel = episodeDurationLabel(
+                  watched: watchedDuration,
+                  totalMinutes: totalMinutes,
+                );
+                final isWatched = watchedDuration != null;
+                return Material(
+                  color: theme.colorScheme.surfaceContainerHighest
+                      .withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(12),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => onEpisode(episode),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          // Batch 134 (user revision): the
+                          // episode image fills the whole card
+                          // as its background.
+                          if (cardImage.isNotEmpty)
+                            CachedNetworkImage(
+                              imageUrl: cardImage,
+                              fit: BoxFit.cover,
+                              fadeInDuration: Duration.zero,
+                              fadeOutDuration: Duration.zero,
+                              errorWidget: (context, _, _) =>
+                                  _episodeImageFallback(theme),
+                            )
+                          else
+                            _episodeImageFallback(theme),
+                          // Scrim so the text stays readable
+                          // over any still.
+                          const DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.black38,
+                                  Colors.transparent,
+                                  Colors.black87,
+                                ],
+                                stops: [0, 0.45, 1],
+                              ),
+                            ),
+                          ),
+                          // Batch 134: watched episodes carry a
+                          // grey sweep over the image, in from
+                          // the left as far as the watched share
+                          // of the runtime reaches.
+                          if (fraction > 0)
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: FractionallySizedBox(
+                                widthFactor: fraction,
+                                heightFactor: 1,
+                                child: ColoredBox(
+                                  color: Colors.grey.withValues(alpha: 0.45),
+                                ),
+                              ),
+                            ),
+                          Padding(
+                            padding: const EdgeInsets.all(9),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      '第$episode集',
+                                      style: theme.textTheme.titleSmall
+                                          ?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                        color: isWatched
+                                            ? Colors.white70
+                                            : Colors.white,
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    if (durationLabel.isNotEmpty)
+                                      Text(
+                                        durationLabel,
+                                        style: theme.textTheme.labelSmall
+                                            ?.copyWith(color: Colors.white70),
+                                      ),
+                                  ],
+                                ),
+                                const Spacer(),
+                                if (subtitle.isNotEmpty)
+                                  Text(
+                                    subtitle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                if (meta.isNotEmpty)
+                                  Text(
+                                    meta,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.labelSmall
+                                        ?.copyWith(color: Colors.white60),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Batch 137: the line step of the episode-first flow — the
+/// viewer already picked the episode and a source; when that
+/// source offers several lines, they pick the exact one
+/// here and playback starts.
+class _LineRoadsView extends StatelessWidget {
+  const _LineRoadsView({
+    required this.episode,
+    required this.pluginName,
+    required this.roads,
+    required this.onRoad,
+    required this.onBack,
+    required this.onClose,
+  });
+
+  final int episode;
+  final String pluginName;
+  final List<Road> roads;
+  final ValueChanged<int> onRoad;
+  final VoidCallback onBack;
+
+  /// Batch 149: null when embedded in the 选集 tab (no ✕).
+  final VoidCallback? onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(AnikumoIcons.arrow_back_rounded),
+                  tooltip: '换个源',
+                  onPressed: onBack,
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '第$episode集',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      Text(
+                        '$pluginName · 选择线路',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (onClose != null)
+                  IconButton(
+                    icon: const Icon(AnikumoIcons.close_rounded),
+                    tooltip: '关闭',
+                    onPressed: onClose,
+                  ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView.separated(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              itemCount: roads.length,
+              separatorBuilder: (_, _) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final road = roads[index];
+                return ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                  leading: const Icon(AnikumoIcons.play_circle_outline_rounded),
+                  title: Text(road.name),
+                  subtitle: Text('${road.data.length} 集'),
+                  trailing: const Icon(AnikumoIcons.chevron_right_rounded),
+                  onTap: () => onRoad(index),
+                );
+              },
+            ),
           ),
         ],
       ),

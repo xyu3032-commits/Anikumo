@@ -181,7 +181,18 @@ class MangaDownloadStore {
         .where((f) => f is File && f.path.endsWith('.img'))
         .cast<File>()
         .toList();
-    files.sort((a, b) => a.path.compareTo(b.path));
+    // Batch 185: order by the page number in the file
+    // name, not lexicographically — zero padding made the
+    // two agree only up to page 9999.
+    int pageNo(File f) {
+      final base = f.path.split('/').last;
+      return int.tryParse(base.split('.').first) ?? 1 << 30;
+    }
+
+    files.sort((a, b) {
+      final byNo = pageNo(a).compareTo(pageNo(b));
+      return byNo != 0 ? byNo : a.path.compareTo(b.path);
+    });
     if (files.isEmpty) return null;
     return [for (final f in files) MangaPage('file://${f.path}')];
   }
@@ -218,13 +229,39 @@ class MangaDownloadStore {
       // index entry is only written on full success, so partial
       // chapters never surface as downloaded).
       var done = 0;
+      // Batch 185: a stored page only counts as downloaded
+      // when its head bytes are really an image. Downloads
+      // used to skip any non-empty file and save any 200
+      // response verbatim — an HTML error page served for
+      // one page became a permanent broken page that
+      // resume would never refetch.
+      Future<bool> storedPageIsImage(File file) async {
+        try {
+          if (!await file.exists() || await file.length() < 12) {
+            return false;
+          }
+          final head = await file.openRead(0, 16).fold<List<int>>(
+                <int>[],
+                (acc, chunk) => acc..addAll(chunk),
+              );
+          return looksLikeImageBytes(head);
+        } catch (_) {
+          return false;
+        }
+      }
+
       Future<void> fetchPage(int i) async {
         final name = i.toString().padLeft(4, '0');
         final target = File('${dir.path}/$name.img');
-        if (await target.exists() && await target.length() > 0) {
+        if (await storedPageIsImage(target)) {
           done++;
           onProgress?.call(done, pages.length);
           return;
+        }
+        if (await target.exists()) {
+          // Present but not a valid image (an error page
+          // from an earlier run): drop it and refetch.
+          await target.delete();
         }
         final page = pages[i];
         final spec = mangaPageLoadSpec(
@@ -253,6 +290,10 @@ class MangaDownloadStore {
             options: Options(headers: page.headers),
           );
           await part.rename(target.path);
+          if (!await storedPageIsImage(target)) {
+            await target.delete();
+            throw const FormatException('downloaded page was not an image');
+          }
         }
         done++;
         onProgress?.call(done, pages.length);

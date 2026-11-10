@@ -232,6 +232,9 @@ class _MangaCategoryPageState extends State<MangaCategoryPage> {
   bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = true;
+  // Batch 188: two consecutive dud pages end the list,
+  // not one (see MangaEndOfList).
+  final _endOfList = MangaEndOfList();
   bool _loadMoreFailed = false;
   String? _errorText;
 
@@ -266,6 +269,7 @@ class _MangaCategoryPageState extends State<MangaCategoryPage> {
         _loading = false;
         _errorText = null;
         _nextPage = 2;
+        _endOfList.reset();
         _loadMoreFailed = false;
         _hasMore = items.isNotEmpty;
       });
@@ -299,7 +303,9 @@ class _MangaCategoryPageState extends State<MangaCategoryPage> {
       );
       setState(() {
         _items.addAll(batch.additions);
-        _hasMore = batch.hasMore;
+        _hasMore = _endOfList.record(
+          addedNew: batch.additions.isNotEmpty,
+        );
         _nextPage++;
       });
     } catch (_) {

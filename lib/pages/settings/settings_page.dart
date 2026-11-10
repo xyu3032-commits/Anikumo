@@ -7,6 +7,7 @@ import 'package:anikumo/bean/settings/settings_list.dart';
 import 'package:anikumo/bean/widget/content_section.dart';
 import 'package:anikumo/pages/settings/player_settings.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class _SettingsCategory {
   const _SettingsCategory({
@@ -36,19 +37,25 @@ const List<_SettingsGroup> _settingsGroups = [
       _SettingsCategory(
         label: '播放设置',
         description: '解码、渲染与播放行为',
-        icon: Icons.display_settings_rounded,
+        icon: AnikumoIcons.display_settings_rounded,
         path: '/settings/player',
       ),
       _SettingsCategory(
         label: '弹幕设置',
         description: '弹幕来源与显示效果',
-        icon: Icons.subtitles_rounded,
+        icon: AnikumoIcons.subtitles_rounded,
         path: '/settings/danmaku',
+      ),
+      _SettingsCategory(
+        label: '剧集图片',
+        description: '选集里的每集剧照与资料',
+        icon: AnikumoIcons.image_rounded,
+        path: '/settings/tmdb',
       ),
       _SettingsCategory(
         label: '操作设置',
         description: '播放器按键映射',
-        icon: Icons.keyboard_rounded,
+        icon: AnikumoIcons.keyboard_rounded,
         path: '/settings/keyboard',
       ),
     ],
@@ -59,13 +66,13 @@ const List<_SettingsGroup> _settingsGroups = [
       _SettingsCategory(
         label: '规则管理',
         description: '番剧资源规则',
-        icon: Icons.extension_rounded,
+        icon: AnikumoIcons.extension_rounded,
         path: '/settings/plugin',
       ),
       _SettingsCategory(
         label: '下载设置',
         description: '并发数与弹幕缓存',
-        icon: Icons.downloading_rounded,
+        icon: AnikumoIcons.downloading_rounded,
         path: '/settings/download-settings',
       ),
     ],
@@ -76,37 +83,37 @@ const List<_SettingsGroup> _settingsGroups = [
       _SettingsCategory(
         label: '外观设置',
         description: '主题、配色与字体',
-        icon: Icons.palette_rounded,
+        icon: AnikumoIcons.palette_rounded,
         path: '/settings/theme',
       ),
       _SettingsCategory(
         label: '界面设置',
         description: '启动、窗口行为与展示信息',
-        icon: Icons.pages_rounded,
+        icon: AnikumoIcons.pages_rounded,
         path: '/settings/interface',
       ),
       _SettingsCategory(
         label: '同步设置',
         description: '追番状态与多设备同步',
-        icon: Icons.cloud_rounded,
+        icon: AnikumoIcons.cloud_rounded,
         path: '/settings/sync',
       ),
       _SettingsCategory(
         label: 'Anikumo 增强',
         description: '字体、启动页、定时深色、应用锁、存储与历史工具',
-        icon: Icons.auto_awesome_rounded,
+        icon: AnikumoIcons.auto_awesome_rounded,
         path: '/settings/extras',
       ),
       _SettingsCategory(
         label: '工具箱',
         description: '卡片样式、玻璃效果、本地备份与常用工具',
-        icon: Icons.construction_rounded,
+        icon: AnikumoIcons.construction_rounded,
         path: '/settings/toolbox',
       ),
       _SettingsCategory(
         label: '网络设置',
         description: '访问加速与代理',
-        icon: Icons.language_rounded,
+        icon: AnikumoIcons.language_rounded,
         path: '/settings/proxy',
       ),
     ],
@@ -117,19 +124,19 @@ const List<_SettingsGroup> _settingsGroups = [
       _SettingsCategory(
         label: '更新设置',
         description: '应用与规则更新',
-        icon: Icons.update_rounded,
+        icon: AnikumoIcons.update_rounded,
         path: '/settings/update',
       ),
       _SettingsCategory(
         label: '存储与日志',
         description: '图片缓存与错误日志',
-        icon: Icons.storage_rounded,
+        icon: AnikumoIcons.storage_rounded,
         path: '/settings/storage',
       ),
       _SettingsCategory(
         label: '关于',
         description: '版本与开源信息',
-        icon: Icons.info_outline_rounded,
+        icon: AnikumoIcons.info_outline_rounded,
         path: '/settings/about',
       ),
     ],

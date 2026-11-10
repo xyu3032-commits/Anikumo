@@ -12,6 +12,7 @@ import 'package:anikumo/services/stats/achievements.dart';
 import 'package:anikumo/services/stats/report_stats.dart';
 import 'package:anikumo/services/stats/watch_stats.dart';
 import 'package:anikumo/utils/constants.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// 时光 tab (batch 37): everything personal that used to sit
 /// at the bottom of the discover page as 「我的时光」 — moved
@@ -182,7 +183,7 @@ class _MomentsPageState extends State<MomentsPage> {
                   vertical: 8,
                 ),
                 child: GeneralEmptyState(
-                  icon: Icons.hourglass_empty_rounded,
+                  icon: AnikumoIcons.hourglass_empty_rounded,
                   title: '还没有观看记录',
                   compact: true,
                 ),
@@ -195,7 +196,7 @@ class _MomentsPageState extends State<MomentsPage> {
             ),
             EditorialIndexRow(
               index: '01',
-              icon: Icons.list_alt_outlined,
+              icon: AnikumoIcons.list_alt_outlined,
               title: '我的榜单',
               subtitle: '自建片单',
               trailingText: listCount > 0 ? '$listCount 个' : null,
@@ -204,7 +205,7 @@ class _MomentsPageState extends State<MomentsPage> {
             const EditorialHairline(),
             EditorialIndexRow(
               index: '02',
-              icon: Icons.bar_chart_rounded,
+              icon: AnikumoIcons.bar_chart_rounded,
               title: '观看统计',
               subtitle: '集数与时长',
               onTap: () => context.pushNamed('/tab/discover/watch-stats/'),
@@ -212,7 +213,7 @@ class _MomentsPageState extends State<MomentsPage> {
             const EditorialHairline(),
             EditorialIndexRow(
               index: '03',
-              icon: Icons.sticky_note_2_outlined,
+              icon: AnikumoIcons.sticky_note_2_outlined,
               title: '番剧笔记',
               subtitle: '私人备注',
               trailingText: noteCount > 0 ? '$noteCount 条' : null,
@@ -221,7 +222,7 @@ class _MomentsPageState extends State<MomentsPage> {
             const EditorialHairline(),
             EditorialIndexRow(
               index: '04',
-              icon: Icons.insights_outlined,
+              icon: AnikumoIcons.insights_outlined,
               title: '观看报告',
               subtitle: '月度总结与热力图',
               trailingText: monthly != null && monthly.episodes > 0
@@ -232,7 +233,7 @@ class _MomentsPageState extends State<MomentsPage> {
             const EditorialHairline(),
             EditorialIndexRow(
               index: '05',
-              icon: Icons.emoji_events_outlined,
+              icon: AnikumoIcons.emoji_events_outlined,
               title: '观看成就',
               subtitle: achievements.isEmpty
                   ? '里程碑徽章'
@@ -358,7 +359,7 @@ class _MomentsPageState extends State<MomentsPage> {
                   padding: const EdgeInsets.all(10),
                   minimumSize: const Size(40, 40),
                 ),
-                child: const Icon(Icons.play_arrow_rounded, size: 20),
+                child: const Icon(AnikumoIcons.play_arrow_rounded, size: 20),
               ),
             ),
           ],

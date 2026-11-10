@@ -6,6 +6,7 @@ import 'package:anikumo/pages/history/history_module.dart';
 import 'package:anikumo/pages/logs/logs_page.dart';
 import 'package:anikumo/pages/plugin_editor/plugin_module.dart';
 import 'package:anikumo/pages/settings/danmaku/danmaku_module.dart';
+import 'package:anikumo/pages/settings/tmdb/tmdb_module.dart';
 import 'package:anikumo/pages/settings/decoder_settings.dart';
 import 'package:anikumo/pages/settings/displaymode_settings.dart';
 import 'package:anikumo/pages/settings/download_settings.dart';
@@ -90,6 +91,7 @@ final settingsModule = createModule(
           ..module(aboutModule)
           ..module(pluginModule)
           ..module(danmakuModule)
+          ..module(tmdbModule)
           ..route(
             '/download-settings',
             child: (context, state) => const DownloadSettingsPage(),

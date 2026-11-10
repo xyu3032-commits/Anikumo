@@ -17,10 +17,12 @@ import 'package:anikumo/services/manga/manga_api.dart';
 import 'package:anikumo/services/manga/manga_image_pipeline.dart';
 import 'package:anikumo/services/manga/manga_page_cache.dart';
 import 'package:anikumo/services/manga/manga_source.dart';
+import 'package:anikumo/services/storage/cache_budget_trimmer.dart';
 import 'package:anikumo/services/manga/reader_settings.dart';
 import 'package:anikumo/services/ui/app_extras.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// The manga reader, driven by the Venera-style reading settings:
 /// gallery modes left-to-right and right-to-left (RTL), continuous
@@ -89,6 +91,12 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
   int _autoPageSeconds = 0;
   bool _wakelockEnabled = false;
   Timer? _autoTimer;
+  // Batch 186: scroll-to-load-next-chapter state. The
+  // chapter-end button stays (tap to load); reaching the
+  // end by scrolling now loads the next chapter too —
+  // armed once per chapter so it can never chain-fire.
+  bool _autoNextArmed = true;
+  Timer? _bottomDwell;
   int _autoElapsed = 0;
 
   // Batch 15: in-app dim (M11), pinch-zoom lock (M3), reading
@@ -99,6 +107,13 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
   DateTime _statsStamp = DateTime.now();
   int _pendingPages = 0;
   bool _chapterCounted = false;
+  // Batch 185: chapter-load ticket — a slow chapter fetch
+  // must not land after a newer chapter was requested
+  // (the novel reader's batch-30 guard, which this reader
+  // never had: fast chapter hops could paint the old
+  // chapter's pages under the new chapter's title and
+  // record progress against the wrong chapter).
+  int _loadTicket = 0;
   final Set<String> _prefetching = {};
 
   final ValueNotifier<int> _pageNotifier = ValueNotifier<int>(0);
@@ -113,8 +128,7 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
 
   /// Landscape paged reading shows two-page spreads (batch 14).
   bool _landscape = false;
-  bool get _spreadActive =>
-      !_isContinuous && _landscape && _pages.length > 1;
+  bool get _spreadActive => !_isContinuous && _landscape && _pages.length > 1;
 
   /// Gallery modes lay pages out in display order: RTL reverses
   /// it. In spread mode the unit is a spread, not a page: the
@@ -150,7 +164,12 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
     super.initState();
     final imageCache = PaintingBinding.instance.imageCache;
     _previousImageCacheBytes = imageCache.maximumSizeBytes;
-    imageCache.maximumSizeBytes = 256 * 1024 * 1024;
+    // Batch 145: 256 -> 160 MB while reading. Pages decode
+    // width-capped, so ~160 MB still keeps a generous
+    // window of pages resident around the reading position;
+    // the old cap let a long session hold hundreds of MB of
+    // long-past pages in RAM.
+    imageCache.maximumSizeBytes = 160 * 1024 * 1024;
     _chapters = widget.args.chapters;
     _chapterIndex = widget.args.chapterIndex;
     _pageController = PageController();
@@ -181,9 +200,14 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
       PaintingBinding.instance.imageCache.maximumSizeBytes =
           _previousImageCacheBytes!;
     }
+    // Batch 145: leaving the reader is when the page store
+    // has just grown the most — trim it back to its byte
+    // budget in the background.
+    unawaited(trimMangaPageCache());
     _flushStats();
     _recordProgress(force: true);
     _autoTimer?.cancel();
+    _bottomDwell?.cancel();
     if (_wakelockEnabled) {
       WakelockPlus.disable();
     }
@@ -214,6 +238,9 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
   }
 
   Future<void> _loadChapter(int index, {int initialPage = 0}) async {
+    final ticket = ++_loadTicket;
+    _autoNextArmed = true;
+    _bottomDwell?.cancel();
     _flushStats();
     _chapterCounted = false;
     setState(() {
@@ -230,12 +257,14 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
       chapter.id,
     );
     final cached = ChapterPrefetchCache.peek(cacheKey);
-    final local = cached ??
+    final local =
+        cached ??
         await MangaDownloadStore.localPages(
           _manga.source,
           _manga.id,
           chapter.id,
         );
+    if (ticket != _loadTicket) return;
     // Batch 27: a throwing page fetch previously bypassed
     // the _failed state entirely — the reader spun forever
     // instead of showing its retry UI.
@@ -243,14 +272,14 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
     try {
       pages = local ?? await MangaApi.fetchChapterPages(_manga, chapter);
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || ticket != _loadTicket) return;
       setState(() {
         _loading = false;
         _failed = true;
       });
       return;
     }
-    if (!mounted) return;
+    if (!mounted || ticket != _loadTicket) return;
     setState(() {
       _pages = pages;
       _autoRetriedUrls.clear();
@@ -299,7 +328,10 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
         CachedNetworkImageProvider(
           _pages[index].url,
           headers: _pages[index].headers,
-          maxWidth: _decodeWidth,
+          // Batch 192: warm the decode size the current
+          // mode will actually request (the image cache
+          // keys on it), or the precache misses.
+          maxWidth: _isContinuous ? _stripDecodeWidth : _decodeWidth,
           cacheManager: mangaPageCacheManager,
         ),
         context,
@@ -357,9 +389,7 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
   /// next-chapter prefetch trigger.
   void _onPageTurned() {
     _pendingPages++;
-    if (_pages.isNotEmpty &&
-        _page >= _pages.length - 1 &&
-        !_chapterCounted) {
+    if (_pages.isNotEmpty && _page >= _pages.length - 1 && !_chapterCounted) {
       _chapterCounted = true;
       MangaStatsStore.recordChapterFinished();
     }
@@ -385,11 +415,7 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
     final nextIndex = _chapterIndex + 1;
     if (nextIndex >= _chapters.length) return;
     final next = _chapters[nextIndex];
-    final key = ChapterPrefetchCache.keyOf(
-      _manga.source,
-      _manga.id,
-      next.id,
-    );
+    final key = ChapterPrefetchCache.keyOf(_manga.source, _manga.id, next.id);
     if (ChapterPrefetchCache.peek(key) != null) return;
     if (!_prefetching.add(key)) return;
     final downloaded = await MangaDownloadStore.localPages(
@@ -406,8 +432,11 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
       if (page.url.startsWith('file://')) continue;
       // Batch 102/103: same spec warm-up for the next
       // chapter's first pages.
-      final nextSpec =
-          mangaPageLoadSpec(manga: _manga, chapter: next, page: page);
+      final nextSpec = mangaPageLoadSpec(
+        manga: _manga,
+        chapter: next,
+        page: page,
+      );
       if (nextSpec != null) {
         prefetchProcessedImage(
           cacheManager: mangaPageCacheManager,
@@ -438,6 +467,19 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
     return width.clamp(320, 1600);
   }
 
+  /// Batch 192: strip (continuous) mode never pinch-zooms
+  /// a single page, so its pages decode tighter than the
+  /// paged modes'. At the 1600px cap a tall page is a
+  /// ~30MB bitmap and the cache extent holds several —
+  /// on mid-range phones that memory churn is the scroll
+  /// jank. Paged modes keep the sharper cap for zooming.
+  int get _stripDecodeWidth {
+    final mq = MediaQuery.of(context);
+    var width = (mq.size.width * mq.devicePixelRatio).round();
+    if (SmoothMode.notifier.value) width = width.clamp(320, 900);
+    return width.clamp(320, 1200);
+  }
+
   int _lastRecordedPage = -1;
   String _lastRecordedChapter = '';
   DateTime _lastRecordedAt = DateTime.fromMillisecondsSinceEpoch(0);
@@ -449,7 +491,8 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
   void _recordProgress({bool force = false}) {
     if (_pages.isEmpty) return;
     final now = DateTime.now();
-    final due = force ||
+    final due =
+        force ||
         _chapter.id != _lastRecordedChapter ||
         (_page - _lastRecordedPage).abs() >= 3 ||
         now.difference(_lastRecordedAt) >= const Duration(seconds: 5);
@@ -478,6 +521,25 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
     }
     final max = _scrollController.position.maxScrollExtent;
     if (max <= 0) return;
+    // Batch 186: resting at the very bottom of a chapter
+    // loads the next one (the pull-past-the-end gesture
+    // fires it immediately via the overscroll handler).
+    // The dwell keeps a fast flick that merely passes the
+    // end from triggering it.
+    final nearBottom = _scrollController.position.pixels >= max - 240;
+    if (nearBottom && _autoNextArmed && !_loading) {
+      _bottomDwell ??= Timer(const Duration(milliseconds: 600), () {
+        _bottomDwell = null;
+        if (!mounted || !_scrollController.hasClients) return;
+        final m = _scrollController.position.maxScrollExtent;
+        if (_scrollController.position.pixels >= m - 240) {
+          _maybeAutoNextChapter();
+        }
+      });
+    } else if (!nearBottom) {
+      _bottomDwell?.cancel();
+      _bottomDwell = null;
+    }
     final estimated = ((_scrollController.offset / max) * _pages.length)
         .floor();
     final clamped = estimated.clamp(0, _pages.length - 1);
@@ -486,6 +548,25 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
       _recordProgress();
       _onPageTurned();
     }
+  }
+
+  /// Batch 186: fires the next-chapter load at most once
+  /// per chapter, only when a next chapter exists.
+  void _maybeAutoNextChapter() {
+    if (!_autoNextArmed || _loading || _pages.isEmpty) return;
+    if (_chapterIndex >= _chapters.length - 1) return;
+    _autoNextArmed = false;
+    _bottomDwell?.cancel();
+    _nextChapter();
+  }
+
+  /// Whether the paged view sits on its last display unit
+  /// (in RTL the reading end is display index 0).
+  bool get _atReadingEnd {
+    if (_pages.isEmpty) return false;
+    final count = _spreadActive ? spreadCount(_pages.length) : _pages.length;
+    final display = _displayIndexOf(_page);
+    return _isRtl ? display <= 0 : display >= count - 1;
   }
 
   void _nextChapter() {
@@ -562,7 +643,10 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
         cacheWidth: _decodeWidth,
         gaplessPlayback: true,
         errorBuilder: (context, _, _) => const Center(
-          child: Icon(Icons.broken_image_outlined, color: Colors.white54),
+          child: Icon(
+            AnikumoIcons.broken_image_outlined,
+            color: Colors.white54,
+          ),
         ),
       );
     } else if (spec != null) {
@@ -645,9 +729,7 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
           if (_dim > 0)
             Positioned.fill(
               child: IgnorePointer(
-                child: ColoredBox(
-                  color: Colors.black.withValues(alpha: _dim),
-                ),
+                child: ColoredBox(color: Colors.black.withValues(alpha: _dim)),
               ),
             ),
           if (_showPageNumber && !_loading && _pages.isNotEmpty)
@@ -701,7 +783,10 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
                     children: [
                       IconButton(
                         onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.arrow_back, color: Colors.white),
+                        icon: const Icon(
+                          AnikumoIcons.arrow_back,
+                          color: Colors.white,
+                        ),
                       ),
                       Expanded(
                         child: Column(
@@ -729,11 +814,10 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
                         ),
                       ),
                       IconButton(
-                        onPressed: () => setState(
-                          () => _showDimPanel = !_showDimPanel,
-                        ),
+                        onPressed: () =>
+                            setState(() => _showDimPanel = !_showDimPanel),
                         icon: const Icon(
-                          Icons.brightness_6_rounded,
+                          AnikumoIcons.brightness_6_rounded,
                           color: Colors.white,
                         ),
                         tooltip: '亮度遮罩',
@@ -741,7 +825,7 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
                       IconButton(
                         onPressed: _openSettings,
                         icon: const Icon(
-                          Icons.tune_rounded,
+                          AnikumoIcons.tune_rounded,
                           color: Colors.white,
                         ),
                         tooltip: '阅读设置',
@@ -764,7 +848,7 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
                     child: Row(
                       children: [
                         const Icon(
-                          Icons.brightness_low_rounded,
+                          AnikumoIcons.brightness_low_rounded,
                           color: Colors.white70,
                           size: 20,
                         ),
@@ -773,8 +857,7 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
                             value: _dim,
                             min: 0,
                             max: 0.7,
-                            onChanged: (value) =>
-                                setState(() => _dim = value),
+                            onChanged: (value) => setState(() => _dim = value),
                             onChangeEnd: (value) => GStorage.putSetting(
                               SettingsKeys.mangaReaderDim,
                               value,
@@ -782,7 +865,7 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
                           ),
                         ),
                         const Icon(
-                          Icons.brightness_high_rounded,
+                          AnikumoIcons.brightness_high_rounded,
                           color: Colors.white70,
                           size: 20,
                         ),
@@ -814,7 +897,7 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
                           IconButton(
                             onPressed: _prevChapter,
                             icon: const Icon(
-                              Icons.skip_previous,
+                              AnikumoIcons.skip_previous,
                               color: Colors.white,
                             ),
                             tooltip: '上一话',
@@ -846,7 +929,7 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
                           IconButton(
                             onPressed: _nextChapter,
                             icon: const Icon(
-                              Icons.skip_next,
+                              AnikumoIcons.skip_next,
                               color: Colors.white,
                             ),
                             tooltip: '下一话',
@@ -866,8 +949,21 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
 
   Widget _buildContent() {
     if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(color: Colors.white),
+      // Batch 188: name the chapter being loaded. A bare
+      // spinner on black read as a frozen black screen
+      // when a chapter switch took a while.
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(color: Colors.white),
+            const SizedBox(height: 16),
+            Text(
+              _chapter.title,
+              style: const TextStyle(color: Colors.white70),
+            ),
+          ],
+        ),
       );
     }
     if (_failed) {
@@ -888,142 +984,169 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
     if (_isContinuous) {
       return GestureDetector(
         onTap: () => setState(() => _overlayVisible = !_overlayVisible),
-        child: ListView.builder(
-          controller: _scrollController,
-          // Batch 88: a taller cache extent keeps pages that
-          // just scrolled off alive a little longer, so a
-          // small scroll back doesn't rebuild (and re-flash)
-          // them.
-          scrollCacheExtent: const ScrollCacheExtent.pixels(1600),
-          itemCount: _pages.length + 1,
-          itemBuilder: (context, index) {
-            if (index == _pages.length) {
-              return Padding(
-                padding: const EdgeInsets.all(24),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 640),
-                    child: FilledButton(
-                      onPressed: _nextChapter,
-                      child: const Text('下一话'),
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            // Batch 186: pulling past the last page is a
+            // deliberate "give me the next chapter".
+            if (notification is OverscrollNotification &&
+                notification.overscroll > 0) {
+              _maybeAutoNextChapter();
+            }
+            return false;
+          },
+          child: ListView.builder(
+            controller: _scrollController,
+            // Batch 88: a taller cache extent keeps pages that
+            // just scrolled off alive a little longer, so a
+            // small scroll back doesn't rebuild (and re-flash)
+            // them.
+            scrollCacheExtent: const ScrollCacheExtent.pixels(1600),
+            itemCount: _pages.length + 1,
+            itemBuilder: (context, index) {
+              if (index == _pages.length) {
+                return Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 640),
+                      child: FilledButton(
+                        onPressed: _nextChapter,
+                        child: const Text('下一话'),
+                      ),
                     ),
                   ),
-                ),
+                );
+              }
+              // Batch 73: in landscape the strip no longer
+              // stretches edge to edge — pages stay at a
+              // readable width and sit centered. Portrait
+              // widths are below the cap and unchanged.
+              final screenWidth = MediaQuery.sizeOf(context).width;
+              final width = screenWidth > 640 ? 640.0 : screenWidth;
+              final stripPage = _pages[index];
+              final stripSpec = mangaPageLoadSpec(
+                manga: _manga,
+                chapter: _chapter,
+                page: stripPage,
               );
-            }
-            // Batch 73: in landscape the strip no longer
-            // stretches edge to edge — pages stay at a
-            // readable width and sit centered. Portrait
-            // widths are below the cap and unchanged.
-            final screenWidth = MediaQuery.sizeOf(context).width;
-            final width = screenWidth > 640 ? 640.0 : screenWidth;
-            final stripPage = _pages[index];
-            final stripSpec = mangaPageLoadSpec(
-              manga: _manga,
-              chapter: _chapter,
-              page: stripPage,
-            );
-            return Center(
-              child: stripSpec != null
-                  // Batch 102/103: pipeline pages in the strip
-                  // (see _pageImage).
-                  ? MangaTransformedImage(
-                      key: ValueKey(
-                        '${stripPage.url}#${_nonceFor(stripPage.url)}',
-                      ),
-                      url: stripPage.url,
-                      headers: stripPage.headers,
-                      cacheManager: mangaPageCacheManager,
-                      spec: stripSpec,
-                      width: width,
-                      memCacheWidth: _decodeWidth,
-                      fit: BoxFit.fitWidth,
-                      placeholder: SizedBox(
-                        width: width,
-                        height: width * 1.4,
-                        child: const Center(
-                          child: CircularProgressIndicator(
-                              color: Colors.white54),
+              return Center(
+                child: stripSpec != null
+                    // Batch 102/103: pipeline pages in the strip
+                    // (see _pageImage).
+                    ? MangaTransformedImage(
+                        key: ValueKey(
+                          '${stripPage.url}#${_nonceFor(stripPage.url)}',
                         ),
+                        url: stripPage.url,
+                        headers: stripPage.headers,
+                        cacheManager: mangaPageCacheManager,
+                        spec: stripSpec,
+                        width: width,
+                        memCacheWidth: _stripDecodeWidth,
+                        fit: BoxFit.fitWidth,
+                        placeholder: SizedBox(
+                          width: width,
+                          height: width * 1.4,
+                          child: const Center(
+                            child: CircularProgressIndicator(
+                              color: Colors.white54,
+                            ),
+                          ),
+                        ),
+                        errorWidget: _pageErrorWidget(
+                          stripPage.url,
+                          width * 1.4,
+                        ),
+                      )
+                    : CachedNetworkImage(
+                        key: ValueKey(
+                          '${_pages[index].url}#${_nonceFor(_pages[index].url)}',
+                        ),
+                        imageUrl: _pages[index].url,
+                        httpHeaders: _pages[index].headers,
+                        cacheManager: mangaPageCacheManager,
+                        width: width,
+                        memCacheWidth: _stripDecodeWidth,
+                        fit: BoxFit.fitWidth,
+                        // Batch 88: no fade-in here. The default 500ms
+                        // fade cross-fades FROM the transparent
+                        // placeholder — i.e. from the black scaffold —
+                        // so every page entering during a scroll flashed
+                        // as a black bar that then "disappeared".
+                        // Keeping the old frame on re-resolution stops
+                        // the same flash when an item is rebuilt.
+                        fadeInDuration: Duration.zero,
+                        fadeOutDuration: Duration.zero,
+                        useOldImageOnUrlChange: true,
+                        placeholder: (context, _) => SizedBox(
+                          width: width,
+                          height: width * 1.4,
+                          child: const Center(
+                            child: CircularProgressIndicator(
+                              color: Colors.white54,
+                            ),
+                          ),
+                        ),
+                        errorWidget: (context, _, _) =>
+                            _pageErrorWidget(_pages[index].url, width * 1.4),
                       ),
-                      errorWidget: _pageErrorWidget(
-                        stripPage.url,
-                        width * 1.4,
-                      ),
-                    )
-                  : CachedNetworkImage(
-              key: ValueKey(
-                '${_pages[index].url}#${_nonceFor(_pages[index].url)}',
-              ),
-              imageUrl: _pages[index].url,
-              httpHeaders: _pages[index].headers,
-              cacheManager: mangaPageCacheManager,
-              width: width,
-              memCacheWidth: _decodeWidth,
-              fit: BoxFit.fitWidth,
-              // Batch 88: no fade-in here. The default 500ms
-              // fade cross-fades FROM the transparent
-              // placeholder — i.e. from the black scaffold —
-              // so every page entering during a scroll flashed
-              // as a black bar that then "disappeared".
-              // Keeping the old frame on re-resolution stops
-              // the same flash when an item is rebuilt.
-              fadeInDuration: Duration.zero,
-              fadeOutDuration: Duration.zero,
-              useOldImageOnUrlChange: true,
-              placeholder: (context, _) => SizedBox(
-                width: width,
-                height: width * 1.4,
-                child: const Center(
-                  child: CircularProgressIndicator(color: Colors.white54),
-                ),
-              ),
-              errorWidget: (context, _, _) => _pageErrorWidget(
-                _pages[index].url,
-                width * 1.4,
-              ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       );
     }
-    return PageView.builder(
-      controller: _pageController,
-      physics: _zoomLocked ? const NeverScrollableScrollPhysics() : null,
-      itemCount: _spreadActive ? spreadCount(_pages.length) : _pages.length,
-      onPageChanged: (displayIndex) {
-        _pageNotifier.value = _realPageOf(displayIndex);
-        _autoElapsed = 0;
-        _recordProgress();
-        _precacheAround(_page);
-        _onPageTurned();
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        // Batch 186: swiping past the last page loads the
+        // next chapter (the tap zones already did). The
+        // reading-end edge flips with direction: trailing
+        // in LTR, leading in RTL.
+        if (notification is OverscrollNotification &&
+            _atReadingEnd &&
+            ((_isRtl && notification.overscroll < 0) ||
+                (!_isRtl && notification.overscroll > 0))) {
+          _maybeAutoNextChapter();
+        }
+        return false;
       },
-      itemBuilder: (context, displayIndex) {
-        if (_spreadActive) {
-          final total = spreadCount(_pages.length);
-          final spread = _isRtl ? total - 1 - displayIndex : displayIndex;
-          final visual = spreadVisualPages(
-            spread,
-            _pages.length,
-            rtl: _isRtl,
-          );
+      child: PageView.builder(
+        controller: _pageController,
+        physics: _zoomLocked ? const NeverScrollableScrollPhysics() : null,
+        itemCount: _spreadActive ? spreadCount(_pages.length) : _pages.length,
+        onPageChanged: (displayIndex) {
+          _pageNotifier.value = _realPageOf(displayIndex);
+          _autoElapsed = 0;
+          _recordProgress();
+          _precacheAround(_page);
+          _onPageTurned();
+        },
+        itemBuilder: (context, displayIndex) {
+          if (_spreadActive) {
+            final total = spreadCount(_pages.length);
+            final spread = _isRtl ? total - 1 - displayIndex : displayIndex;
+            final visual = spreadVisualPages(
+              spread,
+              _pages.length,
+              rtl: _isRtl,
+            );
+            return GestureDetector(
+              onTapUp: _handlePagedTap,
+              child: Row(
+                children: [
+                  for (final realIndex in visual)
+                    Expanded(child: _pageImage(realIndex)),
+                ],
+              ),
+            );
+          }
+          final realIndex = _realPageOf(displayIndex);
           return GestureDetector(
             onTapUp: _handlePagedTap,
-            child: Row(
-              children: [
-                for (final realIndex in visual)
-                  Expanded(child: _pageImage(realIndex)),
-              ],
-            ),
+            child: _pageImage(realIndex),
           );
-        }
-        final realIndex = _realPageOf(displayIndex);
-        return GestureDetector(
-          onTapUp: _handlePagedTap,
-          child: _pageImage(realIndex),
-        );
-      },
+        },
+      ),
     );
   }
 }
@@ -1103,7 +1226,7 @@ class _PageErrorState extends State<_PageError> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.broken_image_outlined, color: Colors.white54),
+              Icon(AnikumoIcons.broken_image_outlined, color: Colors.white54),
               SizedBox(height: 8),
               Text(
                 '加载失败，点按重试',

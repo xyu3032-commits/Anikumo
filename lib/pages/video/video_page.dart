@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:canvas_danmaku/models/danmaku_content_item.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
+import 'package:flutter_modular/flutter_modular.dart';
 import 'package:mobx/mobx.dart' as mobx;
 import 'package:screen_brightness_platform_interface/screen_brightness_platform_interface.dart';
 import 'package:window_manager/window_manager.dart';
@@ -16,7 +18,10 @@ import 'package:anikumo/modules/download/download_module.dart';
 import 'package:anikumo/navigation.dart';
 import 'package:anikumo/pages/download/download_controller.dart';
 import 'package:anikumo/pages/download/download_episode_sheet.dart';
+import 'package:anikumo/pages/collect/collect_controller.dart';
 import 'package:anikumo/pages/history/history_controller.dart';
+import 'package:anikumo/pages/info/info_controller.dart';
+import 'package:anikumo/pages/info/source_sheet.dart';
 import 'package:anikumo/pages/player/episode_comments_sheet.dart';
 import 'package:anikumo/pages/player/player_controller.dart';
 import 'package:anikumo/pages/player/player_item.dart';
@@ -32,6 +37,7 @@ import 'package:anikumo/services/player/pip_utils.dart';
 import 'package:anikumo/services/player/timed_shutdown_service.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/utils/device.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class VideoPage extends StatefulWidget {
   const VideoPage({
@@ -68,6 +74,9 @@ class _VideoPageState extends State<VideoPage>
   // Batch 113: exit handover to the in-app mini player.
   bool _exitSettled = false;
   bool _exitToMini = false;
+  // Batch 120: a failed system-PiP entry on exit lets the next
+  // back press leave normally instead of looping.
+  bool _pipExitAttempted = false;
   HistoryController get historyController => widget.historyController;
   DownloadController get downloadController => widget.downloadController;
   late bool playResume;
@@ -93,6 +102,10 @@ class _VideoPageState extends State<VideoPage>
   @override
   void initState() {
     super.initState();
+    // Batch 116: the page reports itself to the mini session so
+    // the floating window hides reliably — route observation alone
+    // missed pushes landing in nested navigators.
+    MiniPlayerSession.instance.setPlayerPageOpen(true);
     videoPageController.applyPlaybackArgs(widget.args);
     windowManager.addListener(this);
 
@@ -157,6 +170,64 @@ class _VideoPageState extends State<VideoPage>
     });
   }
 
+  /// Batch 116: switch the playback SOURCE from inside the player
+  /// (the panel menu's 切换片源). Reuses the info page's source
+  /// sheet with a throwaway info controller for the current anime;
+  /// a pick is applied in place (see [_applySourceSwitch]) instead
+  /// of navigating to a second player page.
+  void _openSourceSwitcher() {
+    if (videoPageController.isOfflineMode) return;
+    final infoController = InfoController(inject<CollectController>())
+      ..bangumiItem = videoPageController.bangumiItem;
+    showAdaptiveBottomSheet<void>(
+      context: context,
+      maxHeightFactor: 0.88,
+      builder: (_) => SourceSheet(
+        infoController: infoController,
+        onPicked: _applySourceSwitch,
+      ),
+    );
+  }
+
+  /// Applies a source pick in place: same episode number and
+  /// playback position carry over when the new source has them.
+  void _applySourceSwitch(OnlineVideoPlaybackArgs newArgs) {
+    if (!mounted) return;
+    final keepEpisode = videoPageController.selectedEpisode.episode;
+    final keepOffset = playerController.playback.playerPosition.inSeconds;
+    videoPageController.applyPlaybackArgs(newArgs);
+    var road = 0;
+    var episode = 1;
+    var offset = 0;
+    final roads = videoPageController.roadList;
+    for (var i = 0; i < roads.length; i++) {
+      if (roads[i].data.length >= keepEpisode) {
+        road = i;
+        episode = keepEpisode;
+        offset = keepOffset;
+        break;
+      }
+    }
+    videoPageController.resetEpisodeState(episode: episode, road: road);
+    videoPageController.historyOffset = offset;
+    _revealCurrentEpisode();
+    // If this pair is the mini session's, the session now plays
+    // the new source — refresh its stored args so leaving and
+    // returning keeps the switch.
+    final session = MiniPlayerSession.instance;
+    if (identical(playerController, session.playerController)) {
+      session.adopt(
+        playerController: playerController,
+        videoPageController: videoPageController,
+        args: newArgs,
+      );
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      changeEpisode(episode, currentRoad: road, offset: offset);
+    });
+  }
+
   void _initOfflineMode() {
     final identity = videoPageController.currentHistoryIdentity;
     videoPageController.historyOffset = identity == null
@@ -181,19 +252,42 @@ class _VideoPageState extends State<VideoPage>
   void _initOnlineMode() {
     videoPageController.historyOffset = 0;
 
-    var progress = historyController.lastWatching(
-        videoPageController.bangumiItem,
-        videoPageController.currentPlugin.name);
-    if (progress != null) {
-      if (videoPageController.roadList.length > progress.road) {
-        if (videoPageController.roadList[progress.road].data.length >=
-            progress.episode) {
-          videoPageController.resetEpisodeState(
-            episode: progress.episode,
-            road: progress.road,
-          );
-          if (playResume) {
-            videoPageController.historyOffset = progress.progress.inSeconds;
+    // Batch 127: an explicit episode pick from the info page
+    // beats history resume — start exactly there, from 0.
+    final args = widget.args;
+    var explicitPick = false;
+    if (args is OnlineVideoPlaybackArgs) {
+      final resolved = resolveInitialEpisode(
+        initialEpisode: args.initialEpisode,
+        initialRoad: args.initialRoad,
+        roadLengths: [
+          for (final road in videoPageController.roadList) road.data.length,
+        ],
+      );
+      if (resolved != null) {
+        videoPageController.resetEpisodeState(
+          episode: resolved.episode,
+          road: resolved.road,
+        );
+        explicitPick = true;
+      }
+    }
+
+    if (!explicitPick) {
+      var progress = historyController.lastWatching(
+          videoPageController.bangumiItem,
+          videoPageController.currentPlugin.name);
+      if (progress != null) {
+        if (videoPageController.roadList.length > progress.road) {
+          if (videoPageController.roadList[progress.road].data.length >=
+              progress.episode) {
+            videoPageController.resetEpisodeState(
+              episode: progress.episode,
+              road: progress.road,
+            );
+            if (playResume) {
+              videoPageController.historyOffset = progress.progress.inSeconds;
+            }
           }
         }
       }
@@ -224,6 +318,9 @@ class _VideoPageState extends State<VideoPage>
   @override
   void dispose() {
     _settleExit();
+    // Batch 116: page gone — the mini window may show again (the
+    // exit settle above decides whether the pair was parked in it).
+    MiniPlayerSession.instance.setPlayerPageOpen(false);
     clearExternalNavigationMark(_route);
     try {
       windowManager.removeListener(this);
@@ -353,21 +450,57 @@ class _VideoPageState extends State<VideoPage>
     }
   }
 
+  /// Batch 120: in the external (system) PiP mode, backing out
+  /// of a playing video should switch into system PiP instead of
+  /// ending playback — the mirror of the in-app mode's exit
+  /// handover. The pop is intercepted (canPop false), PiP entry
+  /// is attempted, and only a failure lets the exit proceed.
+  bool get _shouldInterceptExitForPip =>
+      Platform.isAndroid &&
+      !GStorage.getSetting(SettingsKeys.pipInAppMode) &&
+      playerController.playback.playing &&
+      videoPageController.errorMessage == null &&
+      !videoPageController.loading &&
+      !_pipExitAttempted;
+
+  Future<void> _enterPipInsteadOfExit() async {
+    final entered = await PipUtils.enterAndroidPIPWindow(
+      width: playerController.debug.playerWidth,
+      height: playerController.debug.playerHeight,
+    );
+    if (entered || !mounted) return;
+    _pipExitAttempted = true;
+    setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      onPopInvokedWithResult: (bool didPop, Object? result) {
-        if (didPop) {
-          setState(() => _isExiting = true);
-          _settleExit();
-          if (!_exitToMini) {
-            playerController.beginShutdown();
+    // Batch 120: the Observer wraps the PopScope so canPop can
+    // react to playback state — in external PiP mode a back
+    // press on a playing video is intercepted and routed into
+    // system PiP instead of ending playback.
+    return Observer(builder: (context) {
+      final bool isPip = videoPageController.isPip;
+      final bool interceptPipExit = _shouldInterceptExitForPip;
+      return PopScope(
+        canPop: !interceptPipExit,
+        onPopInvokedWithResult: (bool didPop, Object? result) {
+          if (didPop) {
+            setState(() => _isExiting = true);
+            _settleExit();
+            if (!_exitToMini) {
+              playerController.beginShutdown();
+            }
+          } else if (interceptPipExit) {
+            unawaited(_enterPipInsteadOfExit());
           }
-        }
-      },
-      child: Observer(builder: (context) {
-        final bool isPip = videoPageController.isPip;
-        return VideoSystemBars(
+        },
+        child: VideoSystemBars(
           fullscreen: videoPageController.isFullscreen,
           isPip: isPip,
           child: Scaffold(
@@ -396,9 +529,9 @@ class _VideoPageState extends State<VideoPage>
               ),
             ),
           ),
-        );
-      }),
-    );
+        ),
+      );
+    });
   }
 
   Widget _buildPlayerBody(VideoPlayerLayout layout) {
@@ -419,7 +552,7 @@ class _VideoPageState extends State<VideoPage>
                       return MediaErrorWidget(
                         title: '暂时无法播放',
                         errMsg: errorMessage,
-                        icon: Icons.videocam_off_outlined,
+                        icon: AnikumoIcons.videocam_off_outlined,
                       );
                     }
                     return Center(
@@ -476,7 +609,7 @@ class _VideoPageState extends State<VideoPage>
                       child: Row(
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.arrow_back,
+                            icon: const Icon(AnikumoIcons.arrow_back,
                                 color: Colors.white),
                             onPressed: _onBackPressed,
                           ),
@@ -484,7 +617,7 @@ class _VideoPageState extends State<VideoPage>
                               child: dtb.DragToMoveArea(
                                   child: SizedBox(height: 40))),
                           IconButton(
-                            icon: const Icon(Icons.refresh_outlined,
+                            icon: const Icon(AnikumoIcons.refresh_outlined,
                                 color: Colors.white),
                             onPressed: () {
                               changeEpisode(
@@ -497,15 +630,15 @@ class _VideoPageState extends State<VideoPage>
                             IconButton(
                               onPressed: _toggleSidePanel,
                               icon: const Icon(
-                                Icons.menu_open_rounded,
+                                AnikumoIcons.menu_open_rounded,
                                 color: Colors.white,
                               ),
                             ),
                           IconButton(
                             icon: Icon(
                                 showDebugLog
-                                    ? Icons.bug_report
-                                    : Icons.bug_report_outlined,
+                                    ? AnikumoIcons.bug_report
+                                    : AnikumoIcons.bug_report_outlined,
                                 color: Colors.white),
                             onPressed: _toggleDebugConsole,
                           ),
@@ -532,6 +665,9 @@ class _VideoPageState extends State<VideoPage>
                   keyboardFocus: keyboardFocus,
                   disableAnimations: disableAnimations,
                   pauseForTimedShutdown: pauseForTimedShutdown,
+                  onSwitchSource: videoPageController.isOfflineMode
+                      ? null
+                      : _openSourceSwitcher,
                 ),
         ),
       ],

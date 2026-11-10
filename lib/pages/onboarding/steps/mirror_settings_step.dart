@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:anikumo/bean/settings/network_mirror_settings.dart';
 import 'package:anikumo/pages/onboarding/onboarding_step_layout.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class MirrorSettingsStep extends StatelessWidget {
   const MirrorSettingsStep({super.key});
@@ -8,7 +9,7 @@ class MirrorSettingsStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) => const OnboardingStepLayout(
     leading: OnboardingStepIcon(
-      icon: Icons.public_rounded,
+      icon: AnikumoIcons.public_rounded,
       shape: OnboardingIconShape.clover,
     ),
     title: '让连接更顺畅',

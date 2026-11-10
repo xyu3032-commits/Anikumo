@@ -3,6 +3,7 @@ import 'package:flutter_modular/flutter_modular.dart';
 import 'package:anikumo/bean/widget/error_widget.dart';
 import 'package:anikumo/bean/widget/state_presentation.dart';
 import 'package:anikumo/services/network/bangumi_acceleration.dart';
+import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 class BangumiMirrorErrorWidget extends StatelessWidget {
   const BangumiMirrorErrorWidget({
@@ -21,7 +22,7 @@ class BangumiMirrorErrorWidget extends StatelessWidget {
     return GeneralErrorWidget(
       title: '暂时无法加载番剧',
       errMsg: '请检查网络连接，或调整加速设置后重试。\n番剧条目加速：${acceleration.label}',
-      icon: Icons.cloud_off_rounded,
+      icon: AnikumoIcons.cloud_off_rounded,
       onRetry: onRetry,
       actions: [
         StateActionButton.tonal(
@@ -29,7 +30,7 @@ class BangumiMirrorErrorWidget extends StatelessWidget {
             await context.pushNamed('/settings/proxy/');
             onSettingsReturned?.call();
           },
-          icon: Icons.tune_rounded,
+          icon: AnikumoIcons.tune_rounded,
           text: '加速设置',
         ),
       ],
