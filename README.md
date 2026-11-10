@@ -1,10 +1,25 @@
 <p align="center">
-  <img src="assets/app_icon.png" width="160" alt="Anikumo 图标">
+  <img src="assets/app_icon.png" width="180" alt="Anikumo 图标">
 </p>
 
 <h1 align="center">Anikumo</h1>
 
-<p align="center"><b>动漫、漫画、小说，一部 App 全装下</b></p>
+<p align="center">
+  <font size="4"><b>动漫 · 漫画 · 小说 —— 一部 App，全装下</b></font>
+</p>
+
+<p align="center">
+  开源免费 · 无广告 · 规则驱动 · 内置弹幕 · 自研墨源小说引擎<br>
+  Android / Windows / macOS / Linux / iOS 五平台
+</p>
+
+<p align="center">
+  <a href="https://github.com/xyu3032-commits/Anikumo/releases"><img src="https://img.shields.io/github/v/release/xyu3032-commits/Anikumo?label=%E6%9C%80%E6%96%B0%E7%89%88&color=6A48E0" alt="最新版"></a>
+  <a href="https://github.com/xyu3032-commits/Anikumo/releases"><img src="https://img.shields.io/github/downloads/xyu3032-commits/Anikumo/total?label=%E6%80%BB%E4%B8%8B%E8%BD%BD&color=2ea44f" alt="总下载"></a>
+  <a href="https://anikumo-brown.vercel.app/"><img src="https://img.shields.io/badge/%E5%AE%98%E7%BD%91-anikumo--brown.vercel.app-6A48E0" alt="官网"></a>
+  <a href="https://github.com/xyu3032-commits/Anikumo/issues"><img src="https://img.shields.io/badge/%E5%8F%8D%E9%A6%88-Issues-d73a4a" alt="反馈 Issues"></a>
+  <img src="https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF%E8%AF%81-GPL--3.0-blue" alt="许可证 GPL-3.0">
+</p>
 
 <p align="center">
   <a href="https://anikumo-brown.vercel.app/">官网</a> ·
@@ -13,38 +28,38 @@
   <a href="docs/用户手册.md">用户手册</a> ·
   <a href="docs/常见问题.md">常见问题</a> ·
   <a href="docs/免责手册.md">免责手册</a> ·
-  <a href="docs/墨源-MoYuan-手册.md">墨源手册</a>
+  <a href="docs/墨源-MoYuan-手册.md"><b>墨源手册</b></a>
 </p>
 
-<p align="center">
-  <a href="https://github.com/xyu3032-commits/Anikumo/releases"><img src="https://img.shields.io/badge/下载-v1.0.1-2ea44f" alt="下载 v1.0.1"></a>
-  <a href="https://anikumo-brown.vercel.app/"><img src="https://img.shields.io/badge/官网-anikumo--brown.vercel.app-6A48E0" alt="官网"></a>
-  <a href="https://github.com/xyu3032-commits/Anikumo/issues"><img src="https://img.shields.io/badge/反馈-Issues-d73a4a" alt="反馈 Issues"></a>
-  <img src="https://img.shields.io/badge/许可证-GPL--3.0-blue" alt="许可证 GPL-3.0">
-</p>
-
-<p align="center">
-  开源免费 · 无广告 · 无内置片库<br>
-  当前版本 1.0.2 ｜ 主平台 Android（另有 Windows / macOS / Linux / iOS）｜ 许可证 GPL-3.0
-</p>
+> [!IMPORTANT]
+> **为什么选 Anikumo？** 软件本身不存放任何内容——动漫、漫画、小说全部来自你自己导入的规则与源。无广告、无捆绑、无内置片库；你的数据只存在你自己的设备与自备的 WebDAV 里。
 
 ---
+
+## ✨ 亮点
+
+| | |
+|---|---|
+| 🎬 **三合一** | 动漫、漫画、小说一个 App 搞定，跨区一搜即达，不用来回切 App |
+| 🧩 **规则驱动** | 内容源全开放：自己导入、自己掌控、随时增删 |
+| 💬 **内置弹幕** | 看番自带弹幕氛围，发送的弹幕保存在本地 |
+| ⚡ **快而稳** | 为几十个源、几百话内容做过专项性能治理与故障自愈 |
+| 🎨 **好看** | 鸢尾紫编辑部刊头风、悬浮胶囊导航、五种卡片、深浅双主题 |
+| 🔒 **干净** | 无广告、无捆绑，数据归你：本地存储 + WebDAV 同步 |
+
+<table>
+  <tr>
+    <td align="center" width="33%"><b>📺 动漫区</b><br>Bangumi 数据 · 多源聚合搜索<br>内置弹幕 · 放送时间表 · 追番</td>
+    <td align="center" width="33%"><b>📖 漫画区</b><br>条漫 / 翻页双模式<br>源更新自动检查 · 书柜分组</td>
+    <td align="center" width="33%"><b>📚 小说区</b><br>自研墨源 MoYuan JS 引擎<br>订阅源 · 全链诊断 · 功能仓库</td>
+  </tr>
+</table>
 
 ## 这是什么
 
 Anikumo 是一款**使用 Kazumi 的整体框架制作的动漫软件**，漫画区使用了 **Venera 的漫画框架**，在此基础上扩展出动漫、漫画、小说三大内容区，成为一部三合一应用：又能跨区一搜即达。
 
 全自研界面：鸢尾紫 + 编辑部刊头风 + 悬浮胶囊导航。软件本身不存放任何内容，内容全部来自你自己导入的规则与源——你的数据、你的规则、你的节奏。
-
-## 亮点
-
-| | |
-|---|---|
-| **三合一** | 动漫 + 漫画 + 小说，不用来回切 App |
-| **规则驱动** | 内容源全开放，自己导入、自己掌控 |
-| **快** | 为几十个书源、几百话漫画做过专项性能治理 |
-| **干净** | 无广告、无捆绑、数据归你（本地 + 自备 WebDAV） |
-| **好看** | 鸢尾紫编辑风、五种卡片、玻璃质感、深浅双主题 |
 
 ## 下载
 
