@@ -2,7 +2,7 @@
 
 MangaKit 是 Anikumo 漫画区使用的**自研漫画 JavaScript 源框架引擎**：
 独立项目、零依赖、单文件 bundle、宿主能力靠注入。它负责把漫画源定义
-（自主 API 源，或经兼容层接入的 Venera 风格源文件）执行成统一的
+（自主 API 源，或经兼容层接入的旧框架风格源文件）执行成统一的
 探索 / 搜索 / 详情 / 章节 / 图片数据，供 App 漫画区展示。
 
 - 引擎本体：独立 JS 框架库（ES Modules 源码），当前版本 **0.1.0**，桥协议 **v1**。
@@ -30,7 +30,7 @@ MangaKit 是「源代码托管框架」——**源本身就是一段 JS 程序**
 
 - 自主源 API：`Manga.defineSource({...})` 一次定义搜索、探索、详情、章节、
   图片、分类、缩略图、账号与设置，框架统一分发与归一化
-- Venera 兼容层（独立模块）：Venera 风格源文件（`class X extends ComicSource`）
+- 兼容层（独立模块）：旧框架风格源文件（`class X extends ComicSource`）
   可直接注册运行；不兼容面在注册诊断里明示，不静默吞
 - 宿主靠注入：宿主只提供一个桥对象（http / store / cookies / ui / image / log），
   框架核心不 import 任何宿主代码，桥签名定死、协议带版本
@@ -45,7 +45,7 @@ MangaKit 是「源代码托管框架」——**源本身就是一段 JS 程序**
 
 普通读者不需要接触框架本身，只需要漫画源：
 
-1. **导入**：漫画区 → 源管理页导入源文件（Venera 风格源经兼容层注册，
+1. **导入**：漫画区 → 源管理页导入源文件（旧框架风格源经兼容层注册，
    自主 API 源直接注册）。注册时框架先校验源清单再跑初始化，
    校验不过或初始化失败的源会停在 failed 状态并记录原因，不会半残运行。
 2. **管理与设置**：源在定义里声明的设置项（线路、接口地址、画质等）由 App 渲染，
@@ -87,7 +87,7 @@ MangaKit（默认）与旧引擎共用同一持久化存档，切换不丢源与
 | 解析层 | 内置 HTML 解析与选择器、Convert 编解码/哈希/AES（`parser/`） |
 | 数据层 | 清单校验与全部返回值的归一化（`core/validate.js`） |
 | 源执行层 | 注册表与生命周期状态机、统一分发器（预算、刷新守卫、分节并发）（`source/`） |
-| 兼容层 | Venera 风格源的全局垫片与形状翻译，独立模块、核心零感知（`compat/venera.js`） |
+| 兼容层 | 旧框架风格源的全局垫片与形状翻译，独立模块、核心零感知（`compat/venera.js`） |
 
 ### 3.2 一次搜索的全过程
 
@@ -224,7 +224,7 @@ MangaKit（默认）与旧引擎共用同一持久化存档，切换不丢源与
    墙页原样交回源处理，源抛出的验证类错误在分发器边界同样被归类为
    `MK_VERIFICATION_REQUIRED`——宿主永远能用一个错误码统一处理。
 
-### 3.8 兼容层怎么工作（Venera 风格源）
+### 3.8 兼容层怎么工作（旧框架风格源）
 
 兼容层（`src/compat/venera.js`）是与核心解耦的独立模块，核心里没有它的任何概念：
 
@@ -525,7 +525,7 @@ callback 函数本体不外泄）。写值走 `engine.writeSetting`：
   封面同理有 `coverTransformOf`，封面二次加工经 `thumbnails` kind 触发。
 - **钩子执行（三个 kind）**：源若实现了 `imageOnResponse / imageModify / imageFallback`
   处理函数，宿主以 4.2 的三个 kind 驱动它们对图片字节做实际处理
-  （入参/出参均为 base64 字节）。兼容层里这三个钩子对应 Venera 风格源的
+  （入参/出参均为 base64 字节）。兼容层里这三个钩子对应旧框架风格源的
   onImageLoad / modifyImage / onLoadFailed，其 `Image` 类经同步通道
   `globalThis.__mkImageSync(json) -> json` 操作宿主侧的解码注册表，
   op 包括 `createFromBytes / encode / copyRange / copyAndRotate90 /
@@ -567,7 +567,7 @@ cookies 5s、ui 不限（用户节奏）、image 30s、log 1s；函数缺失抛
 同一规则。单源数据按 `sourceKey` 隔离是桥的契约——store / cookies 的实现
 必须以 `env.sourceKey` 分桶。
 
-### 4.11 兼容层调用（Venera 风格源）
+### 4.11 兼容层调用（旧框架风格源）
 
 ```js
 const { manifest, diagnostics } = await kit.registerVeneraSource(codeText);
@@ -623,9 +623,9 @@ const { manifest, diagnostics } = await kit.registerVeneraSource(codeText);
 `{ load }` 形式、explore 可写分节数组。没有「部分支持」的接口面——
 源没实现的 kind 明确给 `MK_UNSUPPORTED_KIND`，宿主据此隐藏对应入口即可。
 
-### 6.2 Venera 兼容层
+### 6.2 兼容层（旧框架风格源）
 
-兼容层目标是让 Venera 风格源文件**原样**注册运行：类式定义、全局对象、
+兼容层目标是让旧框架风格源文件**原样**注册运行：类式定义、全局对象、
 设置与账号形状都由垫片承接（机制见 3.8）。口径如下：
 
 - **已映射**：探索（含分节）、搜索（含 loadNext 式令牌分页）、详情、章节、
@@ -642,7 +642,7 @@ const { manifest, diagnostics } = await kit.registerVeneraSource(codeText);
 
 ### 6.3 活验基线（0.1.0）
 
-用户指定源 `copy_manga.js`（v1.4.3，来自 venera-configs）全链活验通过，
+一份真实源文件 `copy_manga.js`（v1.4.3）全链活验通过，
 关键数字与旧引擎已验证基线一致：
 
 | 环节 | 结果 |
@@ -668,7 +668,7 @@ const { manifest, diagnostics } = await kit.registerVeneraSource(codeText);
 - **未验项**（0.1.0 测试报告口径）：长期运行、并发压测、内存上限触发行为未测；
   参考宿主只在桌面 QuickJS 探针台跑过，框架层面的 Android 真机行为以
   Anikumo 接入后的真机验证为准。
-- 我们**不宣称与 Venera 生态完全兼容**：兼容层是行为映射，
+- 我们**不宣称与旧框架生态完全兼容**：兼容层是行为映射，
   未映射面与语义差异（3.8）都写在明处，注册诊断就是判定依据。
 
 ---
@@ -683,7 +683,7 @@ src/core/             桥客户端、错误码、日志（脱敏/环形）、校
 src/network/          HTTP 客户端：Cookie 经桥、GET 缓存/在途合并、限流闸、验证墙重放
 src/parser/           HTML 解析与选择器、Convert（编解码/哈希）、AES
 src/source/           注册表与清单、生命周期、ctx 能力面、统一分发器、引擎门面
-src/compat/           Venera 兼容层（独立模块，核心零感知）
+src/compat/           兼容层（独立模块，核心零感知）
 ```
 
 项目其余部分：
