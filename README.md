@@ -51,10 +51,22 @@
 
 <table>
   <tr>
-    <td align="center" width="25%"><b>📺 动漫区</b><br>Bangumi 数据 · 多源聚合搜索<br>内置弹幕 · 放送时间表 · 追番</td>
-    <td align="center" width="25%"><b>📖 漫画区</b><br>自研 MangaKit 引擎 · 双模式阅读<br>源更新自动检查 · 书柜分组</td>
-    <td align="center" width="25%"><b>📚 小说区</b><br>自研墨源 MoYuan JS 引擎<br>订阅源 · 全链诊断 · 功能仓库</td>
-    <td align="center" width="25%"><b>🎬 影视区</b><br>自研流光 LiuGuang 框架<br>TMDB / Bangumi 资料 · 云端片单</td>
+    <td align="center"><img src="screenshots/01_recommend.jpg" width="240" alt="推荐"><br>推荐</td>
+    <td align="center"><img src="screenshots/02_featured.jpg" width="240" alt="精选"><br>精选</td>
+    <td align="center"><img src="screenshots/03_discover.jpg" width="240" alt="发现"><br>发现</td>
+    <td align="center"><img src="screenshots/04_time.jpg" width="240" alt="时光 · 继续观看"><br>时光</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/05_timeline.jpg" width="240" alt="放送时间表"><br>时间表</td>
+    <td align="center"><img src="screenshots/06_mine.jpg" width="240" alt="我的"><br>我的</td>
+    <td align="center"><img src="screenshots/07_manga.jpg" width="240" alt="漫画 · 首页"><br>漫画</td>
+    <td align="center"><img src="screenshots/08_novel.jpg" width="240" alt="小说 · 首页"><br>小说</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/09_film_featured.jpg" width="240" alt="影视 · 精选"><br>影视 · 精选</td>
+    <td align="center"><img src="screenshots/10_film_discover.jpg" width="240" alt="影视 · 发现"><br>影视 · 发现</td>
+    <td align="center"><img src="screenshots/11_film_settings.jpg" width="240" alt="影视 · 设置"><br>影视 · 设置</td>
+    <td></td>
   </tr>
 </table>
 
@@ -83,7 +95,7 @@ Anikumo 是一款**使用 Kazumi 的整体框架制作的动漫软件**，漫画
 
 ## 界面预览
 
-> 截图中的作品名、海报与封面已做示例化处理（替换为渐变色块与「示例番剧 / 示例漫画」），不对应任何真实作品。
+> 截图为 1.0.3 真机界面，图中的作品名（剧名 / 片名）与来源、接口名已做模糊处理。
 
 <table>
   <tr>
