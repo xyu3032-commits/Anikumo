@@ -18,6 +18,7 @@
   <a href="https://github.com/xyu3032-commits/Anikumo/releases"><img src="https://img.shields.io/github/downloads/xyu3032-commits/Anikumo/total?label=%E6%80%BB%E4%B8%8B%E8%BD%BD&color=2ea44f" alt="总下载"></a>
   <a href="https://anikumo-brown.vercel.app/"><img src="https://img.shields.io/badge/%E5%AE%98%E7%BD%91-anikumo--brown.vercel.app-6A48E0" alt="官网"></a>
   <a href="https://github.com/xyu3032-commits/Anikumo/issues"><img src="https://img.shields.io/badge/%E5%8F%8D%E9%A6%88-Issues-d73a4a" alt="反馈 Issues"></a>
+  <a href="https://discord.gg/dBwruBWyKE"><img src="https://img.shields.io/badge/%E5%AE%98%E6%96%B9%E7%BE%A4-Discord-5865F2?logo=discord&logoColor=white" alt="Discord 官方群"></a>
   <img src="https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF%E8%AF%81-GPL--3.0-blue" alt="许可证 GPL-3.0">
 </p>
 
@@ -25,6 +26,7 @@
   <a href="https://anikumo-brown.vercel.app/">官网</a> ·
   <a href="https://github.com/xyu3032-commits/Anikumo/releases">下载</a> ·
   <a href="https://github.com/xyu3032-commits/Anikumo/issues">反馈</a> ·
+  <a href="https://discord.gg/dBwruBWyKE">Discord 官方群</a> ·
   <a href="docs/用户手册.md">用户手册</a> ·
   <a href="docs/常见问题.md">常见问题</a> ·
   <a href="docs/免责手册.md">免责手册</a> ·
@@ -213,6 +215,10 @@ A：记下设备型号、系统版本、App 版本和复现步骤，到 [Issues]
 - [墨源 MoYuan 手册](docs/墨源-MoYuan-手册.md)——小说区自研 JS 引擎的说明：使用方法、兼容范围与开源信息
 - [MangaKit 手册](docs/MangaKit-手册.md)——漫画区自研 JS 框架的说明：宿主桥接、源编写、兼容范围与已知边界
 - [流光 LiuGuang 手册](docs/流光-LiuGuang-手册.md)——影视区自研框架引擎的说明：21 包架构、SDK 调用、数据落点与已知限制
+
+## 💬 官方社区
+
+加入 [Discord 官方群](https://discord.gg/dBwruBWyKE)：交流使用心得、反馈问题、第一时间获取更新与公告，还可以参与动漫 / 漫画 / 小说 / 影视专区讨论。
 
 ## 致谢
 
