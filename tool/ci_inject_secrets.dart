@@ -1,9 +1,9 @@
 // CI-only release tool — not part of the app.
 //
-// Injects the built-in TMDB key and danmaku token
-// (obfuscated, same codec as the app-side key holders)
-// from repository secrets into the key-holder sources
-// before a release build:
+// Injects the built-in TMDB key, danmaku token and
+// DanDanPlay credential pair (obfuscated, same codec as
+// the app-side key holders) from repository secrets into
+// the key-holder sources before a release build:
 //
 //   TMDB_API_KEY=... DANMU_API_TOKEN=... \
 //     dart tool/ci_inject_secrets.dart
@@ -21,6 +21,9 @@ const _tmdbMask = [
 ];
 const _danmuMask = [
   0x41, 0x6e, 0x69, 0x6b, 0x75, 0x6d, 0x6f, 0x2d, 0x31, 0x36, 0x33,
+];
+const _dandanMask = [
+  0x41, 0x6e, 0x69, 0x6b, 0x75, 0x6d, 0x6f, 0x2d, 0x31, 0x39, 0x33,
 ];
 
 String _encode(String raw, List<int> mask) {
@@ -74,5 +77,19 @@ Future<void> main() async {
     file: 'lib/services/danmaku/danmu_token.dart',
     patternSource: r"const String kBuiltinDanmuEncodedToken = '[^']*';",
     declaration: 'const String kBuiltinDanmuEncodedToken',
+  );
+  await _inject(
+    envName: 'DANDAN_APPID',
+    mask: _dandanMask,
+    file: 'lib/services/danmaku/dandan_key.dart',
+    patternSource: r"const String kDandanEncodedAppId = '[^']*';",
+    declaration: 'const String kDandanEncodedAppId',
+  );
+  await _inject(
+    envName: 'DANDAN_KEY',
+    mask: _dandanMask,
+    file: 'lib/services/danmaku/dandan_key.dart',
+    patternSource: r"const String kDandanEncodedKey = '[^']*';",
+    declaration: 'const String kDandanEncodedKey',
   );
 }

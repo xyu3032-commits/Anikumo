@@ -54,6 +54,8 @@ jobs:
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           DANMU_API_TOKEN: ${{ secrets.DANMU_API_TOKEN }}
+          DANDAN_APPID: ${{ secrets.DANDAN_APPID }}
+          DANDAN_KEY: ${{ secrets.DANDAN_KEY }}
         run: dart tool/ci_inject_secrets.dart
       - name: Build split APKs
         run: flutter build apk --release --split-per-abi
@@ -103,6 +105,8 @@ jobs:
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           DANMU_API_TOKEN: ${{ secrets.DANMU_API_TOKEN }}
+          DANDAN_APPID: ${{ secrets.DANDAN_APPID }}
+          DANDAN_KEY: ${{ secrets.DANDAN_KEY }}
         run: dart tool/ci_inject_secrets.dart
       - name: Build Windows
         run: flutter build windows --release
@@ -136,6 +140,8 @@ jobs:
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           DANMU_API_TOKEN: ${{ secrets.DANMU_API_TOKEN }}
+          DANDAN_APPID: ${{ secrets.DANDAN_APPID }}
+          DANDAN_KEY: ${{ secrets.DANDAN_KEY }}
         run: dart tool/ci_inject_secrets.dart
       - name: Build macOS
         run: flutter build macos --release
@@ -173,6 +179,8 @@ jobs:
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           DANMU_API_TOKEN: ${{ secrets.DANMU_API_TOKEN }}
+          DANDAN_APPID: ${{ secrets.DANDAN_APPID }}
+          DANDAN_KEY: ${{ secrets.DANDAN_KEY }}
         run: dart tool/ci_inject_secrets.dart
       - name: Build iOS without codesigning
         run: flutter build ios --release --no-codesign
@@ -213,6 +221,8 @@ jobs:
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           DANMU_API_TOKEN: ${{ secrets.DANMU_API_TOKEN }}
+          DANDAN_APPID: ${{ secrets.DANDAN_APPID }}
+          DANDAN_KEY: ${{ secrets.DANDAN_KEY }}
         run: dart tool/ci_inject_secrets.dart
       - name: Build Linux
         run: flutter build linux --release
