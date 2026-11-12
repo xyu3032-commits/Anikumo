@@ -1,0 +1,41 @@
+name: liuguang_core
+description: LiuGuang engine facade.
+version: 0.1.0
+publish_to: none
+environment:
+  sdk: '>=3.10.0 <4.0.0'
+dependencies:
+  liuguang_models:
+    path: ../liuguang_models
+  liuguang_matcher:
+    path: ../liuguang_matcher
+  liuguang_network:
+    path: ../liuguang_network
+  liuguang_cache:
+    path: ../liuguang_cache
+  liuguang_storage:
+    path: ../liuguang_storage
+  liuguang_source_sdk:
+    path: ../liuguang_source_sdk
+  liuguang_source_runtime:
+    path: ../liuguang_source_runtime
+  liuguang_metadata:
+    path: ../liuguang_metadata
+  liuguang_search:
+    path: ../liuguang_search
+  liuguang_player_api:
+    path: ../liuguang_player_api
+  liuguang_history:
+    path: ../liuguang_history
+  liuguang_favorites:
+    path: ../liuguang_favorites
+  liuguang_plugin_api:
+    path: ../liuguang_plugin_api
+  liuguang_plugin_manager:
+    path: ../liuguang_plugin_manager
+  liuguang_sync:
+    path: ../liuguang_sync
+  liuguang_download:
+    path: ../liuguang_download
+dev_dependencies:
+  test: ^1.25.0

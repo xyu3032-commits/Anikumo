@@ -29,7 +29,7 @@ import 'package:anikumo/services/storage/storage.dart';
 
 /// Which area of the app the current route belongs to, for the mini
 /// window's zone visibility rule.
-enum MiniPlayerZone { anime, manga, novel, video }
+enum MiniPlayerZone { anime, manga, novel, video, settings }
 
 /// Classifies a route by its Modular path. Unknown/app routes count
 /// as the anime side (the mini window stays visible there).
@@ -38,6 +38,7 @@ MiniPlayerZone miniPlayerZoneForRoute(String? routeName) {
   if (name.startsWith('/manga')) return MiniPlayerZone.manga;
   if (name.startsWith('/novel')) return MiniPlayerZone.novel;
   if (name.startsWith('/video')) return MiniPlayerZone.video;
+  if (name.startsWith('/settings')) return MiniPlayerZone.settings;
   return MiniPlayerZone.anime;
 }
 
@@ -56,6 +57,14 @@ bool miniPlayerVisible({
   // navigator — the window then stayed over the player, sometimes.
   if (playerPageOpen) return false;
   if (zone == MiniPlayerZone.video) return false;
+  // Batch 251: never float over the settings pages. A
+  // settings detour while watching used to leave the
+  // mini window parked on top of the very pages the
+  // user went to adjust — the "it went PiP by itself"
+  // complaint. Playback keeps its session; the window
+  // simply stays out of the settings area and comes
+  // back with the content zones.
+  if (zone == MiniPlayerZone.settings) return false;
   if (hideInOtherZones &&
       (zone == MiniPlayerZone.manga || zone == MiniPlayerZone.novel)) {
     return false;
@@ -75,6 +84,29 @@ bool miniPlayerShouldExitToMini({
 
 /// Batch 116: which args a '/video/' navigation should use when a
 /// mini session exists. Online playback resumes by ANIME: if the
+/// Batch 220: the mini-resume decision for external
+/// (film) sessions, as a pure function. Their args always
+/// carry an explicit episode pick, so the anime rule
+/// (any pick ends the session) restarted every film on
+/// return from the mini window. Resume [current] when the
+/// candidate is the session's own args, or the same work
+/// at the session's live episode; anything else is a
+/// deliberate new pick and ends the session (null).
+VideoPlaybackArgs? externalMiniResumeArgs(
+  OnlineVideoPlaybackArgs current,
+  OnlineVideoPlaybackArgs candidate, {
+  required int? liveEpisode,
+}) {
+  if (identical(current, candidate)) return current;
+  if (current.bangumiItem.id != candidate.bangumiItem.id) return null;
+  if (candidate.initialEpisode == null ||
+      liveEpisode == null ||
+      candidate.initialEpisode == liveEpisode) {
+    return current;
+  }
+  return null;
+}
+
 /// session is playing the same bangumi, its own args (and live
 /// pair) win over the entry point's. Anything else keeps the
 /// strict same-source match.
@@ -84,9 +116,7 @@ VideoPlaybackArgs? miniPlayerResumeArgs(
 ) {
   if (current is OnlineVideoPlaybackArgs &&
       candidate is OnlineVideoPlaybackArgs) {
-    return current.bangumiItem.id == candidate.bangumiItem.id
-        ? current
-        : null;
+    return current.bangumiItem.id == candidate.bangumiItem.id ? current : null;
   }
   return miniPlayerArgsMatch(current, candidate) ? current : null;
 }
@@ -156,6 +186,23 @@ class MiniPlayerSession extends ChangeNotifier {
   VideoPlaybackArgs? resumeArgsFor(VideoPlaybackArgs candidate) {
     final current = _args;
     if (current == null) return null;
+    // Batch 220: external sessions (film) resume from the
+    // mini window — see video_module for why their explicit
+    // episode pick must not veto this. Resume for the
+    // session's own args object (the mini window's expand),
+    // or the same work at the session's live episode; a
+    // deliberate pick of a DIFFERENT episode still ends the
+    // session and starts fresh, as Batch 127 requires.
+    if (current is OnlineVideoPlaybackArgs &&
+        current.externalPlayback &&
+        candidate is OnlineVideoPlaybackArgs &&
+        candidate.externalPlayback) {
+      return externalMiniResumeArgs(
+        current,
+        candidate,
+        liveEpisode: _videoPageController?.selectedEpisode.episode,
+      );
+    }
     return miniPlayerResumeArgs(current, candidate);
   }
 
@@ -204,12 +251,11 @@ class MiniPlayerSession extends ChangeNotifier {
   }
 
   bool get visible => miniPlayerVisible(
-        hasSession: hasSession,
-        zone: _zone,
-        hideInOtherZones:
-            GStorage.getSetting(SettingsKeys.pipHideInOtherZones),
-        playerPageOpen: _playerPageOpen,
-      );
+    hasSession: hasSession,
+    zone: _zone,
+    hideInOtherZones: GStorage.getSetting(SettingsKeys.pipHideInOtherZones),
+    playerPageOpen: _playerPageOpen,
+  );
 
   /// Route changes come from [MiniPlayerRouteObserver]. Zone entry
   /// hides/shows the window and applies the mute preference.
@@ -229,7 +275,8 @@ class MiniPlayerSession extends ChangeNotifier {
   void _applyZoneAudio() {
     final player = _playerController?.playback.mediaPlayer;
     if (player == null) return;
-    final shouldMute = hasSession &&
+    final shouldMute =
+        hasSession &&
         !visible &&
         _zone != MiniPlayerZone.video &&
         // Batch 116: never mute while the full player page is open
@@ -278,8 +325,9 @@ class MiniPlayerSession extends ChangeNotifier {
 /// Feeds the session's zone tracking from the app's navigator.
 class MiniPlayerRouteObserver extends RouteObserver<PageRoute<void>> {
   void _report(Route<dynamic>? route) {
-    MiniPlayerSession.instance
-        .updateZone(miniPlayerZoneForRoute(route?.settings.name));
+    MiniPlayerSession.instance.updateZone(
+      miniPlayerZoneForRoute(route?.settings.name),
+    );
   }
 
   @override

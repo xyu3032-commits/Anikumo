@@ -1,0 +1,12 @@
+name: liuguang_storage_hive
+description: Hive (hive_ce) StorageAdapter implementation for LiuGuang.
+version: 0.1.0
+publish_to: none
+environment:
+  sdk: '>=3.10.0 <4.0.0'
+dependencies:
+  liuguang_storage:
+    path: ../liuguang_storage
+  hive_ce: ^2.16.0
+dev_dependencies:
+  test: ^1.25.0

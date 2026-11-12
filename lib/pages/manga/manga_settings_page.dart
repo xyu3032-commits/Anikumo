@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:anikumo/bean/dialog/dialog_helper.dart';
+import 'package:anikumo/pages/manga/manga_feature_repo_page.dart';
 import 'package:anikumo/pages/manga/manga_downloads_page.dart';
 import 'package:anikumo/pages/manga/manga_sources_page.dart';
+import 'package:anikumo/services/manga/manga_features.dart';
+import 'package:anikumo/services/reader_chrome_prefs.dart';
 import 'package:anikumo/services/manga/manga_image_pipeline.dart';
+import 'package:anikumo/services/manga/manga_sources.dart';
 import 'package:anikumo/services/manga/manga_library.dart';
 import 'package:anikumo/services/manga/manga_page_cache.dart';
 import 'package:anikumo/services/manga/reader_settings.dart';
@@ -26,22 +30,28 @@ class MangaSettingsIndex extends StatelessWidget {
     final entries = <(IconData, String, Widget Function())>[
       (AnikumoIcons.explore_rounded, '探索', () => const _ExploreSettingsPage()),
       (AnikumoIcons.hub_rounded, '漫画源', () => const MangaSourcesPage()),
-      (AnikumoIcons.menu_book_rounded, '阅读', () => const _ReadingSettingsPage()),
-      (AnikumoIcons.color_lens_rounded, '外观', () => const _AppearanceSettingsPage()),
+      (AnikumoIcons.memory_rounded, '漫画引擎', () => const _EngineSettingsPage()),
+      (
+        AnikumoIcons.menu_book_rounded,
+        '阅读',
+        () => const _ReadingSettingsPage(),
+      ),
+      (
+        AnikumoIcons.color_lens_rounded,
+        '外观',
+        () => const _AppearanceSettingsPage(),
+      ),
       (
         AnikumoIcons.collections_bookmark_rounded,
         '本地收藏',
-        () => const _DataSettingsPage()
+        () => const _DataSettingsPage(),
       ),
+      (AnikumoIcons.download_rounded, '下载管理', () => const MangaDownloadsPage()),
+      (AnikumoIcons.bar_chart_rounded, '阅读数据', () => const MangaStatsPage()),
       (
-        AnikumoIcons.download_rounded,
-        '下载管理',
-        () => const MangaDownloadsPage()
-      ),
-      (
-        AnikumoIcons.bar_chart_rounded,
-        '阅读数据',
-        () => const MangaStatsPage()
+        AnikumoIcons.extension_rounded,
+        '扩展功能',
+        () => const MangaFeatureRepoPage(),
       ),
       (AnikumoIcons.public_rounded, '网络', () => const _NetworkSettingsPage()),
       (AnikumoIcons.info_rounded, '关于', () => const _AboutSettingsPage()),
@@ -56,8 +66,9 @@ class MangaSettingsIndex extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
               child: Text(
                 '设置',
-                style: theme.textTheme.titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w800),
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
           Expanded(
@@ -68,9 +79,9 @@ class MangaSettingsIndex extends StatelessWidget {
                     leading: Icon(icon),
                     title: Text(title),
                     trailing: const Icon(AnikumoIcons.chevron_right_rounded),
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(builder: (_) => builder()),
-                    ),
+                    onTap: () => Navigator.of(
+                      context,
+                    ).push(MaterialPageRoute<void>(builder: (_) => builder())),
                   ),
               ],
             ),
@@ -193,6 +204,71 @@ class _SelectRow<T> extends StatelessWidget {
   }
 }
 
+// ── 漫画引擎 ────────────────────────────────────────────────────
+
+/// Batch 199: the engine switch — JS sources run on
+/// MangaKit by default and can be flipped back to the
+/// legacy engine here. Both engines share the same
+/// persisted source data, settings and cookies, so
+/// switching loses nothing; pages already open keep the
+/// engine they started with, and the zone picks the new
+/// engine up on re-entry.
+class _EngineSettingsPage extends StatefulWidget {
+  const _EngineSettingsPage();
+
+  @override
+  State<_EngineSettingsPage> createState() => _EngineSettingsPageState();
+}
+
+class _EngineSettingsPageState extends State<_EngineSettingsPage> {
+  String get _kind => GStorage.getSetting(SettingsKeys.mangaEngineKind);
+
+  Future<void> _select(String kind) async {
+    if (kind == _kind) return;
+    await MangaSources.setEngineKind(kind);
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return _SettingsScaffold(
+      title: '漫画引擎',
+      children: [
+        RadioGroup<String>(
+          groupValue: _kind,
+          onChanged: (value) {
+            if (value != null) _select(value);
+          },
+          child: const Column(
+            children: [
+              RadioListTile<String>(
+                title: Text('MangaKit'),
+                subtitle: Text('默认引擎 · 带限流保护、渐进加载与验证码自动重试'),
+                value: 'mangakit',
+              ),
+              RadioListTile<String>(
+                title: Text('旧引擎'),
+                subtitle: Text('之前的 JS 引擎 · 每个源独立运行'),
+                value: 'legacy',
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Text(
+            '切换后重新进入漫画区生效；源的设置、登录状态与 Cookie 两个引擎共用，不会丢失。',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 // ── 探索 ────────────────────────────────────────────────────────
 
 class _ExploreSettingsPage extends StatefulWidget {
@@ -205,8 +281,9 @@ class _ExploreSettingsPage extends StatefulWidget {
 class _ExploreSettingsPageState extends State<_ExploreSettingsPage> {
   @override
   Widget build(BuildContext context) {
-    final allowSuggestive =
-        GStorage.getSetting(SettingsKeys.mangaAllowSuggestive);
+    final allowSuggestive = GStorage.getSetting(
+      SettingsKeys.mangaAllowSuggestive,
+    );
     final railCount = GStorage.getSetting(SettingsKeys.mangaHistoryRailCount);
     return _SettingsScaffold(
       title: '探索',
@@ -304,6 +381,72 @@ class _ReadingSettingsPageState extends State<_ReadingSettingsPage> {
           value: GStorage.getSetting(SettingsKeys.mangaKeepScreenOn),
           onChanged: (value) {
             GStorage.putSetting(SettingsKeys.mangaKeepScreenOn, value);
+            setState(() {});
+          },
+        ),
+        // Batch 234 （阅读滤镜 pack): filter choice lives
+        // here while the pack is installed.
+        if (MangaFeatures.isInstalled(MangaFeatures.readerFiltersId))
+          _SelectRow<String>(
+            title: '阅读滤镜',
+            valueLabel: MangaReaderFilters.modes
+                .firstWhere(
+                  (m) =>
+                      m.$1 ==
+                      GStorage.getSetting(SettingsKeys.mangaReaderFilter),
+                  orElse: () => MangaReaderFilters.modes.first,
+                )
+                .$2,
+            options: MangaReaderFilters.modes,
+            onSelected: (value) {
+              GStorage.putSetting(SettingsKeys.mangaReaderFilter, value);
+              setState(() {});
+            },
+          ),
+        // Batch 234 （自动滚动 pack): scroll speed; the
+        // play/pause control itself is in the reader.
+        if (MangaFeatures.isInstalled(MangaFeatures.autoScrollId)) ...[
+          ListTile(
+            title: const Text('自动滚动速度'),
+            subtitle: Text(
+              '${GStorage.getSetting(SettingsKeys.mangaAutoScrollSpeed)} 像素/秒（条漫模式）',
+            ),
+          ),
+          Slider(
+            value: GStorage.getSetting(
+              SettingsKeys.mangaAutoScrollSpeed,
+            ).toDouble(),
+            min: 20,
+            // Batch 252: top speed 200 -> 1500 px/s at
+            // the user's request (fast strip skimming).
+            max: 1500,
+            divisions: 148,
+            label: '${GStorage.getSetting(SettingsKeys.mangaAutoScrollSpeed)}',
+            onChanged: (value) {
+              GStorage.putSetting(
+                SettingsKeys.mangaAutoScrollSpeed,
+                value.round(),
+              );
+              setState(() {});
+            },
+          ),
+        ],
+        // Batch 252: reader chrome auto-hide delay,
+        // shared with the novel reader (0.5–5 s).
+        ListTile(
+          title: const Text('界面自动隐藏'),
+          subtitle: Text(
+            '${readerChromeHideSeconds().toStringAsFixed(1)} 秒无操作后隐藏（漫画 / 小说阅读器共用）',
+          ),
+        ),
+        Slider(
+          value: readerChromeHideSeconds(),
+          min: kReaderChromeHideMinSeconds,
+          max: kReaderChromeHideMaxSeconds,
+          divisions: 45,
+          label: '${readerChromeHideSeconds().toStringAsFixed(1)} 秒',
+          onChanged: (value) {
+            GStorage.putSetting(SettingsKeys.readerChromeHideSeconds, value);
             setState(() {});
           },
         ),
@@ -540,10 +683,7 @@ class _AboutSettingsPage extends StatelessWidget {
     return const _SettingsScaffold(
       title: '关于',
       children: [
-        ListTile(
-          title: Text('漫画源'),
-          subtitle: Text('免费公共 API'),
-        ),
+        ListTile(title: Text('漫画源'), subtitle: Text('免费公共 API')),
         ListTile(
           title: Text('界面与设置结构'),
           subtitle: Text(

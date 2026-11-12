@@ -36,15 +36,15 @@ class MangaDownloadEntry {
   String get key => '$source:$mangaId:$chapterId';
 
   Map<String, dynamic> toJson() => {
-        'source': source,
-        'mangaId': mangaId,
-        'mangaTitle': mangaTitle,
-        'coverUrl': coverUrl,
-        'chapterId': chapterId,
-        'chapterLabel': chapterLabel,
-        'pageCount': pageCount,
-        'downloadedAtMs': downloadedAtMs,
-      };
+    'source': source,
+    'mangaId': mangaId,
+    'mangaTitle': mangaTitle,
+    'coverUrl': coverUrl,
+    'chapterId': chapterId,
+    'chapterLabel': chapterLabel,
+    'pageCount': pageCount,
+    'downloadedAtMs': downloadedAtMs,
+  };
 
   static MangaDownloadEntry? fromJson(Map<dynamic, dynamic> json) {
     final chapterId = json['chapterId']?.toString() ?? '';
@@ -91,7 +91,20 @@ class MangaDownloadStore {
     return File('${base.path}/index.json');
   }
 
+  /// Batch 252: in-memory copy of the index. Every
+  /// chapter open used to re-read and re-decode the
+  /// whole index file from disk (plus a path_provider
+  /// round trip) just to answer "is this chapter
+  /// downloaded" — pure latency on the reader's enter
+  /// path. Writes funnel through [_saveIndex], which
+  /// keeps the memo in step; readers get copies, never
+  /// the memo itself (batch 104's in-place-mutation
+  /// lesson).
+  static List<MangaDownloadEntry>? _indexMemo;
+
   static Future<List<MangaDownloadEntry>> loadIndex() async {
+    final memo = _indexMemo;
+    if (memo != null) return [...memo];
     // Batch 104: never return a const list. On a fresh
     // install (no index file yet) the empty cases used to
     // hand back `const []`, and downloadChapter's in-place
@@ -103,13 +116,21 @@ class MangaDownloadStore {
     // at the source: always return a writable list.)
     try {
       final file = await _indexFile();
-      if (!await file.exists()) return <MangaDownloadEntry>[];
+      if (!await file.exists()) {
+        _indexMemo = <MangaDownloadEntry>[];
+        return <MangaDownloadEntry>[];
+      }
       final decoded = jsonDecode(await file.readAsString());
-      if (decoded is! List) return <MangaDownloadEntry>[];
-      return [
+      if (decoded is! List) {
+        _indexMemo = <MangaDownloadEntry>[];
+        return <MangaDownloadEntry>[];
+      }
+      final entries = [
         for (final entry in decoded)
           if (entry is Map) ?MangaDownloadEntry.fromJson(entry),
       ];
+      _indexMemo = entries;
+      return [...entries];
     } catch (_) {
       return <MangaDownloadEntry>[];
     }
@@ -145,10 +166,9 @@ class MangaDownloadStore {
   }
 
   static Future<void> _saveIndex(List<MangaDownloadEntry> entries) async {
+    _indexMemo = [...entries];
     final file = await _indexFile();
-    await file.writeAsString(
-      jsonEncode([for (final e in entries) e.toJson()]),
-    );
+    await file.writeAsString(jsonEncode([for (final e in entries) e.toJson()]));
   }
 
   static Future<bool> isDownloaded(
@@ -157,9 +177,7 @@ class MangaDownloadStore {
     String chapterId,
   ) async {
     final entries = await loadIndex();
-    return entries.any(
-      (e) => e.key == '$source:$mangaId:$chapterId',
-    );
+    return entries.any((e) => e.key == '$source:$mangaId:$chapterId');
   }
 
   /// Local page list for a downloaded chapter, in order, as
@@ -240,10 +258,9 @@ class MangaDownloadStore {
           if (!await file.exists() || await file.length() < 12) {
             return false;
           }
-          final head = await file.openRead(0, 16).fold<List<int>>(
-                <int>[],
-                (acc, chunk) => acc..addAll(chunk),
-              );
+          final head = await file
+              .openRead(0, 16)
+              .fold<List<int>>(<int>[], (acc, chunk) => acc..addAll(chunk));
           return looksLikeImageBytes(head);
         } catch (_) {
           return false;

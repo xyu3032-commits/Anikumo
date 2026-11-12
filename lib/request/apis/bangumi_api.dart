@@ -894,6 +894,40 @@ class BangumiApi {
     }
   }
 
+  /// Batch 233: mark one episode of a collected subject
+  /// as watched on Bangumi (episode progress — the half
+  /// of sync that collection-status updates never covered).
+  /// [episodeId] is Bangumi's episode id, not the episode
+  /// number. Fails soft: callers treat progress sync as
+  /// best-effort.
+  static Future<bool> markBangumiEpisodeWatched(
+    int subjectId,
+    int episodeId,
+  ) async {
+    await _writeRateLimiter.acquire();
+    try {
+      await _client.patch(
+        ApiEndpoints.formatUrl(
+          ApiEndpoints.bangumiAuthAPIMirrorDomain +
+              ApiEndpoints.bangumiEpisodeProgress,
+          [subjectId],
+        ),
+        data: {
+          'episode_id': [episodeId],
+          'type': 2, // watched
+        },
+        requiresAuth: true,
+      );
+      AnikumoLogger().d(
+        'Update to Bangumi: episode $episodeId of $subjectId watched',
+      );
+      return true;
+    } catch (e) {
+      AnikumoLogger().w('Bangumi episode progress failed', error: e);
+      return false;
+    }
+  }
+
   static Future<bool> updateBangumiByType(int id, int localType) async {
     final type = CollectType.fromValue(localType).toBangumiCollectionType();
     if (type == null) {

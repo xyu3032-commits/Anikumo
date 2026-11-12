@@ -4,6 +4,7 @@ import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/services/logging/logger.dart';
 import 'package:anikumo/modules/bangumi/sync_priority.dart';
 import 'package:anikumo/request/apis/bangumi_api.dart';
+import 'package:anikumo/services/anime/anime_features.dart';
 import 'package:anikumo/request/core/network_exception.dart';
 import 'package:anikumo/utils/async_serial_queue.dart';
 
@@ -129,6 +130,43 @@ class BangumiSyncService extends ChangeNotifier {
     }
     if (error is StateError) return error.message.toString();
     return 'Bangumi 操作失败，请稍后重试';
+  }
+
+  /// Batch 233 （单集进度同步 pack): report [episodeNumber]
+  /// of [bangumiId] as watched on Bangumi. Gated by the
+  /// pack, the sync switch and the persisted already-sent
+  /// set; resolves Bangumi's episode id from its episode
+  /// list. Returns true only when a report was sent (or
+  /// had already been sent earlier).
+  Future<bool> syncEpisodeProgress(int bangumiId, int episodeNumber) {
+    return _operations.run(() async {
+      if (!AnimeFeatures.isInstalled(AnimeFeatures.bgmProgressId)) {
+        return false;
+      }
+      if (!GStorage.getSetting(SettingsKeys.bangumiSyncEnable)) {
+        return false;
+      }
+      if (_configuredToken.isEmpty) return false;
+      if (AnimeBgmSyncedStore.contains(bangumiId, episodeNumber)) {
+        return true;
+      }
+      if (!initialized) await _connectConfiguredToken();
+      final episodes = await BangumiApi.getBangumiEpisodesByID(bangumiId);
+      int? episodeId;
+      for (final e in episodes) {
+        if (e.type == 0 && e.episode == episodeNumber) {
+          episodeId = e.id;
+          break;
+        }
+      }
+      if (episodeId == null) return false;
+      final ok = await BangumiApi.markBangumiEpisodeWatched(
+        bangumiId,
+        episodeId,
+      );
+      if (ok) await AnimeBgmSyncedStore.add(bangumiId, episodeNumber);
+      return ok;
+    });
   }
 
   Future<bool> syncCollectibleWhenIdle(int bangumiId, int localType) {

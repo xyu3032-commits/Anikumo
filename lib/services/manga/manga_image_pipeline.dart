@@ -132,8 +132,10 @@ class MangaImageFileService extends FileService {
 final CacheManager mangaCoverCacheManager = CacheManager(
   Config(
     'anikumoMangaCovers',
-    stalePeriod: const Duration(days: 10),
-    maxNrOfCacheObjects: 600,
+    // Batch 239: 10 days / 600 -> 7 days / 400 ("less
+    // cache" pass; byte budget tightened alongside).
+    stalePeriod: const Duration(days: 7),
+    maxNrOfCacheObjects: 400,
     fileService: MangaImageFileService(gated: true),
   ),
 );
@@ -447,7 +449,7 @@ MangaImageLoadSpec? mangaPageLoadSpec({
     return null;
   }
   final source = MangaSources.byId(manga.source);
-  if (source is! JsMangaSource) return null;
+  if (source is! JsBackedMangaSource) return null;
   var process = pageTransformCallback(
     manga: manga,
     chapter: chapter,
@@ -511,7 +513,7 @@ MangaByteTransform? pageTransformCallback({
   final original = page.transformOf;
   if (original == null) return null;
   final source = MangaSources.byId(manga.source);
-  if (source is! JsMangaSource) return null;
+  if (source is! JsBackedMangaSource) return null;
   return (raw) => source.transformImageBytes(
         mode: 'image',
         originalUrl: original,
@@ -527,7 +529,7 @@ MangaByteTransform? coverTransformCallback(MangaItem item) {
   final original = item.coverTransformOf;
   if (original == null) return null;
   final source = MangaSources.byId(item.source);
-  if (source is! JsMangaSource) return null;
+  if (source is! JsBackedMangaSource) return null;
   return (raw) => source.transformImageBytes(
         mode: 'thumb',
         originalUrl: original,

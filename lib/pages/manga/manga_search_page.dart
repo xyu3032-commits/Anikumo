@@ -77,8 +77,7 @@ class MangaSearchPage extends StatefulWidget {
   State<MangaSearchPage> createState() => _MangaSearchPageState();
 }
 
-class _MangaSearchPageState extends State<MangaSearchPage>
-    with RouteAware {
+class _MangaSearchPageState extends State<MangaSearchPage> with RouteAware {
   static const _pageSize = 30;
 
   final _controller = TextEditingController();
@@ -126,6 +125,7 @@ class _MangaSearchPageState extends State<MangaSearchPage>
       });
     }
   }
+
   // Batch 64: default to THIS zone (manga), not 全部 —
   // same fix as the anime search page.
   CrossSearchMode _mode = CrossSearchMode.manga;
@@ -182,8 +182,7 @@ class _MangaSearchPageState extends State<MangaSearchPage>
   void _touchHidden() => _hiddenStamp++;
 
   List<MangaItem> get _visibleManga {
-    final stamp =
-        Object.hash(_mangaResults, _hiddenStamp, _showHidden);
+    final stamp = Object.hash(_mangaResults, _hiddenStamp, _showHidden);
     if (_visibleCache != null && _visibleCacheStamp == stamp) {
       return _visibleCache!;
     }
@@ -270,9 +269,7 @@ class _MangaSearchPageState extends State<MangaSearchPage>
         },
         visualDensity: VisualDensity.compact,
         shape: const StadiumBorder(),
-        side: BorderSide(
-          color: colors.outlineVariant.withValues(alpha: 0.5),
-        ),
+        side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.5)),
         backgroundColor: colors.surfaceContainerHigh,
         selectedColor: colors.primary,
         labelStyle: TextStyle(
@@ -332,28 +329,30 @@ class _MangaSearchPageState extends State<MangaSearchPage>
       _lastQuery = query;
     });
     setState(() => _novelLoading = true);
-    final novelFuture = NovelApi.searchAll(query).then((all) {
-      if (!mounted || generation != _generation) return;
-      setState(() {
-        _novelResults = rankNovels(query, all, strict: true);
-        _novelResultsAll = rankNovels(query, all);
-        _novelLoading = false;
-      });
-    }).catchError((_) {
-      if (!mounted || generation != _generation) return;
-      setState(() {
-        _novelResults = const [];
-        _novelResultsAll = const [];
-        _novelLoading = false;
-      });
-    });
+    final novelFuture = NovelApi.searchAll(query)
+        .then((all) {
+          if (!mounted || generation != _generation) return;
+          setState(() {
+            _novelResults = rankNovels(query, all, strict: true);
+            _novelResultsAll = rankNovels(query, all);
+            _novelLoading = false;
+          });
+        })
+        .catchError((_) {
+          if (!mounted || generation != _generation) return;
+          setState(() {
+            _novelResults = const [];
+            _novelResultsAll = const [];
+            _novelLoading = false;
+          });
+        });
     final mangaFuture = _fetchManga(query, generation);
-    final animeFuture = BangumiApi.bangumiSearch(query, limit: 18)
-        .then((page) {
+    final animeFuture = BangumiApi.bangumiSearch(query, limit: 18).then((page) {
       if (!mounted || generation != _generation) return;
       setState(() {
-        _animeResults =
-            page == null ? const [] : rankCrossAnime(page.items, query);
+        _animeResults = page == null
+            ? const []
+            : rankCrossAnime(page.items, query);
         _animeLoading = false;
       });
     });
@@ -393,8 +392,7 @@ class _MangaSearchPageState extends State<MangaSearchPage>
       // manga's source). A stale origin (source removed)
       // falls back to the unscoped resolution.
       final origin = _tagOriginSourceId;
-      final originSource =
-          origin == null ? null : MangaSources.byId(origin);
+      final originSource = origin == null ? null : MangaSources.byId(origin);
       results = await fetchMangaByTagName(
         query,
         limit: _pageSize,
@@ -425,9 +423,7 @@ class _MangaSearchPageState extends State<MangaSearchPage>
               )
               .catchError((_) => const <MangaItem>[]),
       ]);
-      results = dedupeMangaItems([
-        for (final list in perSource) ...list,
-      ]);
+      results = dedupeMangaItems([for (final list in perSource) ...list]);
     } else {
       // Batch 97: the picked source, not always the active
       // one.
@@ -561,7 +557,9 @@ class _MangaSearchPageState extends State<MangaSearchPage>
       _mangaResults = [..._mangaResults, ...fresh];
     });
     _verifyAvailability(
-      _mangaResults.sublist(_mangaResults.length - results.length.clamp(0, _mangaResults.length)),
+      _mangaResults.sublist(
+        _mangaResults.length - results.length.clamp(0, _mangaResults.length),
+      ),
       generation,
     );
   }
@@ -635,9 +633,15 @@ class _MangaSearchPageState extends State<MangaSearchPage>
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final modeSwitch = CrossSearchModeSwitch(
-                  mode: _mode,
-                  onChanged: (mode) => setState(() => _mode = mode),
+                // Batch 231: five modes now — the switch
+                // scrolls horizontally on narrow screens
+                // instead of overflowing the portrait row.
+                final modeSwitch = SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: CrossSearchModeSwitch(
+                    mode: _mode,
+                    onChanged: (mode) => setState(() => _mode = mode),
+                  ),
                 );
                 if (_mode != CrossSearchMode.manga &&
                     _mode != CrossSearchMode.all) {
@@ -730,6 +734,11 @@ class _MangaSearchPageState extends State<MangaSearchPage>
       CrossSearchMode.manga => _mangaPane(),
       CrossSearchMode.anime => _animePane(),
       CrossSearchMode.novel => _novelPane(),
+      // Batch 231: the film zone's aggregated search,
+      // hosted by the shared cross-search pane.
+      CrossSearchMode.film => FilmCrossSearchPane(
+        query: _controller.text.trim(),
+      ),
       CrossSearchMode.all => _allPane(),
     };
   }
@@ -924,10 +933,7 @@ class _MangaSearchPageState extends State<MangaSearchPage>
                 ),
               if (visible.isNotEmpty) ...[
                 SliverToBoxAdapter(
-                  child: CrossSectionHeader(
-                    title: '漫画',
-                    count: visible.length,
-                  ),
+                  child: CrossSectionHeader(title: '漫画', count: visible.length),
                 ),
                 MangaResultsSliver(
                   items: visible,
@@ -947,9 +953,7 @@ class _MangaSearchPageState extends State<MangaSearchPage>
                     count: _novelResults.length,
                   ),
                 ),
-                NovelResultsSliver(
-                  items: _novelResults.take(10).toList(),
-                ),
+                NovelResultsSliver(items: _novelResults.take(10).toList()),
               ] else if (_novelLoading)
                 const SliverToBoxAdapter(
                   child: Padding(

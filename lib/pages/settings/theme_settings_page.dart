@@ -14,6 +14,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:anikumo/utils/device.dart';
 import 'package:anikumo/utils/theme.dart';
 import 'package:anikumo/bean/widget/anikumo_icons.dart';
+import 'package:anikumo/bean/widget/zone_switcher.dart';
 
 class ThemeSettingsPage extends StatefulWidget {
   const ThemeSettingsPage({super.key});
@@ -29,6 +30,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
   late bool useDynamicColor;
   late bool showWindowButton;
   late bool useSystemFont;
+  late String zoneSwitcherStyleKey;
   late final ThemeProvider themeProvider;
 
   @override
@@ -40,6 +42,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
     useDynamicColor = GStorage.getSetting(SettingsKeys.useDynamicColor);
     showWindowButton = GStorage.getSetting(SettingsKeys.showWindowButton);
     useSystemFont = GStorage.getSetting(SettingsKeys.useSystemFont);
+    zoneSwitcherStyleKey = currentZoneSwitcherStyle().key;
     themeProvider = context.read<ThemeProvider>();
   }
 
@@ -142,6 +145,19 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                 fallbackLabel: '跟随系统',
                 options: const {'system': '跟随系统', 'light': '浅色', 'dark': '深色'},
                 onChanged: updateTheme,
+              ),
+              SettingsDropdownTile<String>(
+                leading: AnikumoIcons.swap_horiz_rounded,
+                title: const Text('专区切换样式'),
+                value: zoneSwitcherStyleKey,
+                fallbackLabel: '上拉面板',
+                options: {
+                  for (final s in ZoneSwitcherStyle.values) s.key: s.label,
+                },
+                onChanged: (key) async {
+                  await setZoneSwitcherStyle(ZoneSwitcherStyle.fromKey(key));
+                  setState(() => zoneSwitcherStyleKey = key);
+                },
               ),
               SettingsTile(
                 leading: AnikumoIcons.palette_rounded,

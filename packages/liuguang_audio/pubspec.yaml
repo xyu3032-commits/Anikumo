@@ -1,0 +1,15 @@
+name: liuguang_audio
+description: Audio track selection policy, per-track sync offsets, capability helpers.
+version: 0.1.0
+publish_to: none
+environment:
+  sdk: '>=3.10.0 <4.0.0'
+dependencies:
+  liuguang_models:
+    path: ../liuguang_models
+  liuguang_player_api:
+    path: ../liuguang_player_api
+  liuguang_storage:
+    path: ../liuguang_storage
+dev_dependencies:
+  test: ^1.25.0

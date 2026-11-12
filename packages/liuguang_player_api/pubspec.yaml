@@ -1,0 +1,11 @@
+name: liuguang_player_api
+description: Player engine API and in-memory engine.
+version: 0.1.0
+publish_to: none
+environment:
+  sdk: '>=3.10.0 <4.0.0'
+dependencies:
+  liuguang_models:
+    path: ../liuguang_models
+dev_dependencies:
+  test: ^1.25.0

@@ -653,7 +653,7 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
                   : Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (source is JsMangaSource)
+                  if (source is JsBackedMangaSource)
                     IconButton(
                       tooltip: '源账号登录',
                       icon: const Icon(AnikumoIcons.account_circle_outlined),
@@ -687,7 +687,7 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
                       tooltip: '删除',
                       onPressed: () => _remove(source.id, source.name),
                     ),
-                  if (source is JsMangaSource)
+                  if (source is JsBackedMangaSource)
                     Icon(
                       _expandedId == source.id
                           ? AnikumoIcons.expand_less_rounded
@@ -705,7 +705,7 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
                       // expands its settings panel in
                       // place; other sources keep the
                       // tap-to-activate behavior.
-                      if (source is JsMangaSource) {
+                      if (source is JsBackedMangaSource) {
                         setState(() {
                           _expandedId = _expandedId == source.id
                               ? null
@@ -717,7 +717,7 @@ class _MangaSourcesPageState extends State<MangaSourcesPage> {
                     },
             ),
             if (_expandedId == source.id &&
-                source is JsMangaSource &&
+                source is JsBackedMangaSource &&
                 !_selecting)
               MangaSourceSettingsPanel(
                 key: ValueKey('source-settings:${source.id}'),

@@ -42,11 +42,12 @@ class CrossHistoryEntry {
   final NovelProgress? novelProgress;
 
   String get kindLabel => switch (mode) {
-        CrossSearchMode.anime => '动漫',
-        CrossSearchMode.manga => '漫画',
-        CrossSearchMode.novel => '小说',
-        CrossSearchMode.all => '',
-      };
+    CrossSearchMode.anime => '动漫',
+    CrossSearchMode.manga => '漫画',
+    CrossSearchMode.novel => '小说',
+    CrossSearchMode.film => '影视',
+    CrossSearchMode.all => '',
+  };
 }
 
 List<CrossHistoryEntry> mangaHistoryEntries(List<MangaProgress> progress) {
@@ -87,7 +88,8 @@ List<CrossHistoryEntry> animeHistoryEntries(List<History> histories) {
             ? '看到第 ${h.lastWatchEpisode} 话'
             : h.lastWatchEpisodeName,
         timeMs: h.lastWatchTime.millisecondsSinceEpoch,
-        coverUrl: h.bangumiItem.images['large'] ??
+        coverUrl:
+            h.bangumiItem.images['large'] ??
             h.bangumiItem.images['common'] ??
             '',
         anime: h,
@@ -149,6 +151,10 @@ void _openEntry(
             .pushNamed('/info/', arguments: history.bangumiItem)
             .then((_) => onReturn());
       }
+    // Batch 231: film entries never occur in this list
+    // (film progress lives in the film zone's own store);
+    // the case exists for exhaustiveness.
+    case CrossSearchMode.film:
     case CrossSearchMode.all:
       break;
   }
@@ -221,11 +227,7 @@ class _CrossHistoryListView extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 7),
             child: Row(
               children: [
-                NetworkImgLayer(
-                  src: entry.coverUrl,
-                  width: 44,
-                  height: 62,
-                ),
+                NetworkImgLayer(src: entry.coverUrl, width: 44, height: 62),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -235,8 +237,9 @@ class _CrossHistoryListView extends StatelessWidget {
                         entry.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyMedium
-                            ?.copyWith(fontWeight: FontWeight.w600),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(height: 3),
                       Text(

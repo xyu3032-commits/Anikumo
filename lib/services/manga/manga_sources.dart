@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
 import 'package:anikumo/services/manga/js/js_manga_source.dart';
+import 'package:anikumo/services/manga/js/mangakit_host.dart';
+import 'package:anikumo/services/manga/js/mangakit_source.dart';
 import 'package:anikumo/services/manga/manga_api.dart';
 import 'package:anikumo/services/manga/js/venera_engine.dart';
 import 'package:anikumo/services/manga/legado_manga_source.dart';
@@ -70,10 +73,53 @@ class MangaSources {
 
   // ---- downloaded JS sources (Venera format) ----
 
-  /// Live engines, one per installed JS source, keyed by the
+  /// Batch 199: which engine runs the JS sources — the user
+  /// switches it in 漫画设置 → 漫画引擎， MangaKit by default.
+  static bool get useLegacyEngine =>
+      GStorage.getSetting(SettingsKeys.mangaEngineKind) == 'legacy';
+
+  static String get _engineKind => useLegacyEngine ? 'legacy' : 'mangakit';
+
+  /// Records the engine choice and drops every live handle,
+  /// so the next [installed] rebuilds all sources on the
+  /// newly picked engine. Persisted source data, settings
+  /// and cookies are shared between the engines, so the
+  /// switch itself loses nothing.
+  static Future<void> setEngineKind(String kind) async {
+    await GStorage.putSetting(SettingsKeys.mangaEngineKind, kind);
+    for (final handle in _jsCache.values) {
+      _dropHandle(handle);
+    }
+    _jsCache.clear();
+    _jsCacheEngine = kind;
+    _installedCache = null;
+    _bump();
+  }
+
+  /// Releases one source handle's engine-side resources:
+  /// a MangaKit handle unregisters from the shared runtime,
+  /// a legacy handle disposes its own engine.
+  static void _dropHandle(JsBackedMangaSource handle) {
+    if (handle is MangaKitMangaSource) {
+      unawaited(
+        MangaKitRuntime.instance
+            .removeSource(handle.jsKey, handle.manifestKey),
+      );
+    } else if (handle is JsMangaSource) {
+      handle.engine.dispose();
+    }
+  }
+
+  /// The engine the live handles in [_jsCache] were built
+  /// for; a mismatch means the setting flipped underneath
+  /// the cache (e.g. restored from a backup).
+  static String? _jsCacheEngine;
+
+  /// Live sources, one per installed JS source, keyed by the
   /// source's registry id (`js:<key>`). Rebuilt when the stored
-  /// code changes (a re-download / update).
-  static final Map<String, JsMangaSource> _jsCache = {};
+  /// code changes (a re-download / update) or the engine
+  /// setting flips.
+  static final Map<String, JsBackedMangaSource> _jsCache = {};
 
   // Batch 79: the stored JSON embeds every installed source's
   // full JS code (hundreds of KB in total). installed() / all()
@@ -115,12 +161,22 @@ class MangaSources {
     }
   }
 
-  static List<JsMangaSource>? _installedCache;
+  static List<JsBackedMangaSource>? _installedCache;
 
-  static List<JsMangaSource> installed() {
+  static List<JsBackedMangaSource> installed() {
+    // Batch 199: the engine setting flipped underneath the
+    // cache — drop every handle and rebuild on the new one.
+    if (_jsCacheEngine != _engineKind) {
+      for (final handle in _jsCache.values) {
+        _dropHandle(handle);
+      }
+      _jsCache.clear();
+      _jsCacheEngine = _engineKind;
+      _installedCache = null;
+    }
     final cachedList = _installedCache;
     if (cachedList != null) return cachedList;
-    final sources = <JsMangaSource>[];
+    final sources = <JsBackedMangaSource>[];
     final seen = <String>{};
     for (final entry in installedJsEntries()) {
       final jsKey = entry['key'] as String;
@@ -128,25 +184,37 @@ class MangaSources {
       if (!seen.add(id)) continue;
       final code = entry['code'] as String;
       final cached = _jsCache[id];
-      if (cached != null && cached.engine.code == code) {
+      if (cached != null && cached.code == code) {
         sources.add(cached);
         continue;
       }
-      cached?.engine.dispose();
-      final source = JsMangaSource(
-        jsKey: jsKey,
-        displayName: (entry['name'] as String?) ?? jsKey,
-        version: (entry['version'] as String?) ?? '',
-        fileName: (entry['fileName'] as String?) ?? '$jsKey.js',
-        code: code,
-      );
+      if (cached != null) _dropHandle(cached);
+      final name = (entry['name'] as String?) ?? jsKey;
+      final version = (entry['version'] as String?) ?? '';
+      final fileName = (entry['fileName'] as String?) ?? '$jsKey.js';
+      final source = useLegacyEngine
+          ? JsMangaSource(
+              jsKey: jsKey,
+              displayName: name,
+              version: version,
+              fileName: fileName,
+              code: code,
+            )
+          : MangaKitMangaSource(
+              jsKey: jsKey,
+              displayName: name,
+              version: version,
+              fileName: fileName,
+              code: code,
+            );
       _jsCache[id] = source;
       sources.add(source);
     }
-    // Drop engines whose entries were removed.
+    // Drop sources whose entries were removed.
     for (final id in _jsCache.keys.toList()) {
       if (!seen.contains(id)) {
-        _jsCache.remove(id)?.engine.dispose();
+        final dropped = _jsCache.remove(id);
+        if (dropped != null) _dropHandle(dropped);
       }
     }
     _installedCache = sources;
@@ -181,7 +249,7 @@ class MangaSources {
   // every Legado adapter) on each call was pure churn.
   // Memoized on the identities of its two memoized inputs.
   static List<MangaSource>? _allCache;
-  static List<JsMangaSource>? _allCacheJs;
+  static List<JsBackedMangaSource>? _allCacheJs;
   static List<LegadoNovelSource>? _allCacheNovel;
 
   static List<MangaSource> all() {

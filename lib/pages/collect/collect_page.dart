@@ -15,6 +15,8 @@ import 'package:anikumo/modules/collect/collect_type.dart';
 import 'package:anikumo/pages/collect/collect_controller.dart';
 import 'package:anikumo/pages/collect/collect_library_view.dart';
 import 'package:anikumo/pages/collect/collect_sync_dialog.dart';
+import 'package:anikumo/services/anime/anime_auto_update.dart';
+import 'package:anikumo/services/anime/anime_features.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
@@ -115,6 +117,28 @@ class _CollectPageState extends State<CollectPage> with AnikumoDialogOwner {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Batch 233 （追番自动更新 pack): pending update
+            // notices sit above the page head.
+            ValueListenableBuilder<int>(
+              valueListenable: AnimeFeatures.revision,
+              builder: (context, _, __) {
+                final pending = AnimeAutoUpdate.pendingUpdates();
+                if (pending.isEmpty) return const SizedBox.shrink();
+                return MaterialBanner(
+                  content: Text(pending.join('；')),
+                  leading: const Icon(Icons.fiber_new_rounded),
+                  actions: [
+                    TextButton(
+                      onPressed: () async {
+                        await AnimeAutoUpdate.clearPending();
+                        AnimeFeatures.revision.value++;
+                      },
+                      child: const Text('知道了'),
+                    ),
+                  ],
+                );
+              },
+            ),
             // Batch 44: editorial page head — same sync
             // action, same enable rules, no app bar.
             Padding(

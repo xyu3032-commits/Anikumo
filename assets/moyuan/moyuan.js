@@ -177,6 +177,14 @@ function createAnikumoBridge(engine) {
       return {
         blocks: contentToAnikumoBlocks(content),
         truncated: !!(content && content.metadata && content.metadata.truncated),
+        // Batch 195: the chapter stopped at a verification
+        // wall (preview + captcha gate) — the host shows a
+        // distinct notice with a browser-view escape hatch.
+        verificationRequired: !!(content && content.metadata && content.metadata.verificationRequired),
+        // Batch 197: the challenge descriptor (image-code
+        // form) when the engine could extract one, so the
+        // host can offer an in-place solve prompt.
+        verification: (content && content.metadata && content.metadata.verification) || null,
       };
     },
   };
@@ -5446,7 +5454,7 @@ class SourceAdapter {
     if (this.def.custom) { if (typeof this.def.custom.content !== 'function') throw new NovelError(ERR.UNSUPPORTED, 'Custom source has no content()'); const raw = await this.def.custom.content(item, chapter); return normalizeContentResult(this, item, chapter, typeof raw === 'string' ? raw : (raw.text || raw.content || ''), typeof raw === 'string' ? null : raw.html); }
     await this._prepare();
     const maxPages = this.engine.config.get('maxContentPages') || 100;
-    const seen = new Set(); let pageUrl = chapter.url; let htmlParts = []; let pages = 0; let contentTitle = ''; let lastBody = '';
+    const seen = new Set(); let pageUrl = chapter.url; let htmlParts = []; let pages = 0; let contentTitle = ''; let lastBody = ''; let walled = false; let wallVerification = null;
     const rules = this.def.ruleContent;
     // ruleContent.webJs: executed only when the host injected a webJsHandler
     // (engine option `webJsHandler(url, html, sourceId)` — e.g. a WebView in
@@ -5462,6 +5470,32 @@ class SourceAdapter {
       const ctx = this._ctx(res.body, { baseUrl: res.url || pageUrl, book: item, chapter, stage: 'ruleContent' });
       const labeled = (label, fn) => { const prev = ctx.traceLabel; ctx.traceLabel = label; try { return fn(); } finally { ctx.traceLabel = prev; } };
       const part = labeled('ruleContent.content', () => ctx.getString(res.body, rules.content, { book: item, chapter }));
+      // Batch 195: a walled page ends the chapter fetch. Keep
+      // the preview only when nothing real precedes it (it is
+      // the chapter's genuine opening); when full pages came
+      // before, the preview would silently skip the rest of
+      // its segment, so it is left out and the flags below
+      // carry the story.
+      // Batch 200: a DESCRIBABLE challenge (the form-POST
+      // image-code shape) is a wall no matter how long the
+      // extracted part runs — some templates hand back a
+      // preview longer than the old 800-char guard (or the
+      // content rule matches a container that inflates it),
+      // and those chapters sailed through as merely short,
+      // never telling the reader a verification was needed.
+      // The marker+length dual signal stays for wall shapes
+      // we cannot describe.
+      const described = extractVerification(res.body, res.url || pageUrl);
+      if (described || (verificationWallIn(res.body) && visibleTextLength(part) <= 800)) {
+        walled = true;
+        // Batch 197: describe the challenge for the host's
+        // in-place solve prompt (null when the wall is not
+        // the form-POST image-code shape).
+        wallVerification = described;
+        if (part && htmlParts.length === 0) htmlParts.push(part);
+        this._trace('branch', { stage: 'ruleContent', label: 'verification wall — stopping chapter fetch', outputSummary: pageUrl });
+        break;
+      }
       if (part) htmlParts.push(part);
       if (rules.title && !contentTitle) { try { contentTitle = labeled('ruleContent.title', () => ctx.getString(res.body, rules.title, { book: item, chapter })); } catch (e) { debugLog('ruleContent.title error', e); } }
       let next = rules.nextContentUrl ? labeled('ruleContent.nextContentUrl', () => ctx.getString(res.body, rules.nextContentUrl, { book: item, chapter })) : '';
@@ -5480,10 +5514,32 @@ class SourceAdapter {
     const hitPageCap = pages >= maxPages && !!pageUrl;
     const result = normalizeContentResult(this, item, chapter, null, fullHtml);
     if (hitPageCap) result.metadata.truncated = true;
+    // Batch 195: a verification wall means the text is
+    // incomplete AND the reader can act on it (pass the
+    // check in a browser view) — a stronger, distinct signal
+    // from a plain page-cap truncation.
+    if (walled) { result.metadata.truncated = true; result.metadata.verificationRequired = true; if (wallVerification) result.metadata.verification = wallVerification; }
     if (rules.replaceRegex) {
-      if (rules.replaceRegex.includes('##')) result.text = applyReplaceRegex(result.text, rules.replaceRegex);
-      else { try { const re = new RegExp(rules.replaceRegex, 'g'); result.text = result.text.replace(re, ''); } catch (e) { debugLog('ruleContent.replaceRegex invalid', e); } }
-      result.blocks = textToBlocks(result.text);
+      const clean = (t) => {
+        if (rules.replaceRegex.includes('##')) return applyReplaceRegex(t, rules.replaceRegex);
+        try { const re = new RegExp(rules.replaceRegex, 'g'); return t.replace(re, ''); } catch (e) { debugLog('ruleContent.replaceRegex invalid', e); return t; }
+      };
+      result.text = clean(result.text);
+      // Batch 251: rebuilding blocks from the cleaned
+      // text used to ERASE every image block — an image
+      // chapter on a source with a replace rule (very
+      // common) came back empty. Clean text blocks in
+      // place; image blocks ride through untouched.
+      if (result.blocks.some(b => b.type === 'image')) {
+        const rebuilt = [];
+        for (const b of result.blocks) {
+          if (b.type === 'image') { rebuilt.push(b); continue; }
+          if (b.type === 'text') for (const nb of textToBlocks(clean(b.text))) rebuilt.push(nb);
+        }
+        result.blocks = rebuilt;
+      } else {
+        result.blocks = textToBlocks(result.text);
+      }
       result.content = result.text;
     }
     applyMediaType(this, result, fullHtml, chapter.url);
@@ -5526,6 +5582,132 @@ class SourceAdapter {
   }
 }
 function truthy(v) { if (v === true) return true; const s = String(v || '').toLowerCase(); return s === 'true' || s === '1' || s === 'yes'; }
+// Batch 195: verification-wall detection. Some sites answer an
+// unverified client with a short PREVIEW of the chapter segment
+// plus a captcha gate ("enter the code to keep reading") on
+// every sub-page. Each preview is genuine text and the
+// next-page chain ends normally, so stitching the previews
+// produced a fake abridged chapter that presented as complete
+// (measured live 2026-11-11: 4 sub-pages x ~198 chars = a
+// 786-char "chapter" cut mid-sentence). A page counts as
+// walled only when BOTH signals hold: a captcha challenge is
+// present in the markup AND the extracted part is preview-sized
+// (long real content next to an unrelated captcha — a comment
+// form, a login box — must not trip this).
+const WALL_INPUT_RE = /<input[^>]+(?:name|id)\s*=\s*["']?[\w-]*(?:captcha|vcode|verify[-_]?code|yzm)/i;
+const WALL_IMG_RE = /<img[^>]+src\s*=\s*["'][^"']*(?:captcha|vcode|verifycode)/i;
+const WALL_ID_RE = /\b(?:id|class)\s*=\s*["'][^"']*captcha/i;
+// Batch 200: the wall's own words — templates whose field
+// and image names carry none of the keywords above still
+// tell the reader to enter a code.
+const WALL_TEXT_RE = /请输入验证码|输入验证码继续|完成验证后继续阅读|验证码继续阅读/;
+function verificationWallIn(body) {
+  if (!body) return false;
+  return WALL_INPUT_RE.test(body) || WALL_IMG_RE.test(body) || WALL_ID_RE.test(body) || WALL_TEXT_RE.test(body);
+}
+function visibleTextLength(fragment) {
+  return String(fragment || '').replace(/<[^>]+>/g, '').replace(/&[a-z#0-9]+;/gi, ' ').trim().length;
+}
+// Batch 197: describe the wall's challenge so the host can
+// let the reader solve it in place (layer 1 of the
+// verification support; the WebView + cookie sync of B196
+// is layer 2 for challenge kinds this cannot describe).
+// Only the form-POST image-code shape is described: the
+// captcha image, the code field, the submit target (the
+// form's action, else the page itself) and any hidden
+// fields riding the form. Anything else returns null and
+// the host falls back to the browser view.
+function extractVerification(body, pageUrl) {
+  if (!body) return null;
+  // The src match must be quote-aware and take the FIRST
+  // src attribute: a plain [^>]+src= search backtracks
+  // into the captcha image's own onclick refresh string
+  // (this.src='...?action=captcha&t='+Math.random()) and
+  // captures that truncated URL instead — seen live on
+  // the 22k wall page, where the real src ends in a
+  // timestamp the onclick copy lacks.
+  const imgTag = /<img[^>]*?\ssrc\s*=\s*(?:"([^"]*(?:captcha|vcode|verifycode)[^"]*)"|'([^']*(?:captcha|vcode|verifycode)[^']*)')/i.exec(body);
+  if (!imgTag) return extractVerificationFallback(body, pageUrl);
+  const img = [null, imgTag[1] || imgTag[2]];
+  const input = /<input[^>]+(?:name|id)\s*=\s*["']?([\w-]*(?:captcha|vcode|verify[-_]?code|yzm)[\w-]*)/i.exec(body);
+  if (!input) return extractVerificationFallback(body, pageUrl);
+  const fields = {};
+  let submitUrl = pageUrl;
+  const formStart = body.toLowerCase().lastIndexOf('<form', input.index);
+  if (formStart >= 0) {
+    const formEnd = body.indexOf('</form>', input.index);
+    const seg = body.slice(formStart, formEnd > input.index ? formEnd + 7 : input.index + 500);
+    const openTag = /<form[^>]*>/i.exec(seg);
+    const action = openTag && /action\s*=\s*["']([^"']*)["']/i.exec(openTag[0]);
+    if (action && action[1]) submitUrl = resolveUrl(pageUrl, action[1].replace(/&amp;/g, '&'));
+    for (const m of seg.matchAll(/<input[^>]+type\s*=\s*["']?hidden\b[^>]*>/gi)) {
+      const nm = /name\s*=\s*["']([^"']+)["']/i.exec(m[0]);
+      const val = /value\s*=\s*["']([^"']*)["']/i.exec(m[0]);
+      if (nm) fields[nm[1]] = val ? val[1] : '';
+    }
+  }
+  return {
+    type: 'image-code',
+    imageUrl: resolveUrl(pageUrl, img[1].replace(/&amp;/g, '&')),
+    submitUrl,
+    method: 'POST',
+    field: input[1],
+    fields,
+    pageUrl,
+  };
+}
+
+// Batch 200 fallback: templates whose captcha image and
+// code field carry NONE of the keyword names (src like
+// /code/image.php, field named just "code") still betray
+// the wall in words — the page tells the reader to enter
+// a verification code. When that text marker is present,
+// a <form> holding an <img> and a named text input is
+// described with that input as the code field.
+function extractVerificationFallback(body, pageUrl) {
+  if (!WALL_TEXT_RE.test(body)) return null;
+  const formRe = /<form[^>]*>[\s\S]*?<\/form>/gi;
+  let m;
+  while ((m = formRe.exec(body)) !== null) {
+    const seg = m[0];
+    const img = /<img[^>]*?\ssrc\s*=\s*(?:"([^"]+)"|'([^']+)')/i.exec(seg);
+    if (!img) continue;
+    let field = null;
+    for (const im of seg.matchAll(/<input[^>]*>/gi)) {
+      const tag = im[0];
+      const type = /type\s*=\s*["']?([\w-]+)/i.exec(tag);
+      if (type && type[1].toLowerCase() !== 'text') continue;
+      const nm = /name\s*=\s*["']([^"']+)["']/i.exec(tag);
+      if (nm) {
+        field = nm[1];
+        break;
+      }
+    }
+    if (!field) continue;
+    let submitUrl = pageUrl;
+    const openTag = /<form[^>]*>/i.exec(seg);
+    const action = openTag && /action\s*=\s*["']([^"']*)["']/i.exec(openTag[0]);
+    if (action && action[1]) {
+      submitUrl = resolveUrl(pageUrl, action[1].replace(/&amp;/g, '&'));
+    }
+    const fields = {};
+    for (const hm of seg.matchAll(/<input[^>]+type\s*=\s*["']?hidden\b[^>]*>/gi)) {
+      const nm = /name\s*=\s*["']([^"']+)["']/i.exec(hm[0]);
+      const val = /value\s*=\s*["']([^"']*)["']/i.exec(hm[0]);
+      if (nm) fields[nm[1]] = val ? val[1] : '';
+    }
+    return {
+      type: 'image-code',
+      imageUrl: resolveUrl(pageUrl, (img[1] || img[2]).replace(/&amp;/g, '&')),
+      submitUrl,
+      method: 'POST',
+      field,
+      fields,
+      pageUrl,
+    };
+  }
+  return null;
+}
 // Parse a Legado loginUi definition (JSON string or array) into host-renderable
 // field descriptors: [{name, type:'text'|'password'|'select'|'button', chars?, action?, default?}]
 function parseLoginUi(loginUi) {
@@ -5557,11 +5739,17 @@ const AUDIO_EXT_RE = /\.(mp3|m4a|aac|ogg|opus|wav|flac)(\?\S*)?$/i;
 function applyMediaType(adapter, result, html, chapterUrl) {
   const type = adapter.def.type;
   if (type === 2) {
-    const urls = []; const push = (u) => { const v = u ? resolveUrl(chapterUrl || adapter.id, String(u).trim()) : ''; if (v && !urls.includes(v)) urls.push(v); };
+    const urls = []; const headersByUrl = new Map();
+    const push = (u) => {
+      if (!u) return;
+      const opt = splitImageUrlOptions(String(u).trim());
+      const v = opt.url ? resolveUrl(chapterUrl || adapter.id, opt.url) : '';
+      if (v && !urls.includes(v)) { urls.push(v); headersByUrl.set(v, opt.headers); }
+    };
     for (const u of result.images || []) push(u);
     for (const tok of String(result.text || '').split(/\s+/)) if (/^https?:\/\/\S+$/i.test(tok)) push(tok);
     if (urls.length) {
-      result.blocks = urls.map(u => ({ type: 'image', url: u, headers: { ...adapter.def.headers } }));
+      result.blocks = urls.map(u => ({ type: 'image', url: u, headers: { ...adapter.def.headers, ...(headersByUrl.get(u) || {}) } }));
       result.images = urls; result.text = ''; result.content = '';
     }
     result.metadata.mediaType = 'image';
@@ -5590,13 +5778,62 @@ function parseCategories(text, raw) {
   return out.filter(c => c.title);
 }
 function textToBlocks(text) { return String(text || '').split(/\n{2,}|\n/).map(l => l.trim()).filter(Boolean).map(t => ({ type: 'text', text: t })); }
+// Batch 251: Legado image URLs often carry an options
+// suffix — url,{"headers":{"Referer":...}} — the Dart
+// engine splits it (LegadoParse.splitUrlOptions); the JS
+// walk used to keep the suffix inside the URL (or cut
+// the URL at the brace), which made image chapters
+// un-loadable. Split at the first ',{' and parse the
+// options loosely.
+function splitImageUrlOptions(spec) {
+  const s = String(spec || '');
+  const m = /,\s*\{/.exec(s);
+  if (!m) return { url: s.trim(), headers: {} };
+  const url = s.slice(0, m.index).trim().replace(/&amp;/g, '&');
+  let headers = {};
+  const tail = s.slice(m.index + 1).trim().replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+  try {
+    const parsed = JSON.parse(tail);
+    if (parsed && typeof parsed === 'object' && parsed.headers && typeof parsed.headers === 'object') {
+      for (const [k, v] of Object.entries(parsed.headers)) headers[k] = String(v);
+    }
+  } catch (_) {
+    // Loose (unquoted-key) options: the clean URL alone
+    // still loads far more often than the mangled string.
+  }
+  return { url, headers };
+}
+const PLACEHOLDER_IMG_RE = /(?:loading|lazy|placeholder|blank|spinner|grey|gray|default[-_]?img|占位)/i;
+function pickImgSrc(attrs) {
+  const viable = (v) => !!v && !/^data:/i.test(v) && !PLACEHOLDER_IMG_RE.test(v);
+  // Lazy-load attributes carry the real image when the
+  // plain src is a placeholder; when a data-* twin
+  // exists it is the full-size original in Legado
+  // sources, so it wins over a plain src too.
+  for (const key of ['data-original', 'data-src', 'data-lazy-src', 'src']) {
+    if (viable(attrs[key])) return attrs[key];
+  }
+  return attrs['src'] || attrs['data-src'] || attrs['data-original'] || '';
+}
 function normalizeContentResult(adapter, item, chapter, text, html) {
   const rawHtml = html || '';
   let cleanText = text != null ? text : cleanContent(rawHtml);
   const blocks = []; const images = [];
   if (rawHtml) {
-    const imgRe = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi; let last = 0, m; let found = false;
-    while ((m = imgRe.exec(rawHtml)) !== null) { found = true; const before = cleanContent(rawHtml.slice(last, m.index)); for (const b of textToBlocks(before)) blocks.push(b); const src = resolveUrl(chapter.url, m[1]); images.push(src); blocks.push({ type: 'image', url: src, headers: { ...adapter.def.headers } }); last = m.index + m[0].length; }
+    const imgRe = /<img\b[^>]*>/gi; let last = 0, m; let found = false;
+    while ((m = imgRe.exec(rawHtml)) !== null) {
+      const attrs = {};
+      const attrRe = /([\w-]+)\s*=\s*"([^"]*)"|([\w-]+)\s*=\s*'([^']*)'/g; let am;
+      while ((am = attrRe.exec(m[0])) !== null) { const nm = (am[1] || am[3]).toLowerCase(); attrs[nm] = am[2] !== undefined ? am[2] : am[4]; }
+      const rawSrc = pickImgSrc(attrs);
+      if (!rawSrc) continue;
+      found = true;
+      const before = cleanContent(rawHtml.slice(last, m.index)); for (const b of textToBlocks(before)) blocks.push(b);
+      const opt = splitImageUrlOptions(rawSrc);
+      const src = resolveUrl(chapter.url, opt.url); images.push(src);
+      blocks.push({ type: 'image', url: src, headers: { ...adapter.def.headers, ...opt.headers } });
+      last = m.index + m[0].length;
+    }
     if (found) { const after = cleanContent(rawHtml.slice(last)); for (const b of textToBlocks(after)) blocks.push(b); }
   }
   if (!blocks.length) for (const b of textToBlocks(cleanText)) blocks.push(b);
@@ -5612,10 +5849,14 @@ module.exports.detectSourceKind = detectSourceKind;
 module.exports.normalizeSourceDef = normalizeSourceDef;
 module.exports.parseSourceArray = parseSourceArray;
 module.exports.SourceAdapter = SourceAdapter;
+module.exports.verificationWallIn = verificationWallIn;
+module.exports.visibleTextLength = visibleTextLength;
+module.exports.extractVerification = extractVerification;
 module.exports.parseLoginUi = parseLoginUi;
 module.exports.applyMediaType = applyMediaType;
 module.exports.parseCategories = parseCategories;
 module.exports.textToBlocks = textToBlocks;
+module.exports.splitImageUrlOptions = splitImageUrlOptions;
 module.exports.normalizeContentResult = normalizeContentResult;
 
 });

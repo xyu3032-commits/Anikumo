@@ -253,8 +253,9 @@ class _NovelCabinetsTabState extends State<NovelCabinetsTab> {
               const SizedBox(width: 8),
               Text(
                 cabinet.name,
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w600),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const SizedBox(width: 8),
               Text(
@@ -296,11 +297,7 @@ class _NovelCabinetsTabState extends State<NovelCabinetsTab> {
             ListTile(
               onTap: () => openNovelDetail(context, book),
               onLongPress: () => _moveBook(book),
-              leading: NovelCover(
-                url: book.coverUrl,
-                width: 42,
-                height: 56,
-              ),
+              leading: NovelCover(url: book.coverUrl, width: 42, height: 56),
               title: Text(
                 book.title,
                 maxLines: 1,
@@ -314,7 +311,10 @@ class _NovelCabinetsTabState extends State<NovelCabinetsTab> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              trailing: const Icon(AnikumoIcons.chevron_right_rounded, size: 18),
+              trailing: const Icon(
+                AnikumoIcons.chevron_right_rounded,
+                size: 18,
+              ),
             ),
       ],
     );

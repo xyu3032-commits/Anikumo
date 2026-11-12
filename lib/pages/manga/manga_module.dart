@@ -7,6 +7,7 @@ import 'package:anikumo/pages/manga/manga_history_page.dart';
 import 'package:anikumo/pages/manga/manga_diagnostics_page.dart';
 import 'package:anikumo/pages/manga/manga_login_page.dart';
 import 'package:anikumo/pages/manga/manga_explore_page.dart';
+import 'package:anikumo/pages/manga/manga_verification_page.dart';
 import 'package:anikumo/pages/manga/manga_main_page.dart';
 import 'package:anikumo/pages/manga/manga_reader_page.dart';
 import 'package:anikumo/pages/manga/manga_search_page.dart';
@@ -38,6 +39,9 @@ final _mangaTransition = CustomTransition(
 final mangaModule = createModule(
   path: '/manga',
   register: (c) {
+    // Batch 198: the MangaKit verification solver hook
+    // (idempotent; also installed on zone entry).
+    MangaVerification.install();
     c
       ..route(
         '/',

@@ -9,6 +9,7 @@ import 'package:anikumo/bean/widget/anikumo_menu.dart';
 import 'package:anikumo/modules/bangumi/bangumi_item.dart';
 import 'package:anikumo/pages/popular/popular_controller.dart';
 import 'package:anikumo/bean/card/bangumi_card.dart';
+import 'package:anikumo/services/anime/anime_auto_update.dart';
 import 'package:anikumo/services/ui/app_extras.dart';
 import 'package:anikumo/utils/constants.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
@@ -52,6 +53,9 @@ class _PopularPageState extends State<PopularPage> {
     if (popularController.trendList.isEmpty) {
       popularController.queryBangumiByTrend();
     }
+    // Batch 233 （追番自动更新 pack): opening the anime
+    // home kicks a throttled update check.
+    AnimeAutoUpdate.maybeCheck();
   }
 
   @override

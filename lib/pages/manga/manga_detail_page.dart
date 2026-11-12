@@ -12,6 +12,8 @@ import 'package:anikumo/modules/bangumi/bangumi_item.dart';
 import 'package:anikumo/modules/manga/manga_item.dart';
 import 'package:anikumo/pages/manga/manga_categories_page.dart';
 import 'package:anikumo/pages/manga/manga_search_page.dart';
+import 'package:anikumo/pages/manga/manga_verification_page.dart';
+import 'package:anikumo/services/manga/js/js_manga_source.dart';
 import 'package:anikumo/pages/manga/manga_widgets.dart';
 import 'package:anikumo/request/apis/bangumi_api.dart';
 import 'package:anikumo/services/manga/cross_media.dart';
@@ -338,6 +340,20 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
 
   String? _chaptersError;
 
+  /// Batch 198: the chapters failure was a verification
+  /// wall — the error block offers the verification flow.
+  bool _chaptersVerification = false;
+
+  String? get _verificationUrl {
+    if (!_chaptersVerification) return null;
+    final source = MangaSources.byId(_current.source);
+    if (source is JsBackedMangaSource) {
+      final url = source.declaredUrl;
+      if (url != null && url.isNotEmpty) return url;
+    }
+    return null;
+  }
+
   /// Batch 42: when this edition's source serves nothing
   /// readable, swap the page to a verified edition on
   /// another source and reload. Runs at most once per page
@@ -395,6 +411,7 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
       setState(() {
         _loadingChapters = false;
         _chaptersError = friendlyError(e);
+        _chaptersVerification = MangaVerification.isVerificationError(e);
       });
       return;
     }
@@ -802,11 +819,27 @@ class _MangaDetailPageState extends State<MangaDetailPage> {
                         color: Theme.of(context).colorScheme.error,
                       ),
                     ),
+                    if (_verificationUrl != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: MangaVerificationButton(
+                          url: _verificationUrl!,
+                          onSolved: () {
+                            setState(() {
+                              _loadingChapters = true;
+                              _chaptersError = null;
+                              _chaptersVerification = false;
+                            });
+                            _loadChapters();
+                          },
+                        ),
+                      ),
                     TextButton(
                       onPressed: () {
                         setState(() {
                           _loadingChapters = true;
                           _chaptersError = null;
+                          _chaptersVerification = false;
                         });
                         _loadChapters();
                       },

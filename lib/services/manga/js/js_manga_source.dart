@@ -5,11 +5,56 @@ import 'package:anikumo/services/manga/js/venera_engine.dart';
 import 'package:anikumo/services/manga/manga_source.dart';
 import 'package:anikumo/services/storage/storage.dart';
 
+/// Batch 199: the surface every JS-backed manga source
+/// exposes, whichever engine runs it — the engine is
+/// user-switchable （漫画设置 → 漫画引擎， default MangaKit),
+/// and the settings panel, the image pipeline and the source
+/// list program against this shared face instead of an
+/// engine's concrete class. Both engines persist source
+/// data, settings and cookies to the same store, so
+/// switching engines loses nothing.
+abstract class JsBackedMangaSource extends MangaSource {
+  String get jsKey;
+  String get displayName;
+  String get version;
+  String get fileName;
+
+  /// The source's own code, for registry change detection.
+  String get code;
+
+  /// The source's declared site url, when it states one.
+  String? get declaredUrl;
+
+  Future<List<MangaSettingDef>> settingsSchema();
+  Map<String, dynamic> settingValues();
+  Future<void> writeSetting(String key, Object? value);
+  Future<void> invokeSettingCallback(String key);
+
+  Future<List<int>?> transformImageBytes({
+    required String mode,
+    required String originalUrl,
+    String id = '',
+    String ep = '',
+    required List<int> raw,
+  });
+
+  Future<List<int>?> modifyImageBytes({
+    required String code,
+    required List<int> raw,
+  });
+
+  Future<Map<String, dynamic>?> loadFailedConfig({
+    required String originalUrl,
+    String id = '',
+    String ep = '',
+  });
+}
+
 /// A downloaded Venera JS source running on the QuickJS
 /// runtime — the original Venera mechanism: the .js file from
 /// the community index is downloaded, installed, and executed,
 /// instead of being re-expressed as a declarative definition.
-class JsMangaSource extends MangaSource {
+class JsMangaSource extends JsBackedMangaSource {
   JsMangaSource({
     required this.jsKey,
     required this.displayName,
@@ -24,6 +69,9 @@ class JsMangaSource extends MangaSource {
   final String version;
   final String fileName;
   final VeneraEngine engine;
+
+  @override
+  String get code => engine.code;
 
   @override
   String get id => 'js:$jsKey';

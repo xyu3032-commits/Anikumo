@@ -17,6 +17,8 @@ import 'package:anikumo/pages/settings/proxy/proxy_module.dart';
 import 'package:anikumo/pages/settings/renderer_settings.dart';
 import 'package:anikumo/pages/settings/settings_page.dart';
 import 'package:anikumo/pages/settings/extras_settings_page.dart';
+import 'package:anikumo/pages/settings/anime_feature_repo_page.dart';
+import 'package:anikumo/pages/settings/anime_stats_page.dart';
 import 'package:anikumo/pages/settings/storage_settings.dart';
 import 'package:anikumo/pages/settings/super_resolution_settings.dart';
 import 'package:anikumo/pages/settings/sync/bangumi_sync_page.dart';
@@ -58,6 +60,10 @@ final settingsModule = createModule(
               child: (context, state) => const StorageSettingsPage())
           ..route('/extras',
               child: (context, state) => const ExtrasSettingsPage())
+          ..route('/anime-features',
+              child: (context, state) => const AnimeFeatureRepoPage())
+          ..route('/anime-stats',
+              child: (context, state) => const AnimeStatsPage())
           ..route('/storage/logs', child: (context, state) => const LogsPage())
           ..route('/theme',
               child: (context, state) => const ThemeSettingsPage())

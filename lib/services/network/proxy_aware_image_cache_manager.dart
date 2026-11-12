@@ -17,8 +17,11 @@ class ProxyAwareImageCacheManager extends CacheManager with ImageCacheManager {
         // the headroom, and the worst-case disk footprint
         // roughly halves. Same key: the on-disk store is
         // kept, eviction just tightens to the new caps.
-        stalePeriod: const Duration(days: 14),
-        maxNrOfCacheObjects: 800,
+        // Batch 239: 14 days / 800 -> 7 days / 500 in the
+        // "less cache" pass (byte budget in
+        // cache_budget_trimmer.dart tightened alongside).
+        stalePeriod: const Duration(days: 7),
+        maxNrOfCacheObjects: 500,
         fileService: _fileService,
       ));
 

@@ -7,6 +7,7 @@ import 'package:anikumo/modules/bangumi/episode_item.dart';
 import 'package:anikumo/pages/player/episode_comments_picker.dart';
 import 'package:anikumo/pages/player/episode_comments_view.dart';
 import 'package:anikumo/pages/video/video_controller.dart';
+import 'package:anikumo/pages/video/video_playback_args.dart';
 import 'package:anikumo/request/apis/bangumi_api.dart';
 
 class EpisodeCommentsSheet extends StatefulWidget {
@@ -56,8 +57,20 @@ class _EpisodeCommentsSheetState extends State<EpisodeCommentsSheet>
     }
   }
 
+  /// Batch 244: an external session that lends reviews —
+  /// its 评论 tab shows those instead of Bangumi episode
+  /// comments (which external sessions cannot load).
+  bool get _externalReviews =>
+      _controller.isExternalPlayback &&
+      _controller.externalReviewsLoader != null;
+
   void _resetAndScheduleRefresh() {
     dialogs.cancel();
+    if (_externalReviews) {
+      _isLoading = false;
+      _hasError = false;
+      return;
+    }
     final version = ++_requestVersion;
     _selectedEpisode = widget.episode;
     _hasError = false;
@@ -137,6 +150,9 @@ class _EpisodeCommentsSheetState extends State<EpisodeCommentsSheet>
 
   @override
   Widget build(BuildContext context) {
+    if (_externalReviews) {
+      return _ExternalReviewsView(loader: _controller.externalReviewsLoader!);
+    }
     return Observer(builder: (context) {
       final matchesEpisode = _controller.commentsEpisode == _selectedEpisode;
       final comments = _controller.episodeCommentsList.toList();
@@ -154,5 +170,98 @@ class _EpisodeCommentsSheetState extends State<EpisodeCommentsSheet>
         onRefresh: _loadComments,
       );
     });
+  }
+}
+
+/// Batch 244: the 评论 tab for an external session that
+/// lends work-level reviews (the film zone's TMDB
+/// reviews). Loads once per sheet; the anime path never
+/// builds this widget.
+class _ExternalReviewsView extends StatefulWidget {
+  const _ExternalReviewsView({required this.loader});
+
+  final ExternalReviewsLoader loader;
+
+  @override
+  State<_ExternalReviewsView> createState() => _ExternalReviewsViewState();
+}
+
+class _ExternalReviewsViewState extends State<_ExternalReviewsView> {
+  late final Future<List<ExternalReview>> _future = widget.loader();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<ExternalReview>>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final reviews = snapshot.data ?? const <ExternalReview>[];
+        if (reviews.isEmpty) {
+          return const Center(child: Text('暂无影评'));
+        }
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          itemCount: reviews.length,
+          separatorBuilder: (_, _) => const Divider(height: 20),
+          itemBuilder: (context, index) {
+            final review = reviews[index];
+            final scheme = Theme.of(context).colorScheme;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        review.author.isEmpty ? '匿名' : review.author,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    // Batch 245: which source this review
+                    // came from (the stream mixes TMDB and
+                    // Bangumi comments).
+                    if (review.source.isNotEmpty) ...[
+                      Text(
+                        review.source,
+                        style: TextStyle(
+                          color: scheme.primary,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    if (review.rating != null)
+                      Text(
+                        '★ ${review.rating!.toStringAsFixed(1)}',
+                        style: TextStyle(
+                          color: scheme.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    if (review.date.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        review.date,
+                        style: TextStyle(
+                          color: scheme.onSurfaceVariant,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(review.content),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 }

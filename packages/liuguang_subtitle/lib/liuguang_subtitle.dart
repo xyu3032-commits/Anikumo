@@ -1,0 +1,1 @@
+export 'src/subtitle.dart';

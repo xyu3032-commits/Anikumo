@@ -32,6 +32,9 @@ import 'package:anikumo/models/novel_item.dart';
 import 'package:anikumo/services/novel/novel_api.dart';
 import 'package:anikumo/services/novel/novel_sources.dart';
 import 'package:anikumo/services/storage/storage.dart';
+import 'package:liuguang_core/liuguang_core.dart' as lg;
+import 'package:anikumo/pages/liuguang/film_widgets.dart';
+import 'package:anikumo/services/liuguang/video_engine.dart';
 import 'package:anikumo/utils/constants.dart';
 import 'package:anikumo/utils/date_time.dart';
 import 'package:anikumo/utils/search_parser.dart';
@@ -80,6 +83,7 @@ class _SearchPageState extends State<SearchPage> {
   String? _animeFetchedFor;
   String? _mangaFetchedFor;
   String? _novelFetchedFor;
+  String? _filmFetchedFor;
   List<MangaItem> _mangaResults = const [];
 
   /// Batch 64: the manga-mode list — the same results the
@@ -160,9 +164,12 @@ class _SearchPageState extends State<SearchPage> {
       _novelResults = const [];
       _novelResultsAll = const [];
       _novelLoading = false;
+      _filmResults = const [];
+      _filmLoading = false;
       _animeFetchedFor = null;
       _mangaFetchedFor = null;
       _novelFetchedFor = null;
+      _filmFetchedFor = null;
     });
     if (_scroll.hasClients) _scroll.jumpTo(0);
     // Batch 72: only the visible mode's backends run (plus
@@ -179,11 +186,16 @@ class _SearchPageState extends State<SearchPage> {
       case CrossSearchMode.novel:
         _novelFetchedFor = filters.keyword;
         _searchNovel(filters.keyword);
+      case CrossSearchMode.film:
+        _filmFetchedFor = filters.keyword;
+        _searchFilm(filters.keyword);
       case CrossSearchMode.all:
         _mangaFetchedFor = filters.keyword;
         _searchManga(filters.keyword);
         _novelFetchedFor = filters.keyword;
         _searchNovel(filters.keyword);
+        _filmFetchedFor = filters.keyword;
+        _searchFilm(filters.keyword);
     }
     await request;
   }
@@ -209,6 +221,11 @@ class _SearchPageState extends State<SearchPage> {
         _novelFetchedFor != keyword) {
       _novelFetchedFor = keyword;
       _searchNovel(keyword);
+    }
+    if ((mode == CrossSearchMode.film || mode == CrossSearchMode.all) &&
+        _filmFetchedFor != keyword) {
+      _filmFetchedFor = keyword;
+      _searchFilm(keyword);
     }
   }
 
@@ -333,9 +350,7 @@ class _SearchPageState extends State<SearchPage> {
       rest = const [];
     }
     if (!mounted || generation != _mangaGeneration) return;
-    _mangaSearchedIds = {
-      for (final source in MangaSources.all()) source.id,
-    };
+    _mangaSearchedIds = {for (final source in MangaSources.all()) source.id};
     setState(() => _mangaExpanding = false);
     if (rest.isEmpty) {
       AnikumoDialog.showToast(message: '其他源也没有找到更多结果');
@@ -343,10 +358,7 @@ class _SearchPageState extends State<SearchPage> {
     }
     // Re-apply through the same funnel _searchManga uses:
     // ranked view + strict companion view over the union.
-    final ranked = rankMangaResults(
-      [..._mangaRawMerged, ...rest],
-      keyword,
-    );
+    final ranked = rankMangaResults([..._mangaRawMerged, ...rest], keyword);
     for (final item in ranked) {
       if (!mangaHasInfo(item)) _hiddenMangaKeys.add(item.storageKey);
     }
@@ -425,6 +437,143 @@ class _SearchPageState extends State<SearchPage> {
     });
   }
 
+  // Batch 231: film side of the cross search — the film
+  // zone's aggregated search over its installed sources,
+  // with the 全部/电影/电视剧/其他 sub-filter the user
+  // asked for on the film mode.
+  List<lg.MediaItem> _filmResults = const [];
+  bool _filmLoading = false;
+  int _filmGeneration = 0;
+  FilmCrossFilter _filmFilter = FilmCrossFilter.all;
+
+  Future<void> _searchFilm(String keyword) async {
+    final generation = ++_filmGeneration;
+    if (keyword.trim().isEmpty) {
+      setState(() {
+        _filmResults = const [];
+        _filmLoading = false;
+      });
+      return;
+    }
+    final service = VideoEngineService.instance;
+    service.loadRegistry();
+    if (!service.hasSources) {
+      setState(() {
+        _filmResults = const [];
+        _filmLoading = false;
+      });
+      return;
+    }
+    setState(() => _filmLoading = true);
+    List<lg.MediaItem> results;
+    try {
+      final engine = await service.engine();
+      final page = await engine.search(lg.SearchRequest(keyword: keyword));
+      results = page.items;
+    } catch (_) {
+      results = const [];
+    }
+    if (!mounted || generation != _filmGeneration) return;
+    setState(() {
+      _filmResults = results;
+      _filmLoading = false;
+    });
+  }
+
+  List<Widget> _filmSectionSlivers() {
+    if (_filmLoading && _filmResults.isEmpty) {
+      return const [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: LoadingIndicator(size: 28)),
+          ),
+        ),
+      ];
+    }
+    if (_filmResults.isEmpty) return const [];
+    return [
+      SliverToBoxAdapter(
+        child: CrossSectionHeader(title: '影视', count: _filmResults.length),
+      ),
+      SliverToBoxAdapter(
+        child: FilmRail(
+          items: _filmResults.take(12).toList(),
+          onTapItem: (item) => openFilmDetail(context, item),
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _filmResultSlivers() {
+    if (_filmLoading) {
+      return const [SliverToBoxAdapter(child: _SearchLoadingState())];
+    }
+    final service = VideoEngineService.instance;
+    service.loadRegistry();
+    if (!service.hasSources) {
+      return const [
+        SliverToBoxAdapter(
+          child: GeneralEmptyState(
+            icon: AnikumoIcons.movie_rounded,
+            title: '影视区还没有数据源',
+          ),
+        ),
+      ];
+    }
+    final filtered = _filmResults.where(_filmFilter.matches).toList();
+    return [
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final filter in FilmCrossFilter.values) ...[
+                  ChoiceChip(
+                    label: Text(filter.label),
+                    selected: _filmFilter == filter,
+                    onSelected: (_) => setState(() => _filmFilter = filter),
+                  ),
+                  const SizedBox(width: 7),
+                ],
+                const SizedBox(width: 6),
+                Text(
+                  '${filtered.length} 部影视 · 点开进入影视专区',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      if (filtered.isEmpty)
+        const SliverToBoxAdapter(
+          child: GeneralEmptyState(
+            icon: AnikumoIcons.movie_rounded,
+            title: '没有找到影视',
+          ),
+        )
+      else
+        SliverGrid.builder(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 10,
+            childAspectRatio: 0.56,
+          ),
+          itemCount: filtered.length,
+          itemBuilder: (context, index) => FilmPosterCard(
+            item: filtered[index],
+            onTap: () => openFilmDetail(context, filtered[index]),
+          ),
+        ),
+    ];
+  }
+
   /// Batch 75: 「更多搜索」 for novels — every source the
   /// trio did not cover, unioned with the results already
   /// on screen.
@@ -443,9 +592,7 @@ class _SearchPageState extends State<SearchPage> {
       rest = const [];
     }
     if (!mounted || generation != _novelGeneration) return;
-    _novelSearchedIds = {
-      for (final source in NovelSources.all()) source.id,
-    };
+    _novelSearchedIds = {for (final source in NovelSources.all()) source.id};
     setState(() => _novelExpanding = false);
     if (rest.isEmpty) {
       AnikumoDialog.showToast(message: '其他源也没有找到更多结果');
@@ -497,7 +644,10 @@ class _SearchPageState extends State<SearchPage> {
                   onPressed: loading
                       ? null
                       : (manga ? _expandMangaSearch : _expandNovelSearch),
-                  icon: const Icon(AnikumoIcons.manage_search_outlined, size: 18),
+                  icon: const Icon(
+                    AnikumoIcons.manage_search_outlined,
+                    size: 18,
+                  ),
                   label: Text('更多搜索（还有 $remaining 个源）'),
                 )
               else
@@ -527,13 +677,15 @@ class _SearchPageState extends State<SearchPage> {
   Future<void> _pickCrossSources({required bool manga}) async {
     final options = manga
         ? [
-            for (final source
-                in MangaSources.sortForDisplay(MangaSources.all()))
+            for (final source in MangaSources.sortForDisplay(
+              MangaSources.all(),
+            ))
               (id: source.id, name: source.name),
           ]
         : [
-            for (final source
-                in NovelSources.sortForDisplay(NovelSources.all()))
+            for (final source in NovelSources.sortForDisplay(
+              NovelSources.all(),
+            ))
               (id: source.id, name: source.name),
           ];
     if (options.isEmpty) return;
@@ -559,8 +711,8 @@ class _SearchPageState extends State<SearchPage> {
                     '默认同时搜索的源，最多 $maxCrossSearchSources 个；'
                     '想一次搜全部源，用结果下方的「更多搜索」。',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
                 for (final option in options)
@@ -591,8 +743,7 @@ class _SearchPageState extends State<SearchPage> {
         ),
         actions: [
           TextButton(
-            onPressed: () =>
-                Navigator.pop(dialogContext, const <String>[]),
+            onPressed: () => Navigator.pop(dialogContext, const <String>[]),
             child: const Text('恢复默认'),
           ),
           TextButton(
@@ -600,8 +751,7 @@ class _SearchPageState extends State<SearchPage> {
             child: const Text('取消'),
           ),
           FilledButton(
-            onPressed: () =>
-                Navigator.pop(dialogContext, selected.toList()),
+            onPressed: () => Navigator.pop(dialogContext, selected.toList()),
             child: const Text('保存'),
           ),
         ],
@@ -977,7 +1127,10 @@ class _SearchPageState extends State<SearchPage> {
                     children: [
                       for (final history in histories.take(10))
                         InputChip(
-                          avatar: const Icon(AnikumoIcons.history_rounded, size: 16),
+                          avatar: const Icon(
+                            AnikumoIcons.history_rounded,
+                            size: 16,
+                          ),
                           label: Text(
                             _readableQuery(history.keyword),
                             maxLines: 1,
@@ -985,17 +1138,20 @@ class _SearchPageState extends State<SearchPage> {
                           ),
                           shape: const StadiumBorder(),
                           side: BorderSide(
-                            color: theme.colorScheme.outlineVariant
-                                .withValues(alpha: 0.5),
+                            color: theme.colorScheme.outlineVariant.withValues(
+                              alpha: 0.5,
+                            ),
                           ),
                           backgroundColor:
                               theme.colorScheme.surfaceContainerHigh,
                           onPressed: () => _submit(history.keyword),
                           onDeleted: _managingHistory
-                              ? () =>
-                                  _controller.deleteSearchHistory(history)
+                              ? () => _controller.deleteSearchHistory(history)
                               : null,
-                          deleteIcon: const Icon(AnikumoIcons.close_rounded, size: 16),
+                          deleteIcon: const Icon(
+                            AnikumoIcons.close_rounded,
+                            size: 16,
+                          ),
                         ),
                     ],
                   ),
@@ -1031,12 +1187,17 @@ class _SearchPageState extends State<SearchPage> {
         padding: const EdgeInsets.only(bottom: 16),
         child: Align(
           alignment: Alignment.centerLeft,
-          child: CrossSearchModeSwitch(
-            mode: _searchMode,
-            onChanged: (mode) {
-              setState(() => _searchMode = mode);
-              _ensureModeData(mode);
-            },
+          // Batch 231: five modes — scroll on narrow
+          // screens rather than overflow.
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: CrossSearchModeSwitch(
+              mode: _searchMode,
+              onChanged: (mode) {
+                setState(() => _searchMode = mode);
+                _ensureModeData(mode);
+              },
+            ),
           ),
         ),
       ),
@@ -1046,6 +1207,9 @@ class _SearchPageState extends State<SearchPage> {
     }
     if (_searchMode == CrossSearchMode.novel) {
       return [modeSwitchSliver, ..._novelResultSlivers()];
+    }
+    if (_searchMode == CrossSearchMode.film) {
+      return [modeSwitchSliver, ..._filmResultSlivers()];
     }
 
     final animeSlivers = <Widget>[
@@ -1201,6 +1365,7 @@ class _SearchPageState extends State<SearchPage> {
         ...animeSlivers,
         ..._mangaSectionSlivers(),
         ..._novelSectionSlivers(),
+        ..._filmSectionSlivers(),
       ];
     }
     return [modeSwitchSliver, ...animeSlivers];

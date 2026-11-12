@@ -8,9 +8,12 @@ import 'package:anikumo/bean/settings/settings_detail_scaffold.dart';
 import 'package:anikumo/bean/settings/settings_dropdown_tile.dart';
 import 'package:anikumo/bean/settings/settings_list.dart';
 import 'package:anikumo/pages/settings/player_enhance_page.dart';
+import 'package:anikumo/pages/settings/anime_feature_repo_page.dart';
+import 'package:anikumo/pages/settings/anime_stats_page.dart';
 import 'package:anikumo/bean/widget/motion_kit.dart';
 import 'package:anikumo/modules/manga/manga_item.dart';
 import 'package:anikumo/repositories/history_repository.dart';
+import 'package:anikumo/services/anime/anime_features.dart';
 import 'package:anikumo/services/manga/manga_downloads.dart';
 import 'package:anikumo/services/manga/manga_library.dart';
 import 'package:anikumo/services/storage/storage.dart';
@@ -199,6 +202,29 @@ class _ExtrasSettingsPageState extends State<ExtrasSettingsPage> {
       title: const Text('Anikumo 增强'),
       body: SettingsList(
         sections: [
+          SettingsSection(title: const Text('动漫扩展'), tiles: [
+            SettingsTile(
+              leading: AnikumoIcons.extension_rounded,
+              title: const Text('动漫功能仓库'),
+              description: const Text('可选功能包：装好立即生效，没装的不会出现在动漫区里'),
+              onPressed: (context) => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const AnimeFeatureRepoPage(),
+                ),
+              ),
+            ),
+            if (AnimeFeatures.isInstalled(AnimeFeatures.statsId))
+              SettingsTile(
+                leading: AnikumoIcons.bar_chart_rounded,
+                title: const Text('观影报告'),
+                description: const Text('累计时长、看过的番与集数、最近 7 天节奏'),
+                onPressed: (context) => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const AnimeStatsPage(),
+                  ),
+                ),
+              ),
+          ]),
           SettingsSection(title: const Text('显示'), tiles: [
             SettingsTile(
               leading: AnikumoIcons.format_size_rounded,

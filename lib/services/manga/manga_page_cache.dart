@@ -19,8 +19,12 @@ final CacheManager mangaPageCacheManager = CacheManager(
     // objects, 14 -> 10 days). 800 pages still covers several
     // chapters of resume-reading headroom, while the worst-case
     // storage footprint roughly halves.
-    stalePeriod: const Duration(days: 10),
-    maxNrOfCacheObjects: 800,
+    // Batch 239: 10 days / 800 -> 7 days / 500 ("less
+    // cache" pass; the byte budget halved alongside in
+    // cache_budget_trimmer.dart). Resume-reading a recent
+    // chapter still hits the store.
+    stalePeriod: const Duration(days: 7),
+    maxNrOfCacheObjects: 500,
     // Batch 185: downloads pass the image-magic check
     // before they may enter the store (see
     // MangaImageFileService) — a 200 HTML challenge page

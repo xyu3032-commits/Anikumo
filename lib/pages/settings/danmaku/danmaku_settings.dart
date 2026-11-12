@@ -36,8 +36,6 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
   late bool danmakuGamerSource;
   late bool danmakuDanDanSource;
   late bool danmakuFollowSpeed;
-  late String danmakuAppId;
-  late String danmakuAppKey;
   late bool danmakuBuiltinEnabled;
 
   @override
@@ -80,8 +78,6 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
         GStorage.getSetting<bool>(SettingsKeys.danmakuDanDanSource);
     danmakuFollowSpeed =
         GStorage.getSetting<bool>(SettingsKeys.danmakuFollowSpeed);
-    danmakuAppId = GStorage.getSetting(SettingsKeys.danmakuAppId);
-    danmakuAppKey = GStorage.getSetting(SettingsKeys.danmakuAppKey);
     danmakuBuiltinEnabled =
         GStorage.getSetting<bool>(SettingsKeys.danmakuBuiltinEnabled);
   }
@@ -161,82 +157,27 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
     });
   }
 
-  Future<void> _editCredential({required bool isId}) async {
-    final controller = TextEditingController(
-      text: isId ? danmakuAppId : danmakuAppKey,
-    );
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(isId ? '弹弹Play AppId' : '弹弹Play AppKey'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: '在 open.dandanplay.net 申请后粘贴',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('保存'),
-          ),
-        ],
-      ),
-    );
-    if (saved != true || !mounted) return;
-    final value = controller.text.trim();
-    if (isId) {
-      danmakuAppId = value;
-      await GStorage.putSetting<String>(SettingsKeys.danmakuAppId, value);
-    } else {
-      danmakuAppKey = value;
-      await GStorage.putSetting<String>(SettingsKeys.danmakuAppKey, value);
-    }
-    setState(() {});
-  }
-
   @override
   Widget build(BuildContext context) {
     return SettingsDetailScaffold(
       title: const Text('弹幕设置'),
       body: SettingsList(
         sections: [
-          // Batch 18: without credentials the DanDanPlay API
-          // 403s every request; self-built packages inject
-          // none, so let users bring their own.
+          // Batch 193: the credential entry is gone — the
+          // build carries the pair (obfuscated, injected at
+          // packaging time) and a pair stored by an earlier
+          // version keeps working silently underneath.
+          // Nothing about credentials appears here anymore.
           SettingsSection(
-            title: Text('弹弹Play 接口凭据'),
+            title: Text('弹幕服务'),
             tiles: [
-              SettingsTile(
-                leading: AnikumoIcons.key_rounded,
-                title: Text('AppId'),
-                description: Text(
-                  danmakuAppId.isEmpty
-                      ? '未设置 — 弹幕搜索与加载会被接口拒绝（403）'
-                      : danmakuAppId,
-                ),
-                onPressed: (_) => _editCredential(isId: true),
-              ),
-              SettingsTile(
-                leading: AnikumoIcons.password_rounded,
-                title: Text('AppKey'),
-                description: Text(
-                  danmakuAppKey.isEmpty ? '未设置' : '已设置（内容隐藏）',
-                ),
-                onPressed: (_) => _editCredential(isId: false),
-              ),
               // Batch 163: the built-in service's only UI —
               // a switch. No address, no key, nothing else
               // about it appears anywhere in the app.
               SettingsTile.switchTile(
                 leading: AnikumoIcons.cloud_rounded,
                 title: Text('内置弹幕服务'),
-                description: Text('未填写凭据时自动使用'),
+                description: Text('主线路不可用时自动切换使用'),
                 initialValue: danmakuBuiltinEnabled,
                 onToggle: (value) async {
                   danmakuBuiltinEnabled = value ?? !danmakuBuiltinEnabled;

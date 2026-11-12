@@ -35,7 +35,9 @@ void main() async {
   // grids, manga rails), forcing re-decode on every revisit.
   // 2000 images / 256 MB keeps a working set of covers hot;
   // entries are still evicted under memory pressure.
-  PaintingBinding.instance.imageCache.maximumSize = 2000;
+  // Batch 239: 2000 -> 1500 objects alongside the byte
+  // trim below (the user's "less cache" pass).
+  PaintingBinding.instance.imageCache.maximumSize = 1500;
   // Batch 32: byte cap trimmed 256 -> 192 MB (still ~2x the
   // framework default). Covers are decode-capped at 2x their
   // display width by the cover widgets, so the resident set
@@ -46,8 +48,11 @@ void main() async {
   // decodes mean the working set of covers/pages fits
   // comfortably — the trimmed headroom was mostly occupied
   // by pages from chapters read long ago in the session.
+  // Batch 239: 128 -> 96 MB, same reasoning — the width
+  // caps keep the visible working set resident; what got
+  // trimmed is the tail of pages nobody scrolls back to.
   PaintingBinding.instance.imageCache.maximumSizeBytes =
-      128 * 1024 * 1024;
+      96 * 1024 * 1024;
   AppDeepLinks().start();
   registerEchHttpLicenses();
   MediaKit.ensureInitialized();

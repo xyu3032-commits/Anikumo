@@ -1238,6 +1238,16 @@ class _PlayerItemState extends State<PlayerItem>
           duration: playerController.playback.playerDuration,
         );
       }
+      // Batch 208: external sessions report progress to their
+      // owning zone instead of the anime history above.
+      if (playerController.playback.playerPlaying &&
+          !videoPageController.loading &&
+          videoPageController.isExternalPlayback) {
+        videoPageController.reportExternalProgress(
+          playerController.playback.playerPosition,
+          playerController.playback.playerDuration,
+        );
+      }
       final playingSelection = videoPageController.playbackEpisode;
       final playingRoadData =
           videoPageController.roadList[playingSelection.road];
@@ -1366,6 +1376,12 @@ class _PlayerItemState extends State<PlayerItem>
   }
 
   void showDanmakuSwitch() {
+    // Batch 208: external sessions do not use the anime
+    // danmaku services; the owning zone adds its own source.
+    if (videoPageController.isExternalPlayback) {
+      AnikumoDialog.showToast(message: '该专区暂无弹幕源');
+      return;
+    }
     unawaited(showDanmakuSourceSheet(
       context,
       bangumiId: videoPageController.bangumiItem.id,

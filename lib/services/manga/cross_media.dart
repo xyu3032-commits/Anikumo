@@ -10,7 +10,12 @@ enum CrossSearchMode {
   // Batch 48: the novel mode the cross search never had —
   // users reported the 搜索小说 button "disappeared"; it was
   // never in this switch. Both search pages now serve it.
-  novel('小说');
+  novel('小说'),
+  // Batch 231: the film mode — the other zones' search
+  // pages can now search 影视 too (the film zone's own
+  // aggregated search, with 全部/电影/电视剧/其他
+  // sub-filters).
+  film('影视');
 
   const CrossSearchMode(this.label);
 
@@ -54,9 +59,7 @@ List<String> buildCrossQueries({
 }
 
 String _normalizeTitle(String title) {
-  return title
-      .toLowerCase()
-      .replaceAll(RegExp(r'[\s·・:：\-—_.,，。!！?？]'), '');
+  return title.toLowerCase().replaceAll(RegExp(r'[\s·・:：\-—_.,，。!！?？]'), '');
 }
 
 /// Ranks manga results for an anime title: exact-normalized title
@@ -96,8 +99,9 @@ List<BangumiItem> rankCrossAnime(List<BangumiItem> results, String title) {
     ];
     if (candidates.contains(target)) {
       exact.add(item);
-    } else if (candidates
-        .any((c) => c.contains(target) || target.contains(c))) {
+    } else if (candidates.any(
+      (c) => c.contains(target) || target.contains(c),
+    )) {
       related.add(item);
     } else {
       rest.add(item);

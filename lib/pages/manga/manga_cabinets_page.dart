@@ -124,7 +124,11 @@ class _MangaCabinetsTabState extends State<MangaCabinetsTab> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              title: Text('把《${book.title}》移动到', maxLines: 1, overflow: TextOverflow.ellipsis),
+              title: Text(
+                '把《${book.title}》移动到',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             for (final cabinet in MangaCabinets.cabinets())
               ListTile(
@@ -250,8 +254,9 @@ class _MangaCabinetsTabState extends State<MangaCabinetsTab> {
               const SizedBox(width: 8),
               Text(
                 cabinet.name,
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w600),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const SizedBox(width: 8),
               Text(

@@ -9,8 +9,10 @@ part of 'search_controller.dart';
 // ignore_for_file: non_constant_identifier_names, unnecessary_brace_in_string_interps, unnecessary_lambdas, prefer_expression_function_bodies, lines_longer_than_80_chars, avoid_as, avoid_annotating_with_dynamic, no_leading_underscores_for_local_identifiers
 
 mixin _$SearchPageController on _SearchPageController, Store {
-  late final _$isLoadingAtom =
-      Atom(name: '_SearchPageController.isLoading', context: context);
+  late final _$isLoadingAtom = Atom(
+    name: '_SearchPageController.isLoading',
+    context: context,
+  );
 
   @override
   bool get isLoading {
@@ -25,8 +27,10 @@ mixin _$SearchPageController on _SearchPageController, Store {
     });
   }
 
-  late final _$isTimeOutAtom =
-      Atom(name: '_SearchPageController.isTimeOut', context: context);
+  late final _$isTimeOutAtom = Atom(
+    name: '_SearchPageController.isTimeOut',
+    context: context,
+  );
 
   @override
   bool get isTimeOut {
@@ -41,8 +45,46 @@ mixin _$SearchPageController on _SearchPageController, Store {
     });
   }
 
+  late final _$isSearchErrorAtom = Atom(
+    name: '_SearchPageController.isSearchError',
+    context: context,
+  );
+
+  @override
+  bool get isSearchError {
+    _$isSearchErrorAtom.reportRead();
+    return super.isSearchError;
+  }
+
+  @override
+  set isSearchError(bool value) {
+    _$isSearchErrorAtom.reportWrite(value, super.isSearchError, () {
+      super.isSearchError = value;
+    });
+  }
+
+  late final _$fallbackKeywordUsedAtom = Atom(
+    name: '_SearchPageController.fallbackKeywordUsed',
+    context: context,
+  );
+
+  @override
+  String get fallbackKeywordUsed {
+    _$fallbackKeywordUsedAtom.reportRead();
+    return super.fallbackKeywordUsed;
+  }
+
+  @override
+  set fallbackKeywordUsed(String value) {
+    _$fallbackKeywordUsedAtom.reportWrite(value, super.fallbackKeywordUsed, () {
+      super.fallbackKeywordUsed = value;
+    });
+  }
+
   late final _$notShowWatchedBangumisAtom = Atom(
-      name: '_SearchPageController.notShowWatchedBangumis', context: context);
+    name: '_SearchPageController.notShowWatchedBangumis',
+    context: context,
+  );
 
   @override
   bool get notShowWatchedBangumis {
@@ -52,14 +94,19 @@ mixin _$SearchPageController on _SearchPageController, Store {
 
   @override
   set notShowWatchedBangumis(bool value) {
-    _$notShowWatchedBangumisAtom
-        .reportWrite(value, super.notShowWatchedBangumis, () {
-      super.notShowWatchedBangumis = value;
-    });
+    _$notShowWatchedBangumisAtom.reportWrite(
+      value,
+      super.notShowWatchedBangumis,
+      () {
+        super.notShowWatchedBangumis = value;
+      },
+    );
   }
 
   late final _$notShowAbandonedBangumisAtom = Atom(
-      name: '_SearchPageController.notShowAbandonedBangumis', context: context);
+    name: '_SearchPageController.notShowAbandonedBangumis',
+    context: context,
+  );
 
   @override
   bool get notShowAbandonedBangumis {
@@ -69,14 +116,19 @@ mixin _$SearchPageController on _SearchPageController, Store {
 
   @override
   set notShowAbandonedBangumis(bool value) {
-    _$notShowAbandonedBangumisAtom
-        .reportWrite(value, super.notShowAbandonedBangumis, () {
-      super.notShowAbandonedBangumis = value;
-    });
+    _$notShowAbandonedBangumisAtom.reportWrite(
+      value,
+      super.notShowAbandonedBangumis,
+      () {
+        super.notShowAbandonedBangumis = value;
+      },
+    );
   }
 
-  late final _$bangumiListAtom =
-      Atom(name: '_SearchPageController.bangumiList', context: context);
+  late final _$bangumiListAtom = Atom(
+    name: '_SearchPageController.bangumiList',
+    context: context,
+  );
 
   @override
   ObservableList<BangumiItem> get bangumiList {
@@ -91,8 +143,10 @@ mixin _$SearchPageController on _SearchPageController, Store {
     });
   }
 
-  late final _$searchHistoriesAtom =
-      Atom(name: '_SearchPageController.searchHistories', context: context);
+  late final _$searchHistoriesAtom = Atom(
+    name: '_SearchPageController.searchHistories',
+    context: context,
+  );
 
   @override
   ObservableList<SearchHistory> get searchHistories {
@@ -107,61 +161,76 @@ mixin _$SearchPageController on _SearchPageController, Store {
     });
   }
 
-  late final _$searchBangumiAsyncAction =
-      AsyncAction('_SearchPageController.searchBangumi', context: context);
+  late final _$searchBangumiAsyncAction = AsyncAction(
+    '_SearchPageController.searchBangumi',
+    context: context,
+  );
 
   @override
   Future<void> searchBangumi(String input, {String type = 'add'}) {
-    return _$searchBangumiAsyncAction
-        .run(() => super.searchBangumi(input, type: type));
+    return _$searchBangumiAsyncAction.run(
+      () => super.searchBangumi(input, type: type),
+    );
   }
 
   late final _$deleteSearchHistoryAsyncAction = AsyncAction(
-      '_SearchPageController.deleteSearchHistory',
-      context: context);
+    '_SearchPageController.deleteSearchHistory',
+    context: context,
+  );
 
   @override
   Future<void> deleteSearchHistory(SearchHistory history) {
-    return _$deleteSearchHistoryAsyncAction
-        .run(() => super.deleteSearchHistory(history));
+    return _$deleteSearchHistoryAsyncAction.run(
+      () => super.deleteSearchHistory(history),
+    );
   }
 
-  late final _$clearSearchHistoryAsyncAction =
-      AsyncAction('_SearchPageController.clearSearchHistory', context: context);
+  late final _$clearSearchHistoryAsyncAction = AsyncAction(
+    '_SearchPageController.clearSearchHistory',
+    context: context,
+  );
 
   @override
   Future<void> clearSearchHistory() {
-    return _$clearSearchHistoryAsyncAction
-        .run(() => super.clearSearchHistory());
+    return _$clearSearchHistoryAsyncAction.run(
+      () => super.clearSearchHistory(),
+    );
   }
 
   late final _$setNotShowWatchedBangumisAsyncAction = AsyncAction(
-      '_SearchPageController.setNotShowWatchedBangumis',
-      context: context);
+    '_SearchPageController.setNotShowWatchedBangumis',
+    context: context,
+  );
 
   @override
   Future<void> setNotShowWatchedBangumis(bool value) {
-    return _$setNotShowWatchedBangumisAsyncAction
-        .run(() => super.setNotShowWatchedBangumis(value));
+    return _$setNotShowWatchedBangumisAsyncAction.run(
+      () => super.setNotShowWatchedBangumis(value),
+    );
   }
 
   late final _$setNotShowAbandonedBangumisAsyncAction = AsyncAction(
-      '_SearchPageController.setNotShowAbandonedBangumis',
-      context: context);
+    '_SearchPageController.setNotShowAbandonedBangumis',
+    context: context,
+  );
 
   @override
   Future<void> setNotShowAbandonedBangumis(bool value) {
-    return _$setNotShowAbandonedBangumisAsyncAction
-        .run(() => super.setNotShowAbandonedBangumis(value));
+    return _$setNotShowAbandonedBangumisAsyncAction.run(
+      () => super.setNotShowAbandonedBangumis(value),
+    );
   }
 
-  late final _$_SearchPageControllerActionController =
-      ActionController(name: '_SearchPageController', context: context);
+  late final _$_SearchPageControllerActionController = ActionController(
+    name: '_SearchPageController',
+    context: context,
+  );
 
   @override
   void loadSearchHistories() {
     final _$actionInfo = _$_SearchPageControllerActionController.startAction(
-        name: '_SearchPageController.loadSearchHistories');
+      name: '_SearchPageController.loadSearchHistories',
+    );
     try {
       return super.loadSearchHistories();
     } finally {
@@ -174,6 +243,8 @@ mixin _$SearchPageController on _SearchPageController, Store {
     return '''
 isLoading: ${isLoading},
 isTimeOut: ${isTimeOut},
+isSearchError: ${isSearchError},
+fallbackKeywordUsed: ${fallbackKeywordUsed},
 notShowWatchedBangumis: ${notShowWatchedBangumis},
 notShowAbandonedBangumis: ${notShowAbandonedBangumis},
 bangumiList: ${bangumiList},

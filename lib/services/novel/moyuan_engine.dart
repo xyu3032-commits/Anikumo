@@ -186,10 +186,19 @@ class MoyuanEngine {
   static NovelContentResult blocksFromBridge(dynamic out) {
     var rawBlocks = const <dynamic>[];
     var truncated = false;
+    var verificationRequired = false;
+    Map<String, dynamic>? verification;
     if (out is Map) {
       final b = out['blocks'];
       if (b is List) rawBlocks = b;
       truncated = out['truncated'] == true;
+      // Batch 195: verification-wall flag, riding beside
+      // truncated in the payload.
+      verificationRequired = out['verificationRequired'] == true;
+      // Batch 197: the challenge descriptor, when the
+      // engine extracted one from the wall page.
+      final v = out['verification'];
+      if (v is Map) verification = v.cast<String, dynamic>();
     } else if (out is List) {
       rawBlocks = out;
     }
@@ -215,7 +224,12 @@ class MoyuanEngine {
       }
       // Unknown types fall through and are dropped.
     }
-    return NovelContentResult(blocks, possiblyTruncated: truncated);
+    return NovelContentResult(
+      blocks,
+      possiblyTruncated: truncated,
+      verificationRequired: verificationRequired,
+      verification: verification,
+    );
   }
 
   static String _js(String value) => jsonEncode(value);

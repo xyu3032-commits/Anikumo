@@ -1,0 +1,11 @@
+name: liuguang_platform
+description: Platform detection, conservative capability matrix, host path injection.
+version: 0.1.0
+publish_to: none
+environment:
+  sdk: '>=3.10.0 <4.0.0'
+dependencies:
+  liuguang_player_api:
+    path: ../liuguang_player_api
+dev_dependencies:
+  test: ^1.25.0

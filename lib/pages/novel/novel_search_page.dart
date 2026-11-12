@@ -9,6 +9,8 @@ import '../../services/novel/novel_api.dart';
 import '../../services/novel/novel_sources.dart';
 import 'novel_widgets.dart';
 import 'package:anikumo/bean/widget/anikumo_icons.dart';
+import 'package:anikumo/pages/search/cross_search_widgets.dart';
+import 'package:anikumo/services/manga/cross_media.dart';
 
 /// Novel search: the active source, or every source with
 /// relevance ranking.
@@ -25,6 +27,10 @@ class NovelSearchPage extends StatefulWidget {
 class _NovelSearchPageState extends State<NovelSearchPage> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
+
+  /// Batch 231: 小说/影视 mode — the novel zone's search
+  /// can search films too, via the shared film pane.
+  CrossSearchMode _mode = CrossSearchMode.novel;
   bool _allSources = false;
   bool _loading = false;
   bool _searched = false;
@@ -53,6 +59,12 @@ class _NovelSearchPageState extends State<NovelSearchPage> {
   Future<void> _search() async {
     final query = _controller.text.trim();
     if (query.isEmpty || _loading) return;
+    if (_mode == CrossSearchMode.film) {
+      // The film pane runs its own search off _lastQuery.
+      FocusScope.of(context).unfocus();
+      setState(() => _lastQuery = query);
+      return;
+    }
     FocusScope.of(context).unfocus();
     setState(() {
       _loading = true;
@@ -137,50 +149,66 @@ class _NovelSearchPageState extends State<NovelSearchPage> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-            child: Row(
-              children: [
-                PillSwitch<bool>(
-                  options: const [
-                    PillSwitchOption(
-                      value: false,
-                      label: '当前源',
-                      icon: AnikumoIcons.book_rounded,
-                    ),
-                    PillSwitchOption(
-                      value: true,
-                      label: '全部源',
-                      icon: AnikumoIcons.library_books_rounded,
-                    ),
-                  ],
-                  value: _allSources,
-                  onChanged: (value) {
-                    setState(() => _allSources = value);
-                    if (_lastQuery.isNotEmpty) _search();
-                  },
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    _allSources
-                        ? '共 ${NovelSources.all().length} 个源'
-                        : '源：${NovelSources.all().isEmpty ? '—' : NovelSources.active().name}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.outline,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: CrossSearchModeSwitch(
+                modes: const [CrossSearchMode.novel, CrossSearchMode.film],
+                mode: _mode,
+                onChanged: (mode) => setState(() => _mode = mode),
+              ),
             ),
           ),
+          if (_mode == CrossSearchMode.novel)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+              child: Row(
+                children: [
+                  PillSwitch<bool>(
+                    options: const [
+                      PillSwitchOption(
+                        value: false,
+                        label: '当前源',
+                        icon: AnikumoIcons.book_rounded,
+                      ),
+                      PillSwitchOption(
+                        value: true,
+                        label: '全部源',
+                        icon: AnikumoIcons.library_books_rounded,
+                      ),
+                    ],
+                    value: _allSources,
+                    onChanged: (value) {
+                      setState(() => _allSources = value);
+                      if (_lastQuery.isNotEmpty) _search();
+                    },
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _allSources
+                          ? '共 ${NovelSources.all().length} 个源'
+                          : '源：${NovelSources.all().isEmpty ? '—' : NovelSources.active().name}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Expanded(
-            child: _loading
+            child: _mode == CrossSearchMode.film
+                ? FilmCrossSearchPane(query: _lastQuery)
+                : _loading
                 ? ListView.builder(
                     itemCount: 6,
                     itemBuilder: (context, index) => const Padding(
-                      padding:
-                          EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                       child: Row(
                         children: [
                           VioletSkeleton(width: 46, height: 62, radius: 8),
@@ -204,26 +232,23 @@ class _NovelSearchPageState extends State<NovelSearchPage> {
                     ),
                   )
                 : !_searched
-                    ? const GeneralEmptyState(
-                        icon: AnikumoIcons.menu_book_outlined,
-                        title: '输入关键词开始搜索',
-                      )
-                    : _errorText != null
-                        ? NovelErrorState(
-                            message: _errorText!,
-                            onRetry: _search,
-                          )
-                        : _results.isEmpty
-                            ? const GeneralEmptyState(
-                                icon: AnikumoIcons.search_off_rounded,
-                                title: '没有找到相关的书',
-                              )
-                            : ListView.builder(
-        scrollCacheExtent: const ScrollCacheExtent.pixels(700),
-                                itemCount: _results.length,
-                                itemBuilder: (context, index) =>
-                                    NovelBookTile(item: _results[index]),
-                              ),
+                ? const GeneralEmptyState(
+                    icon: AnikumoIcons.menu_book_outlined,
+                    title: '输入关键词开始搜索',
+                  )
+                : _errorText != null
+                ? NovelErrorState(message: _errorText!, onRetry: _search)
+                : _results.isEmpty
+                ? const GeneralEmptyState(
+                    icon: AnikumoIcons.search_off_rounded,
+                    title: '没有找到相关的书',
+                  )
+                : ListView.builder(
+                    scrollCacheExtent: const ScrollCacheExtent.pixels(700),
+                    itemCount: _results.length,
+                    itemBuilder: (context, index) =>
+                        NovelBookTile(item: _results[index]),
+                  ),
           ),
         ],
       ),

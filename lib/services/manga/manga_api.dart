@@ -2,6 +2,7 @@ import 'package:anikumo/modules/manga/manga_item.dart';
 import 'dart:convert';
 
 import 'package:anikumo/services/cross_search_trio.dart';
+import 'package:anikumo/services/manga/js/mangakit_source.dart';
 import 'package:anikumo/services/manga/manga_source.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/services/manga/manga_sources.dart';
@@ -288,6 +289,7 @@ class MangaApi {
     int limit = 20,
     int page = 1,
     bool fresh = false,
+    void Function(List<MangaItem> sectionItems)? onSectionItems,
   }) async {
     // Batch 96: the cache/snapshot key no longer contains
     // [limit]. No current source type honours it (JS sources
@@ -320,7 +322,17 @@ class MangaApi {
     // scratch, and burned another 30 s before the grid saw
     // anything. The total budget is 30 s, retry included.
     final result = await retryTransient(
-      () => source.popular(limit: limit, page: page),
+      // Batch 198: MangaKit sources get the framework's
+      // progressive explore (sections stream into
+      // [onSectionItems] as they land) and a manual refresh
+      // bypasses the framework's refresh guard.
+      () => source is MangaKitMangaSource
+          ? source.popularWithSections(
+              page: page,
+              fresh: fresh,
+              onSection: onSectionItems,
+            )
+          : source.popular(limit: limit, page: page),
     ).timeout(const Duration(seconds: 30));
     if (result.isNotEmpty) {
       _popularCache.put(key, result);
@@ -458,7 +470,11 @@ class MangaApi {
     // now gets the same treatment as popular: one transient
     // retry inside a 30 s total budget.
     final result = await retryTransient(
-      () => source.updated(limit: limit, page: page),
+      // Batch 198: same MangaKit treatment as popular
+      // (updated rides the same explore feed there).
+      () => source is MangaKitMangaSource
+          ? source.popularWithSections(page: page, fresh: fresh)
+          : source.updated(limit: limit, page: page),
     ).timeout(const Duration(seconds: 30));
     if (result.isNotEmpty) _updatedCache.put(key, result);
     return result;

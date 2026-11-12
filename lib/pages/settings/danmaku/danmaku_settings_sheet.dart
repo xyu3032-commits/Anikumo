@@ -9,6 +9,7 @@ import 'package:anikumo/bean/widget/content_section.dart';
 import 'package:anikumo/pages/settings/danmaku/danmaku_ch_convert_tile.dart';
 import 'package:anikumo/pages/settings/danmaku/danmaku_shield_settings_sheet.dart';
 import 'package:anikumo/pages/settings/danmaku/danmaku_time_offset_sheet.dart';
+import 'package:anikumo/services/anime/anime_features.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
@@ -93,6 +94,44 @@ class _DanmakuSettingsSheetState extends State<_DanmakuSettingsSheet> {
               key: const PageStorageKey('danmaku-appearance'),
               padding: materialBottomSheetContentPadding,
               children: [
+                // Batch 233 （弹幕个性化 pack): one-tap style
+                // presets over the same settings keys the
+                // sliders below write.
+                if (AnimeFeatures.isInstalled(
+                    AnimeFeatures.danmakuStyleId)) ...[
+                  ContentSection.group(title: '一键预设', children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      child: Wrap(
+                        spacing: 8,
+                        children: [
+                          for (final preset in DanmakuPreset.presets)
+                            ActionChip(
+                              label: Text(preset.name),
+                              onPressed: () async {
+                                await preset.apply();
+                                _applyOption(_option.copyWith(
+                                  opacity: preset.opacity,
+                                  fontSize: preset.fontSize,
+                                  duration: preset.durationSeconds,
+                                  area: preset.area,
+                                  strokeWidth: preset.border
+                                      ? GStorage.getSetting(
+                                          SettingsKeys.danmakuBorderSize)
+                                      : 0,
+                                ));
+                                setState(() {
+                                  _duration = preset.durationSeconds;
+                                });
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 12),
+                ],
                 ContentSection.group(title: '显示效果', children: [
                   SettingsSliderTile(
                     title: Text('字体大小'),

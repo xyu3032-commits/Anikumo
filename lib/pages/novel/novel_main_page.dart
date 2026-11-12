@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:anikumo/utils/error_message.dart';
 import 'package:anikumo/bean/widget/floating_capsule_nav.dart';
 import 'package:anikumo/bean/widget/zone_switcher.dart';
+import 'package:anikumo/pages/profile/user_center.dart';
 import 'package:anikumo/bean/widget/empty_state_widget.dart';
 import 'package:anikumo/bean/widget/violet_components.dart';
 import 'package:flutter/services.dart';
@@ -15,6 +16,8 @@ import 'package:flutter_modular/flutter_modular.dart';
 import '../../models/novel_item.dart';
 import 'novel_cabinets_page.dart';
 import '../../services/novel/novel_features.dart';
+import '../../services/novel/novel_auto_update.dart';
+import '../../services/novel/novel_reader_themes.dart';
 import '../../services/novel/novel_library.dart';
 import '../../services/novel/moyuan_host.dart';
 import '../../services/novel/novel_source.dart';
@@ -22,6 +25,7 @@ import '../../services/novel/novel_sources.dart';
 import '../../services/ui/app_extras.dart';
 import 'package:anikumo/bean/theme/violet_glass.dart';
 import '../../services/storage/storage.dart';
+import '../../services/reader_chrome_prefs.dart';
 import 'novel_explore_tab.dart';
 import 'novel_sources_tab.dart';
 import 'novel_widgets.dart';
@@ -45,8 +49,10 @@ class _NovelMainPageState extends State<NovelMainPage> {
     // zone's first frame settles — the first search used
     // to pay the whole engine startup on the tap itself.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future<void>.delayed(const Duration(milliseconds: 400),
-          () async {
+      // Batch 235 （追书自动更新 pack): zone-entry trigger,
+      // throttled inside.
+      NovelAutoUpdate.maybeCheck();
+      Future<void>.delayed(const Duration(milliseconds: 400), () async {
         try {
           await MoyuanHost.instance.ensureStarted();
           await MoyuanHost.instance.syncSourcesIfChanged();
@@ -73,6 +79,19 @@ class _NovelMainPageState extends State<NovelMainPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // Batch 260: the user center sits in a fixed
+      // app-bar strip — the same always-fixed masthead
+      // arrangement as the anime/film zones. Two floating
+      // placements (stack overlay, then the FAB slot)
+      // both read as "following the scroll" on device;
+      // an app bar cannot move, by construction.
+      appBar: AppBar(
+        toolbarHeight: 46,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        automaticallyImplyLeading: false,
+        actions: const [UserCenterAvatarButton(), SizedBox(width: 6)],
+      ),
       body: Stack(
         children: [
           for (var i = 0; i < _tabs.length; i++)
@@ -252,7 +271,7 @@ class _NovelHomeTabState extends State<NovelHomeTab> {
             SizedBox(
               height: 218,
               child: ListView.separated(
-        scrollCacheExtent: const ScrollCacheExtent.pixels(700),
+                scrollCacheExtent: const ScrollCacheExtent.pixels(700),
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 itemCount: progress.length.clamp(0, 12),
@@ -267,7 +286,7 @@ class _NovelHomeTabState extends State<NovelHomeTab> {
             SizedBox(
               height: 218,
               child: ListView.separated(
-        scrollCacheExtent: const ScrollCacheExtent.pixels(700),
+                scrollCacheExtent: const ScrollCacheExtent.pixels(700),
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 itemCount: favorites.length.clamp(0, 12),
@@ -422,17 +441,36 @@ class _HomeExploreCache {
   ) {
     final key = '${source.id}|${category.title}|${category.url}';
     final hit = _done[key];
+    // Batch 260: the freshness window matches the manga
+    // home's SWR (10 min) — at 2 min, ordinary zone
+    // round-trips kept expiring it and every re-entry
+    // re-fetched every section through the JS engine.
     if (hit != null &&
-        DateTime.now().difference(hit.$1) <
-            const Duration(minutes: 2)) {
+        DateTime.now().difference(hit.$1) < const Duration(minutes: 10)) {
       return Future.value(hit.$2);
     }
     final running = _pending[key];
     if (running != null) return running;
-    final future = source.explore(category).then((items) {
-      _done[key] = (DateTime.now(), items);
-      return items;
-    }).whenComplete(() => _pending.remove(key));
+    // Batch 202: the whenComplete action must NOT be an
+    // expression body returning _pending.remove(key) —
+    // remove() returns the stored future, which IS the
+    // whenComplete result being built here, so the
+    // future would await ITSELF and never complete.
+    // That self-deadlock wedged every cold home section:
+    // the fetch finished and _done was populated, but
+    // awaiting callers only ever saw their own 20s
+    // timeout, while cache hits (retries) and direct
+    // calls (the category page) worked — the user's
+    // "must tap 全部 to load" bug.
+    final future = source
+        .explore(category)
+        .then((items) {
+          _done[key] = (DateTime.now(), items);
+          return items;
+        })
+        .whenComplete(() {
+          _pending.remove(key);
+        });
     _pending[key] = future;
     return future;
   }
@@ -473,9 +511,9 @@ class _SourceSectionState extends State<_SourceSection> {
   /// Batch 173: fetchable categories only — group header
   /// kinds carry no URL and are skipped on this surface.
   List<NovelExploreCategory> get _itemsOnly => [
-        for (final c in widget.source.exploreCategories)
-          if (!c.isHeader) c,
-      ];
+    for (final c in widget.source.exploreCategories)
+      if (!c.isHeader) c,
+  ];
 
   @override
   void initState() {
@@ -646,13 +684,16 @@ class _SourceSectionState extends State<_SourceSection> {
                 onPressed: categories.isEmpty
                     ? null
                     : () => context.pushNamed(
-                          '/novel/category',
-                          arguments: (
-                            sourceId: widget.source.id,
-                            category: categories[_categoryIndex.clamp(
-                                0, categories.length - 1)],
-                          ),
+                        '/novel/category',
+                        arguments: (
+                          sourceId: widget.source.id,
+                          category:
+                              categories[_categoryIndex.clamp(
+                                0,
+                                categories.length - 1,
+                              )],
                         ),
+                      ),
                 child: const Text('全部'),
               ),
             ],
@@ -661,7 +702,7 @@ class _SourceSectionState extends State<_SourceSection> {
         SizedBox(
           height: 36,
           child: ListView.separated(
-        scrollCacheExtent: const ScrollCacheExtent.pixels(700),
+            scrollCacheExtent: const ScrollCacheExtent.pixels(700),
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             itemCount: categories.length,
@@ -712,7 +753,7 @@ class _SourceSectionState extends State<_SourceSection> {
           SizedBox(
             height: 218,
             child: ListView.separated(
-        scrollCacheExtent: const ScrollCacheExtent.pixels(700),
+              scrollCacheExtent: const ScrollCacheExtent.pixels(700),
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: _items.length.clamp(0, 14),
@@ -778,10 +819,7 @@ class _NovelFavoritesTabState extends State<NovelFavoritesTab> {
   }
 
   Future<void> _deleteHistory(NovelProgress entry) async {
-    if (!await _confirm(
-      '删除这条记录？',
-      '将移除《${entry.item.title}》的阅读进度，此操作无法撤销。',
-    )) {
+    if (!await _confirm('删除这条记录？', '将移除《${entry.item.title}》的阅读进度，此操作无法撤销。')) {
       return;
     }
     await NovelLibraryStore.removeProgress(entry.item.storageKey);
@@ -791,10 +829,7 @@ class _NovelFavoritesTabState extends State<NovelFavoritesTab> {
   }
 
   Future<void> _clearHistory(int count) async {
-    if (!await _confirm(
-      '清空全部阅读历史？',
-      '将删除全部 $count 条小说阅读记录，此操作无法撤销。',
-    )) {
+    if (!await _confirm('清空全部阅读历史？', '将删除全部 $count 条小说阅读记录，此操作无法撤销。')) {
       return;
     }
     await NovelLibraryStore.clearProgress();
@@ -813,6 +848,30 @@ class _NovelFavoritesTabState extends State<NovelFavoritesTab> {
         scrollCacheExtent: const ScrollCacheExtent.pixels(700),
         padding: const EdgeInsets.only(bottom: 24),
         children: [
+          // Batch 235 （追书自动更新 pack): pending update
+          // notices above the shelf.
+          StatefulBuilder(
+            builder: (context, setLocal) {
+              final pending = NovelAutoUpdate.pendingUpdates();
+              if (pending.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: MaterialBanner(
+                  content: Text(pending.join('；')),
+                  leading: const Icon(AnikumoIcons.auto_awesome_rounded),
+                  actions: [
+                    TextButton(
+                      onPressed: () async {
+                        await NovelAutoUpdate.clearPending();
+                        setLocal(() {});
+                      },
+                      child: const Text('知道了'),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
           const NovelSectionHeader(title: '我的收藏'),
           if (favorites.isEmpty)
             const GeneralEmptyState(
@@ -888,6 +947,71 @@ class _NovelSettingsTabState extends State<NovelSettingsTab> {
               if (mounted) setState(() {});
             },
           ),
+          // Batch 252: reader chrome auto-hide delay,
+          // shared with the manga reader (0.5–5 s).
+          ListTile(
+            title: const Text('界面自动隐藏'),
+            subtitle: Text(
+              '${readerChromeHideSeconds().toStringAsFixed(1)} 秒无操作后隐藏（漫画 / 小说阅读器共用）',
+            ),
+          ),
+          Slider(
+            value: readerChromeHideSeconds(),
+            min: kReaderChromeHideMinSeconds,
+            max: kReaderChromeHideMaxSeconds,
+            divisions: 45,
+            onChanged: (value) async {
+              await GStorage.putSetting(
+                SettingsKeys.readerChromeHideSeconds,
+                value,
+              );
+              if (mounted) setState(() {});
+            },
+          ),
+          // Batch 235 （排版主题 pack): paper theme picker,
+          // only while the pack is installed.
+          if (NovelFeatures.isInstalled(NovelFeatures.readerThemesId))
+            Builder(
+              builder: (context) {
+                final current = GStorage.getSetting(
+                  SettingsKeys.novelReaderTheme,
+                );
+                return ListTile(
+                  title: const Text('阅读主题'),
+                  subtitle: Text(
+                    current.isEmpty
+                        ? '跟随应用'
+                        : (NovelReaderTheme.byId(current)?.name ?? '跟随应用'),
+                  ),
+                  trailing: const Icon(AnikumoIcons.chevron_right, size: 18),
+                  onTap: () async {
+                    final picked = await showDialog<String>(
+                      context: context,
+                      builder: (ctx) => SimpleDialog(
+                        title: const Text('阅读主题'),
+                        children: [
+                          for (final (value, label) in [
+                            ('', '跟随应用'),
+                            for (final t in NovelReaderTheme.themes)
+                              (t.id, t.name),
+                          ])
+                            SimpleDialogOption(
+                              onPressed: () => Navigator.pop(ctx, value),
+                              child: Text(label),
+                            ),
+                        ],
+                      ),
+                    );
+                    if (picked == null) return;
+                    await GStorage.putSetting(
+                      SettingsKeys.novelReaderTheme,
+                      picked,
+                    );
+                    if (mounted) setState(() {});
+                  },
+                );
+              },
+            ),
           const NovelSectionHeader(title: '下载'),
           ListTile(
             leading: const Icon(AnikumoIcons.download_rounded),
@@ -908,16 +1032,14 @@ class _NovelSettingsTabState extends State<NovelSettingsTab> {
             valueListenable: NovelFeatures.revision,
             builder: (context, _, _) =>
                 NovelFeatures.isInstalled(NovelFeatures.localBooksId)
-                    ? ListTile(
-                        leading:
-                            const Icon(AnikumoIcons.library_books_rounded),
-                        title: const Text('本地书架'),
-                        subtitle: const Text('导入的 EPUB / TXT 书籍'),
-                        trailing:
-                            const Icon(AnikumoIcons.chevron_right, size: 18),
-                        onTap: () => context.pushNamed('/novel/local'),
-                      )
-                    : const SizedBox.shrink(),
+                ? ListTile(
+                    leading: const Icon(AnikumoIcons.library_books_rounded),
+                    title: const Text('本地书架'),
+                    subtitle: const Text('导入的 EPUB / TXT 书籍'),
+                    trailing: const Icon(AnikumoIcons.chevron_right, size: 18),
+                    onTap: () => context.pushNamed('/novel/local'),
+                  )
+                : const SizedBox.shrink(),
           ),
           const NovelSectionHeader(title: '书源引擎'),
           Padding(
@@ -951,8 +1073,7 @@ class _NovelFeaturedBanner extends StatefulWidget {
   const _NovelFeaturedBanner();
 
   @override
-  State<_NovelFeaturedBanner> createState() =>
-      _NovelFeaturedBannerState();
+  State<_NovelFeaturedBanner> createState() => _NovelFeaturedBannerState();
 }
 
 class _NovelFeaturedBannerState extends State<_NovelFeaturedBanner> {
@@ -1000,10 +1121,7 @@ class _NovelFeaturedBannerState extends State<_NovelFeaturedBanner> {
     if (firstCategory == null) return;
     _loadedFor = marker;
     try {
-      final items = await _HomeExploreCache.fetch(
-        source,
-        firstCategory,
-      );
+      final items = await _HomeExploreCache.fetch(source, firstCategory);
       if (!mounted) return;
       final withCovers = [
         for (final item in items)
@@ -1059,21 +1177,19 @@ class _NovelFeaturedBannerState extends State<_NovelFeaturedBanner> {
                       children: [
                         RepaintBoundary(
                           child: ImageFiltered(
-                          imageFilter: ui.ImageFilter.blur(
-                            sigmaX: 24,
-                            sigmaY: 24,
-                          ),
-                          child: NovelCover(
-                            url: item.coverUrl,
-                            width: MediaQuery.sizeOf(context).width,
-                            height: 196,
-                            radius: 0,
-                          ),
+                            imageFilter: ui.ImageFilter.blur(
+                              sigmaX: 24,
+                              sigmaY: 24,
+                            ),
+                            child: NovelCover(
+                              url: item.coverUrl,
+                              width: MediaQuery.sizeOf(context).width,
+                              height: 196,
+                              radius: 0,
+                            ),
                           ),
                         ),
-                        ColoredBox(
-                          color: Colors.black.withValues(alpha: 0.45),
-                        ),
+                        ColoredBox(color: Colors.black.withValues(alpha: 0.45)),
                         Padding(
                           padding: const EdgeInsets.all(16),
                           child: Row(
@@ -1087,8 +1203,7 @@ class _NovelFeaturedBannerState extends State<_NovelFeaturedBanner> {
                               const SizedBox(width: 14),
                               Expanded(
                                 child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Container(
                                       padding: const EdgeInsets.symmetric(
@@ -1097,8 +1212,7 @@ class _NovelFeaturedBannerState extends State<_NovelFeaturedBanner> {
                                       ),
                                       decoration: BoxDecoration(
                                         gradient: VioletGlass.gradient,
-                                        borderRadius:
-                                            BorderRadius.circular(8),
+                                        borderRadius: BorderRadius.circular(8),
                                       ),
                                       child: const Text(
                                         '精选推荐',
@@ -1116,9 +1230,9 @@ class _NovelFeaturedBannerState extends State<_NovelFeaturedBanner> {
                                       overflow: TextOverflow.ellipsis,
                                       style: theme.textTheme.titleMedium
                                           ?.copyWith(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w800,
-                                      ),
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w800,
+                                          ),
                                     ),
                                     if (item.author.isNotEmpty) ...[
                                       const SizedBox(height: 4),
@@ -1127,9 +1241,7 @@ class _NovelFeaturedBannerState extends State<_NovelFeaturedBanner> {
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: theme.textTheme.bodySmall
-                                            ?.copyWith(
-                                          color: Colors.white70,
-                                        ),
+                                            ?.copyWith(color: Colors.white70),
                                       ),
                                     ],
                                     if (item.lastChapter.isNotEmpty) ...[
@@ -1139,9 +1251,7 @@ class _NovelFeaturedBannerState extends State<_NovelFeaturedBanner> {
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: theme.textTheme.bodySmall
-                                            ?.copyWith(
-                                          color: Colors.white70,
-                                        ),
+                                            ?.copyWith(color: Colors.white70),
                                       ),
                                     ],
                                     const Spacer(),
@@ -1154,8 +1264,7 @@ class _NovelFeaturedBannerState extends State<_NovelFeaturedBanner> {
                                       ),
                                       label: const Text('开始阅读'),
                                       style: FilledButton.styleFrom(
-                                        visualDensity:
-                                            VisualDensity.compact,
+                                        visualDensity: VisualDensity.compact,
                                       ),
                                     ),
                                   ],

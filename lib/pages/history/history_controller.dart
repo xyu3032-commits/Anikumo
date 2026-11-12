@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:anikumo/modules/bangumi/bangumi_item.dart';
 import 'package:anikumo/modules/history/history_module.dart';
 import 'package:anikumo/repositories/history_repository.dart';
+import 'package:anikumo/services/anime/anime_features.dart';
+import 'package:anikumo/services/sync/bangumi_sync_service.dart';
 import 'package:mobx/mobx.dart';
 
 part 'history_controller.g.dart';
@@ -32,6 +36,27 @@ abstract class _HistoryController with Store {
       duration: duration,
     );
     init();
+    // Batch 233 （单集进度同步 pack): an episode watched
+    // past 95% is reported to Bangumi as watched. The
+    // sync service re-checks every gate and the
+    // already-sent set, so repeat ticks stay cheap.
+    if (AnimeFeatures.isInstalled(AnimeFeatures.bgmProgressId) &&
+        duration > Duration.zero &&
+        progress.inMilliseconds >= duration.inMilliseconds * 0.95 &&
+        identity.entryKind == HistoryEntryKind.online &&
+        !AnimeBgmSyncedStore.contains(
+          identity.bangumiItem.id,
+          identity.episodeNumber,
+        )) {
+      unawaited(
+        BangumiSyncService()
+            .syncEpisodeProgress(
+              identity.bangumiItem.id,
+              identity.episodeNumber,
+            )
+            .catchError((_) => false),
+      );
+    }
   }
 
   Progress? lastWatching(

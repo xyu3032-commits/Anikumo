@@ -20,6 +20,7 @@ class HubCommand {
 const List<HubCommand> hubCommands = [
   HubCommand(title: '漫画专区', keywords: '漫画 看漫画 manga comic', route: '/manga/'),
   HubCommand(title: '小说专区', keywords: '小说 看小说 novel legado 书源', route: '/novel/'),
+  HubCommand(title: '影视专区', keywords: '影视 电视剧 电影 看电视 video movie tv', route: '/film/'),
   HubCommand(title: '排行榜', keywords: '热门 排名 rank', route: '/tab/discover/rank/'),
   HubCommand(title: '今日上新', keywords: '今天 新番 更新 today', route: '/tab/discover/today/'),
   HubCommand(title: '每日推荐', keywords: '推荐 daily 今日推荐', route: '/tab/discover/daily/'),

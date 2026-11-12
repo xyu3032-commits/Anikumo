@@ -9,6 +9,7 @@ import 'package:anikumo/modules/bangumi/bangumi_item.dart';
 import 'package:anikumo/modules/download/download_module.dart';
 import 'package:anikumo/modules/history/history_module.dart';
 import 'package:anikumo/repositories/download_repository.dart';
+import 'package:anikumo/services/anime/anime_features.dart';
 import 'package:anikumo/services/download/download_manager.dart';
 import 'package:anikumo/services/video_source/services.dart';
 import 'package:anikumo/bean/dialog/dialog_helper.dart';
@@ -126,6 +127,40 @@ abstract class _VideoPageController with Store implements Disposable {
   @observable
   bool isOfflineMode = false;
 
+  /// Batch 208: true while this page runs an external zone's
+  /// session (see [OnlineVideoPlaybackArgs.externalPlayback]).
+  /// External sessions skip the anime catalogue machinery:
+  /// automatic danmaku, Bangumi comments, anime watch-history
+  /// writes (progress goes to [_externalProgressSink]).
+  bool isExternalPlayback = false;
+
+  ExternalPlaybackProgress? _externalProgressSink;
+
+  /// Batch 244: the external session's reviews loader for
+  /// the 评论 tab (null for anime sessions and for external
+  /// sessions that lend none).
+  ExternalReviewsLoader? externalReviewsLoader;
+
+  /// Batch 208: external offline downloads' local paths,
+  /// keyed '<originalRoad>:<episodeNumber>'.
+  Map<String, String>? _externalLocalPaths;
+
+  /// Batch 208: forwards a playback position tick to the
+  /// owning zone's history (external sessions only).
+  void reportExternalProgress(Duration position, Duration duration) {
+    if (!isExternalPlayback) return;
+    final sink = _externalProgressSink;
+    if (sink == null) return;
+    final selection = playbackEpisode;
+    sink(selection.episode, selection.road, position, duration);
+  }
+
+  int _savedHistoryOffset() {
+    final identity = _playbackHistoryIdentity;
+    if (identity == null) return 0;
+    return getHistoryOffsetFor(identity);
+  }
+
   PlaybackHistoryIdentity? _playbackHistoryIdentity;
   final Map<int, DownloadEpisode> _offlineEpisodesByNumber = {};
   final Map<int, int> _offlineDisplayRoadToOriginalRoad = {};
@@ -170,6 +205,9 @@ abstract class _VideoPageController with Store implements Disposable {
         currentPlugin = args.plugin;
         title = args.title;
         src = args.src;
+        isExternalPlayback = args.externalPlayback;
+        _externalProgressSink = args.onProgress;
+        externalReviewsLoader = args.externalReviews;
         roadList.clear();
         roadList.addAll(args.roads);
       case OfflineVideoPlaybackArgs():
@@ -179,6 +217,9 @@ abstract class _VideoPageController with Store implements Disposable {
           episodeNumber: args.episodeNumber,
           road: args.road,
           downloadedEpisodes: args.downloadedEpisodes,
+          externalPlayback: args.externalPlayback,
+          localPathsByKey: args.localPathsByKey,
+          externalReviews: args.externalReviews,
         );
     }
   }
@@ -190,9 +231,15 @@ abstract class _VideoPageController with Store implements Disposable {
     required int episodeNumber,
     required int road,
     required List<DownloadEpisode> downloadedEpisodes,
+    bool externalPlayback = false,
+    Map<String, String>? localPathsByKey,
+    ExternalReviewsLoader? externalReviews,
   }) {
     this.bangumiItem = bangumiItem;
     _offlinePluginName = pluginName;
+    isExternalPlayback = externalPlayback;
+    _externalLocalPaths = localPathsByKey;
+    externalReviewsLoader = externalReviews;
     title =
         bangumiItem.nameCn.isNotEmpty ? bangumiItem.nameCn : bangumiItem.name;
     isOfflineMode = true;
@@ -298,6 +345,11 @@ abstract class _VideoPageController with Store implements Disposable {
   }
 
   void _setOnlineHistoryIdentity(EpisodeRef episode) {
+    // Batch 208: external sessions keep their own history.
+    if (isExternalPlayback) {
+      _playbackHistoryIdentity = null;
+      return;
+    }
     _playbackHistoryIdentity = PlaybackHistoryIdentity.online(
       bangumiItem: bangumiItem,
       pluginName: currentPlugin.name,
@@ -310,6 +362,11 @@ abstract class _VideoPageController with Store implements Disposable {
   }
 
   void _setOfflineHistoryIdentity(EpisodeRef episode) {
+    // Batch 208: external sessions keep their own history.
+    if (isExternalPlayback) {
+      _playbackHistoryIdentity = null;
+      return;
+    }
     _playbackHistoryIdentity = PlaybackHistoryIdentity.offline(
       bangumiItem: bangumiItem,
       pluginName: _offlinePluginName,
@@ -484,7 +541,7 @@ abstract class _VideoPageController with Store implements Disposable {
       // the progress was on record.
       final effectiveOffset = offset > 0
           ? offset
-          : getHistoryOffsetFor(_playbackHistoryIdentity!);
+          : _savedHistoryOffset();
 
       AnikumoLogger().i(
           'VideoPageController: changed to ${resolvedEpisode.displayTitle}');
@@ -549,6 +606,7 @@ abstract class _VideoPageController with Store implements Disposable {
       bangumiItem.id,
       _offlinePluginName,
       resolvedEpisode.historyEpisodeNumber,
+      originalRoad: resolvedEpisode.originalRoadIndex,
     );
     if (localPath == null) {
       _failLoading('该集数未下载');
@@ -561,7 +619,7 @@ abstract class _VideoPageController with Store implements Disposable {
     }
     _finishLoading();
     final resolvedOffset =
-        offset > 0 ? offset : getHistoryOffsetFor(_playbackHistoryIdentity!);
+        offset > 0 ? offset : _savedHistoryOffset();
 
     AnikumoLogger().i(
         'VideoPageController: offline episode changed to ${resolvedEpisode.historyEpisodeNumber} (index: ${selection.episode}), path: $localPath');
@@ -600,6 +658,13 @@ abstract class _VideoPageController with Store implements Disposable {
     PlaybackInitParams params,
     AsyncSession session,
   ) async {
+    // Batch 208: external sessions never touch the anime
+    // danmaku services — the owning zone brings its own
+    // danmaku source (the 影视 zone adds one separately).
+    if (isExternalPlayback) {
+      playerController.danmaku.finishDanmakuLoad(disableDanmaku: true);
+      return;
+    }
     final danmakuSession = _danmakuSessions.begin();
     playerController.danmaku.beginDanmakuLoad();
     try {
@@ -612,8 +677,13 @@ abstract class _VideoPageController with Store implements Disposable {
       );
       if (session.isActive && danmakuSession.isActive) {
         if (result.hasDanmakus) {
+          // Batch 233 （弹幕个性化 pack): a remembered
+          // per-anime choice wins over the global default.
           final bool enableDanmaku =
-              GStorage.getSetting(SettingsKeys.danmakuEnabledByDefault);
+              (AnimeFeatures.isInstalled(AnimeFeatures.danmakuStyleId)
+                      ? AnimeDanmakuPrefs.enabledFor(params.bangumiId)
+                      : null) ??
+                  GStorage.getSetting(SettingsKeys.danmakuEnabledByDefault);
           // Flood control: episodes with extreme danmaku counts are
           // uniformly thinned before they reach the renderer.
           final effectiveResult = DanmakuLoadResult(
@@ -660,7 +730,15 @@ abstract class _VideoPageController with Store implements Disposable {
   }
 
   String? _getLocalVideoPath(
-      int bangumiId, String pluginName, int episodeNumber) {
+      int bangumiId, String pluginName, int episodeNumber,
+      {int? originalRoad}) {
+    // Batch 208: external downloads live in the owning zone's
+    // store; their paths arrive with the route arguments.
+    final external = _externalLocalPaths;
+    if (external != null && originalRoad != null) {
+      final path = external['$originalRoad:$episodeNumber'];
+      if (path != null) return path;
+    }
     final episode =
         downloadRepository.getEpisode(bangumiId, pluginName, episodeNumber);
     return downloadManager.getLocalVideoPath(episode);
@@ -787,6 +865,9 @@ abstract class _VideoPageController with Store implements Disposable {
   }
 
   Future<bool> queryBangumiEpisodeCommentsByID(int id, int episode) async {
+    // Batch 208: external sessions have no Bangumi entry to
+    // hang comments on.
+    if (isExternalPlayback) return false;
     final session = _commentSessions.begin();
     final EpisodeInfo latestEpisodeInfo;
     try {

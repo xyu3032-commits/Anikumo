@@ -1,0 +1,19 @@
+name: liuguang_search
+description: Aggregated multi-source search.
+version: 0.1.0
+publish_to: none
+environment:
+  sdk: '>=3.10.0 <4.0.0'
+dependencies:
+  liuguang_models:
+    path: ../liuguang_models
+  liuguang_source_sdk:
+    path: ../liuguang_source_sdk
+  liuguang_matcher:
+    path: ../liuguang_matcher
+  liuguang_cache:
+    path: ../liuguang_cache
+  liuguang_metadata:
+    path: ../liuguang_metadata
+dev_dependencies:
+  test: ^1.25.0

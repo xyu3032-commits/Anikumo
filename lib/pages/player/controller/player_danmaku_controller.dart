@@ -1,8 +1,10 @@
+import 'dart:async';
 // ignore_for_file: library_private_types_in_public_api
 
 import 'package:canvas_danmaku/canvas_danmaku.dart' as canvas;
 import 'package:flutter/material.dart';
 import 'package:anikumo/modules/danmaku/danmaku_module.dart';
+import 'package:anikumo/services/anime/anime_features.dart';
 import 'package:anikumo/services/danmaku/local_danmaku.dart';
 import 'package:anikumo/pages/download/download_controller.dart';
 import 'package:anikumo/request/apis/danmaku_api.dart';
@@ -134,6 +136,12 @@ abstract class _PlayerDanmakuController with Store {
   @action
   void setDanmakuEnabled(bool value) {
     danmakuOn = value;
+    // Batch 233 （弹幕个性化 pack): remember the choice
+    // for this anime so it survives the next open.
+    if (AnimeFeatures.isInstalled(AnimeFeatures.danmakuStyleId) &&
+        bangumiID > 0) {
+      unawaited(AnimeDanmakuPrefs.setEnabled(bangumiID, value));
+    }
   }
 
   void clearAndInvalidateScheduledDanmakus() {

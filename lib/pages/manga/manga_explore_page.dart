@@ -5,7 +5,9 @@ import 'package:anikumo/modules/manga/manga_item.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:anikumo/bean/theme/violet_glass.dart';
 import 'package:anikumo/bean/widget/empty_state_widget.dart';
+import 'package:anikumo/pages/manga/manga_verification_page.dart';
 import 'package:anikumo/pages/manga/manga_widgets.dart';
+import 'package:anikumo/services/manga/js/js_manga_source.dart';
 import 'package:anikumo/services/manga/manga_api.dart';
 import 'package:anikumo/services/manga/manga_search_utils.dart';
 import 'package:anikumo/services/manga/manga_source.dart';
@@ -269,6 +271,21 @@ class _MangaSourceGridState extends State<MangaSourceGrid> {
   bool _loadMoreFailed = false;
   String? _errorText;
 
+  /// Batch 198: the raw first-page error, kept alongside its
+  /// friendly text so the empty state can offer the
+  /// verification flow when the failure was a wall.
+  Object? _lastLoadError;
+
+  String? get _verificationUrl {
+    if (!MangaVerification.isVerificationError(_lastLoadError)) return null;
+    final source = widget.source;
+    if (source is JsBackedMangaSource) {
+      final url = source.declaredUrl;
+      if (url != null && url.isNotEmpty) return url;
+    }
+    return null;
+  }
+
   /// Batch 90: the next page to fetch, tracked explicitly.
   /// Deriving it from the item count broke whenever a
   /// source's own page size differed from ours (a 20-per-page
@@ -310,22 +327,52 @@ class _MangaSourceGridState extends State<MangaSourceGrid> {
   }
 
   Future<void> _loadFirst({bool fresh = false}) async {
+    // Batch 198: MangaKit sources stream explore sections —
+    // paint each section as it lands instead of holding the
+    // whole grid on a skeleton until the slowest section
+    // returns. When anything streamed, the final list merges
+    // in section order (no shuffle jump at the end).
+    var streamed = false;
     try {
       final items = await MangaApi.fetchPopularFor(
         widget.source,
         limit: _pageSize,
         fresh: fresh,
+        onSectionItems: (sectionItems) {
+          if (!mounted) return;
+          setState(() {
+            // First streamed section replaces whatever a
+            // previous load left on screen.
+            if (!streamed) _items.clear();
+            streamed = true;
+            final known = _items.map((e) => e.storageKey).toSet();
+            _items.addAll([
+              for (final item in sectionItems)
+                if (known.add(item.storageKey)) item,
+            ]);
+            _loading = false;
+          });
+        },
       );
       if (!mounted) return;
       setState(() {
         // Batch 90: shuffled on entry and on every manual
         // refresh — the catalogue order is the site's, the
         // discovery order is ours.
-        _items
-          ..clear()
-          ..addAll(shuffledMangaItems(items));
+        if (streamed) {
+          final known = _items.map((e) => e.storageKey).toSet();
+          _items.addAll([
+            for (final item in items)
+              if (known.add(item.storageKey)) item,
+          ]);
+        } else {
+          _items
+            ..clear()
+            ..addAll(shuffledMangaItems(items));
+        }
         _loading = false;
         _errorText = null;
+        _lastLoadError = null;
         _nextPage = 2;
         _endOfList.reset();
         _loadMoreFailed = false;
@@ -338,6 +385,7 @@ class _MangaSourceGridState extends State<MangaSourceGrid> {
       if (!mounted) return;
       setState(() {
         _loading = false;
+        _lastLoadError = e;
         if (_items.isEmpty) _errorText = friendlyError(e);
       });
       if (_items.isEmpty) {
@@ -462,6 +510,14 @@ class _MangaSourceGridState extends State<MangaSourceGrid> {
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.error,
                         ),
+                      ),
+                    ),
+                  if (_verificationUrl != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: MangaVerificationButton(
+                        url: _verificationUrl!,
+                        onSolved: () => _loadFirst(fresh: true),
                       ),
                     ),
                   FilledButton.tonal(

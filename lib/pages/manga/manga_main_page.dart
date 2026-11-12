@@ -6,7 +6,10 @@ import 'package:anikumo/utils/error_message.dart';
 import 'package:anikumo/bean/theme/violet_glass.dart';
 import 'package:anikumo/bean/widget/floating_capsule_nav.dart';
 import 'package:anikumo/bean/widget/zone_switcher.dart';
+import 'package:anikumo/pages/profile/user_center.dart';
 import 'package:anikumo/pages/manga/manga_source_update_prompt.dart';
+import 'package:anikumo/services/manga/js/js_manga_source.dart';
+import 'package:anikumo/pages/manga/manga_verification_page.dart';
 import 'package:anikumo/bean/widget/violet_components.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_modular/flutter_modular.dart';
@@ -23,7 +26,7 @@ import 'package:anikumo/services/manga/manga_library.dart';
 import 'package:anikumo/services/manga/manga_search_utils.dart';
 import 'package:anikumo/services/manga/manga_api.dart';
 import 'package:anikumo/services/manga/manga_source.dart';
-import 'package:anikumo/services/manga/js/js_manga_source.dart';
+import 'package:anikumo/services/manga/js/mangakit_source.dart';
 import 'package:anikumo/services/manga/local_manga_source.dart';
 import 'package:anikumo/services/manga/manga_image_pipeline.dart';
 import 'package:anikumo/services/manga/manga_sources.dart';
@@ -129,6 +132,11 @@ class _MangaMainPageState extends State<MangaMainPage>
   /// survive switches exactly as before.
   final Set<int> _visited = {0};
 
+  /// Batch 253: owns the deferred source-update check so
+  /// leaving the zone cancels it (and widget tests don't
+  /// inherit a pending timer).
+  Timer? _updatePromptTimer;
+
   @override
   void initState() {
     super.initState();
@@ -139,26 +147,45 @@ class _MangaMainPageState extends State<MangaMainPage>
     // origins) and prompts when any are found.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        unawaited(MangaSourceUpdatePrompt.run(context));
+        // Batch 253: the version check used to fire on
+        // the very first frame, straight into the entry
+        // burst (a network fetch per recorded repository
+        // while the home bands are still loading). It is
+        // a background nicety — let the zone settle first.
+        _updatePromptTimer = Timer(const Duration(seconds: 3), () {
+          if (mounted) {
+            unawaited(MangaSourceUpdatePrompt.run(context));
+          }
+        });
       }
     });
+    // Batch 198: the MangaKit verification solver hook.
+    MangaVerification.install();
     // Batch 16: warm up the active JS source's runtime in the
     // background so the first search/tap doesn't pay the
     // QuickJS spin-up cost.
     final activeSource = MangaSources.activeOrNull();
-    if (activeSource is JsMangaSource) {
+    if (activeSource is MangaKitMangaSource) {
+      unawaited(activeSource.ensureInitialized().catchError((_) {}));
+    } else if (activeSource is JsMangaSource) {
+      // Batch 253: the legacy engine's active source gets
+      // the same warm-up (its registration used to be
+      // paid by the first home load instead).
       unawaited(activeSource.engine.ensureInitialized().catchError((_) {}));
     }
     // Batch 102: load the local book library so the 本地导入
     // source (and its home section) joins the registry when
     // books exist.
-    unawaited(LocalMangaLibrary.ensureLoaded().then((changed) {
-      if (changed) MangaSources.notifyRegistryChanged();
-    }));
+    unawaited(
+      LocalMangaLibrary.ensureLoaded().then((changed) {
+        if (changed) MangaSources.notifyRegistryChanged();
+      }),
+    );
   }
 
   @override
   void dispose() {
+    _updatePromptTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     mangaTabSwitchRequest.removeListener(_onTabSwitchRequest);
     super.dispose();
@@ -206,6 +233,19 @@ class _MangaMainPageState extends State<MangaMainPage>
     // outgoing tab could never fade out (found on device: all
     // visited tabs stayed painted and switching looked dead).
     return Scaffold(
+      // Batch 260: the user center sits in a fixed
+      // app-bar strip — the same always-fixed masthead
+      // arrangement as the anime/film zones. Two floating
+      // placements (stack overlay, then the FAB slot)
+      // both read as "following the scroll" on device;
+      // an app bar cannot move, by construction.
+      appBar: AppBar(
+        toolbarHeight: 46,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        automaticallyImplyLeading: false,
+        actions: const [UserCenterAvatarButton(), SizedBox(width: 6)],
+      ),
       body: Stack(
         children: [
           for (var i = 0; i < _tabs.length; i++)
@@ -434,9 +474,7 @@ class _MangaHomeTabState extends State<MangaHomeTab> {
               ),
             ),
             // ── featured banner (batch 38) ──────────────────
-            SliverToBoxAdapter(
-              child: _FeaturedBanner(onOpen: _openDetail),
-            ),
+            SliverToBoxAdapter(child: _FeaturedBanner(onOpen: _openDetail)),
             // ── history card ────────────────────────────────
             SliverToBoxAdapter(
               child: FadeSlideIn(
@@ -496,7 +534,9 @@ class _MangaHomeTabState extends State<MangaHomeTab> {
                           SizedBox(
                             height: 208,
                             child: ListView.separated(
-        scrollCacheExtent: const ScrollCacheExtent.pixels(700),
+                              scrollCacheExtent: const ScrollCacheExtent.pixels(
+                                700,
+                              ),
                               scrollDirection: Axis.horizontal,
                               padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
                               itemCount: railProgress.length,
@@ -571,8 +611,9 @@ class _MangaHomeTabState extends State<MangaHomeTab> {
                     child: ListTile(
                       leading: const Icon(AnikumoIcons.extension_off_rounded),
                       title: const Text('还没有漫画源'),
-                      subtitle:
-                          const Text('Anikumo 不内置任何漫画源。用你自己的 URL 链接导入 JS 源后，这里就会有内容。'),
+                      subtitle: const Text(
+                        'Anikumo 不内置任何漫画源。用你自己的 URL 链接导入 JS 源后，这里就会有内容。',
+                      ),
                       trailing: const Icon(AnikumoIcons.chevron_right),
                       onTap: () => context.pushNamed('/manga/sources'),
                     ),
@@ -622,11 +663,11 @@ class _MangaHomeTabState extends State<MangaHomeTab> {
                   child: VioletGlassCard(
                     radius: 20,
                     child: ListTile(
-                    leading: const Icon(AnikumoIcons.library_books_outlined),
-                    title: const Text('漫画源管理'),
-                    subtitle: const Text('下载 JS 源、切换或删除来源'),
-                    trailing: const Icon(AnikumoIcons.chevron_right),
-                    onTap: () => context.pushNamed('/manga/sources'),
+                      leading: const Icon(AnikumoIcons.library_books_outlined),
+                      title: const Text('漫画源管理'),
+                      subtitle: const Text('下载 JS 源、切换或删除来源'),
+                      trailing: const Icon(AnikumoIcons.chevron_right),
+                      onTap: () => context.pushNamed('/manga/sources'),
                     ),
                   ),
                 ),
@@ -710,7 +751,14 @@ class _SourceHomeSectionState extends State<_SourceHomeSection> {
     super.initState();
     // Batch 97: take part in the home tab's pull-refresh.
     mangaHomeRefreshTick.addListener(_onHomeRefresh);
-    if (widget.startDelay == Duration.zero) {
+    // Batch 260: a band whose disk snapshot is still
+    // fresh paints it instantly — the mount stagger only
+    // exists to soften cold network bursts, and taxing a
+    // cached re-entry with it made zone returns feel
+    // slow for no benefit.
+    final snapshotFresh =
+        MangaApi.popularSnapshot(widget.source, limit: 1)?.fresh ?? false;
+    if (widget.startDelay == Duration.zero || snapshotFresh) {
       _load();
     } else {
       Future.delayed(widget.startDelay, () {
@@ -914,10 +962,8 @@ class _SourceHomeSectionState extends State<_SourceHomeSection> {
                   ),
                 const Spacer(),
                 TextButton(
-                  onPressed: () => context.pushNamed(
-                    '/manga/source',
-                    arguments: source.id,
-                  ),
+                  onPressed: () =>
+                      context.pushNamed('/manga/source', arguments: source.id),
                   child: const Text('更多'),
                 ),
                 IconButton(
@@ -935,7 +981,7 @@ class _SourceHomeSectionState extends State<_SourceHomeSection> {
             SizedBox(
               height: 38,
               child: ListView.separated(
-        scrollCacheExtent: const ScrollCacheExtent.pixels(700),
+                scrollCacheExtent: const ScrollCacheExtent.pixels(700),
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 itemCount: _tags.length > 14 ? 15 : _tags.length,
@@ -1002,7 +1048,7 @@ class _SourceHomeSectionState extends State<_SourceHomeSection> {
             SizedBox(
               height: 208,
               child: ListView.separated(
-        scrollCacheExtent: const ScrollCacheExtent.pixels(700),
+                scrollCacheExtent: const ScrollCacheExtent.pixels(700),
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 itemCount: _popular.length,
@@ -1146,10 +1192,9 @@ class _ForYouSectionState extends State<_ForYouSection> {
     // resolves them to byTag-able ids (batch 89's helper).
     final byWeight = profile.weights.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-    final matched = matchTagsByName(
-      [for (final e in byWeight) profile.display[e.key] ?? e.key],
-      catalogue,
-    ).take(3);
+    final matched = matchTagsByName([
+      for (final e in byWeight) profile.display[e.key] ?? e.key,
+    ], catalogue).take(3);
     if (matched.isEmpty) return;
     final candidates = <MangaItem>[];
     for (final tag in matched) {
@@ -1209,9 +1254,7 @@ class _ForYouSectionState extends State<_ForYouSection> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
             child: Text(
-              _seedFavorite
-                  ? '因为你收藏了《$_seedTitle》'
-                  : '因为你在读《$_seedTitle》',
+              _seedFavorite ? '因为你收藏了《$_seedTitle》' : '因为你在读《$_seedTitle》',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -1220,7 +1263,7 @@ class _ForYouSectionState extends State<_ForYouSection> {
           SizedBox(
             height: 208,
             child: ListView.separated(
-        scrollCacheExtent: const ScrollCacheExtent.pixels(700),
+              scrollCacheExtent: const ScrollCacheExtent.pixels(700),
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: _items.length,
@@ -1286,11 +1329,13 @@ class _FeaturedBannerState extends State<_FeaturedBanner> {
       _restartTimer();
       if (snap.fresh) return;
     }
-    MangaApi.fetchPopularFor(source, limit: 5).then((items) {
-      if (!mounted || items.isEmpty) return;
-      setState(() => _items = items.take(5).toList());
-      _restartTimer();
-    }).catchError((_) {});
+    MangaApi.fetchPopularFor(source, limit: 5)
+        .then((items) {
+          if (!mounted || items.isEmpty) return;
+          setState(() => _items = items.take(5).toList());
+          _restartTimer();
+        })
+        .catchError((_) {});
   }
 
   void _restartTimer() {
@@ -1340,24 +1385,22 @@ class _FeaturedBannerState extends State<_FeaturedBanner> {
                         // the list scrolls past.
                         RepaintBoundary(
                           child: ImageFiltered(
-                          imageFilter: ui.ImageFilter.blur(
-                            sigmaX: 24,
-                            sigmaY: 24,
-                          ),
-                          child: MangaCover(
-                            url: item.coverUrl,
-                            width: MediaQuery.sizeOf(context).width,
-                            height: 196,
-                            radius: 0,
-                            headers: item.coverHeaders,
-                            transformOf: item.coverTransformOf,
-                            transform: coverTransformCallback(item),
-                          ),
+                            imageFilter: ui.ImageFilter.blur(
+                              sigmaX: 24,
+                              sigmaY: 24,
+                            ),
+                            child: MangaCover(
+                              url: item.coverUrl,
+                              width: MediaQuery.sizeOf(context).width,
+                              height: 196,
+                              radius: 0,
+                              headers: item.coverHeaders,
+                              transformOf: item.coverTransformOf,
+                              transform: coverTransformCallback(item),
+                            ),
                           ),
                         ),
-                        ColoredBox(
-                          color: Colors.black.withValues(alpha: 0.45),
-                        ),
+                        ColoredBox(color: Colors.black.withValues(alpha: 0.45)),
                         Padding(
                           padding: const EdgeInsets.all(16),
                           child: Row(
@@ -1374,8 +1417,7 @@ class _FeaturedBannerState extends State<_FeaturedBanner> {
                               const SizedBox(width: 14),
                               Expanded(
                                 child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Container(
                                       padding: const EdgeInsets.symmetric(
@@ -1384,8 +1426,7 @@ class _FeaturedBannerState extends State<_FeaturedBanner> {
                                       ),
                                       decoration: BoxDecoration(
                                         gradient: VioletGlass.gradient,
-                                        borderRadius:
-                                            BorderRadius.circular(8),
+                                        borderRadius: BorderRadius.circular(8),
                                       ),
                                       child: const Text(
                                         '精选推荐',
@@ -1403,9 +1444,9 @@ class _FeaturedBannerState extends State<_FeaturedBanner> {
                                       overflow: TextOverflow.ellipsis,
                                       style: theme.textTheme.titleMedium
                                           ?.copyWith(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w800,
-                                      ),
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w800,
+                                          ),
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
@@ -1413,16 +1454,13 @@ class _FeaturedBannerState extends State<_FeaturedBanner> {
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                       style: theme.textTheme.bodySmall
-                                          ?.copyWith(
-                                        color: Colors.white70,
-                                      ),
+                                          ?.copyWith(color: Colors.white70),
                                     ),
                                     const Spacer(),
                                     Row(
                                       children: [
                                         FilledButton.icon(
-                                          onPressed: () =>
-                                              widget.onOpen(item),
+                                          onPressed: () => widget.onOpen(item),
                                           icon: const Icon(
                                             AnikumoIcons.play_arrow_rounded,
                                             size: 18,
@@ -1437,17 +1475,13 @@ class _FeaturedBannerState extends State<_FeaturedBanner> {
                                         if (item.tags.isNotEmpty)
                                           Expanded(
                                             child: Text(
-                                              item.tags
-                                                  .take(3)
-                                                  .join(' · '),
+                                              item.tags.take(3).join(' · '),
                                               maxLines: 1,
-                                              overflow:
-                                                  TextOverflow.ellipsis,
-                                              style: theme
-                                                  .textTheme.labelSmall
+                                              overflow: TextOverflow.ellipsis,
+                                              style: theme.textTheme.labelSmall
                                                   ?.copyWith(
-                                                color: Colors.white60,
-                                              ),
+                                                    color: Colors.white60,
+                                                  ),
                                             ),
                                           ),
                                       ],
@@ -1476,12 +1510,10 @@ class _FeaturedBannerState extends State<_FeaturedBanner> {
                   width: i == _page ? 18 : 6,
                   height: 6,
                   decoration: BoxDecoration(
-                    gradient:
-                        i == _page ? VioletGlass.gradient : null,
+                    gradient: i == _page ? VioletGlass.gradient : null,
                     color: i == _page
                         ? null
-                        : theme.colorScheme.onSurface
-                            .withValues(alpha: 0.25),
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.25),
                     borderRadius: BorderRadius.circular(3),
                   ),
                 ),

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:anikumo/webview/video/video_webview_controller.dart';
+import 'package:anikumo/services/video_source/direct_media_registry.dart';
 import 'package:anikumo/services/video_source/resolved_source_cache.dart';
 import 'package:anikumo/services/video_source/video_source_service.dart';
 
@@ -37,6 +38,23 @@ class WebViewVideoSourceService implements IVideoSourceService {
     int offset = 0,
     Duration timeout = const Duration(seconds: 15),
   }) async {
+    // Batch 208: URLs registered as direct media streams (the
+    // 影视 zone's interface sources) resolve to themselves — no
+    // WebView load, no cache TTL. Anime page URLs are never
+    // registered, so this branch is inert for anime playback.
+    final directFormat = DirectMediaRegistry.lookup(episodeUrl);
+    if (directFormat != null) {
+      if (!_logController.isClosed) {
+        _logController.add('Direct media URL, skipping resolve: $episodeUrl');
+      }
+      return VideoSource(
+        url: episodeUrl,
+        offset: offset,
+        type: VideoSourceType.online,
+        format: directFormat,
+      );
+    }
+
     // Fast path: a fresh cached stream URL costs no WebView load at all.
     // The cached entry carries no offset (it echoes the original request),
     // so the result is rebuilt with this call's [offset].

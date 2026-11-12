@@ -14,6 +14,8 @@ import 'package:anikumo/pages/popular/popular_controller.dart';
 import 'package:anikumo/pages/popular/popular_module.dart';
 import 'package:anikumo/pages/manga/manga_module.dart';
 import 'package:anikumo/pages/novel/novel_module.dart';
+import 'package:anikumo/pages/liuguang/liuguang_module.dart';
+import 'package:anikumo/pages/profile/profile_module.dart';
 import 'package:anikumo/pages/route_error_page.dart';
 import 'package:anikumo/pages/search/search_module.dart';
 import 'package:anikumo/pages/settings/settings_module.dart';
@@ -101,10 +103,7 @@ final indexModule = createModule(
         '/error',
         child: (context, state) => Scaffold(
           appBar: AppBar(title: const Text('Anikumo')),
-          body: const GeneralErrorWidget(
-            title: '初始化失败',
-            errMsg: '请重新启动应用后再试。',
-          ),
+          body: const GeneralErrorWidget(title: '初始化失败', errMsg: '请重新启动应用后再试。'),
         ),
       )
       ..module(tabModule)
@@ -128,6 +127,8 @@ final indexModule = createModule(
       ..module(settingsModule)
       ..module(searchModule)
       ..module(mangaModule)
-      ..module(novelModule);
+      ..module(novelModule)
+      ..module(liuguangModule)
+      ..module(profileModule);
   },
 );

@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:anikumo/bean/dialog/dialog_helper.dart';
 import 'package:anikumo/bean/widget/channel_glyphs.dart';
 import 'package:anikumo/bean/widget/zone_switcher.dart';
+import 'package:anikumo/pages/profile/user_center.dart';
 import 'package:anikumo/services/ui/glass_style.dart';
 import 'package:anikumo/bean/widget/embedded_native_control_area.dart';
 import 'package:anikumo/navigation.dart';
@@ -88,6 +89,7 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
       }
     });
   }
+
   DateTime? _lastExitPromptAt;
 
   /// The shell sits at the bottom of the root stack and stays mounted while
@@ -250,9 +252,7 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
         Widget header = Container(
           decoration: BoxDecoration(
             color: glass
-                ? scheme.surface.withValues(
-                    alpha: GlassStyle.navFillOpacity,
-                  )
+                ? scheme.surface.withValues(alpha: GlassStyle.navFillOpacity)
                 : scheme.surface,
             border: Border(
               bottom: BorderSide(
@@ -269,45 +269,48 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
                   padding: const EdgeInsets.fromLTRB(20, 10, 8, 2),
                   child: dtb.DragToMoveArea(
                     child: Row(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(7),
-                        child: Image.asset(
-                          'assets/images/logo/logo_rounded.png',
-                          width: 27,
-                          height: 27,
-                          fit: BoxFit.cover,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(7),
+                          child: Image.asset(
+                            'assets/images/logo/logo_rounded.png',
+                            width: 27,
+                            height: 27,
+                            fit: BoxFit.cover,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 9),
-                      Text(
-                        'Anikumo',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 2.5,
+                        const SizedBox(width: 9),
+                        Text(
+                          'Anikumo',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 2.5,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Batch 131 (user correction): the zone
-                      // switcher entry is the ANIME mark itself,
-                      // not the Anikumo wordmark — tapping it
-                      // spins the zone wheel.
-                      const ZoneWheelChip(
-                        current: AppZone.anime,
-                        english: true,
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        tooltip: '搜索',
-                        onPressed: () => context.pushNamed('/search/'),
-                        icon: const Icon(AnikumoIcons.search),
-                      ),
-                      IconButton(
-                        tooltip: '历史记录',
-                        onPressed: () =>
-                            context.pushNamed('/settings/history/'),
-                        icon: const Icon(AnikumoIcons.history),
-                      ),
+                        const SizedBox(width: 8),
+                        // Batch 131 (user correction): the zone
+                        // switcher entry is the ANIME mark itself,
+                        // not the Anikumo wordmark — tapping it
+                        // spins the zone wheel.
+                        const ZoneWheelChip(
+                          current: AppZone.anime,
+                          english: true,
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          tooltip: '搜索',
+                          onPressed: () => context.pushNamed('/search/'),
+                          icon: const Icon(AnikumoIcons.search),
+                        ),
+                        IconButton(
+                          tooltip: '历史记录',
+                          onPressed: () =>
+                              context.pushNamed('/settings/history/'),
+                          icon: const Icon(AnikumoIcons.history),
+                        ),
+                        // Batch 257: the user-center entry
+                        // lives in every zone's top-right.
+                        const UserCenterAvatarButton(),
                         if (isDesktop() &&
                             !DesktopWindowConfig.showWindowButton)
                           IconButton(
@@ -359,8 +362,7 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
                       Text(
                         (index + 1).toString().padLeft(2, '0'),
                         style: theme.textTheme.labelSmall?.copyWith(
-                          color:
-                              selected ? scheme.primary : scheme.outline,
+                          color: selected ? scheme.primary : scheme.outline,
                           fontWeight: FontWeight.w800,
                           fontSize: 10,
                         ),
@@ -379,8 +381,7 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
                   Text(
                     label,
                     style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight:
-                          selected ? FontWeight.w800 : FontWeight.w500,
+                      fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
                       color: selected
                           ? scheme.onSurface
                           : scheme.onSurfaceVariant,
@@ -431,10 +432,7 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
                   children: [
                     const SizedBox(height: 14),
                     // Batch 131: zone wheel entry on the rail too.
-                    const ZoneWheelChip(
-                      current: AppZone.anime,
-                      english: true,
-                    ),
+                    const ZoneWheelChip(current: AppZone.anime, english: true),
                     const SizedBox(height: 12),
                     FloatingActionButton.small(
                       elevation: 0,
@@ -447,8 +445,7 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
                       child: ListView.builder(
                         itemCount: _channels.length,
                         itemBuilder: (context, index) {
-                          final (label, icon, selectedIcon) =
-                              _channels[index];
+                          final (label, icon, selectedIcon) = _channels[index];
                           final selected = index == selectedIndex;
                           return InkWell(
                             onTap: () => _selectDestination(index),
@@ -463,17 +460,12 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
                                   ),
                                 ),
                               ),
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 9,
-                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 9),
                               child: Column(
                                 children: [
                                   Text(
-                                    (index + 1)
-                                        .toString()
-                                        .padLeft(2, '0'),
-                                    style:
-                                        theme.textTheme.labelSmall?.copyWith(
+                                    (index + 1).toString().padLeft(2, '0'),
+                                    style: theme.textTheme.labelSmall?.copyWith(
                                       color: selected
                                           ? scheme.primary
                                           : scheme.outline,
@@ -494,13 +486,13 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
                                     label,
                                     style: theme.textTheme.labelMedium
                                         ?.copyWith(
-                                      fontWeight: selected
-                                          ? FontWeight.w800
-                                          : FontWeight.w500,
-                                      color: selected
-                                          ? scheme.onSurface
-                                          : scheme.onSurfaceVariant,
-                                    ),
+                                          fontWeight: selected
+                                              ? FontWeight.w800
+                                              : FontWeight.w500,
+                                          color: selected
+                                              ? scheme.onSurface
+                                              : scheme.onSurfaceVariant,
+                                        ),
                                   ),
                                 ],
                               ),

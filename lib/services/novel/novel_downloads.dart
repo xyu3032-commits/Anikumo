@@ -150,7 +150,20 @@ class NovelDownloadStore {
     // real reason; the caller shows it.
     final List<NovelBlock> blocks;
     try {
-      blocks = await NovelApi.content(item, chapter);
+      // Batch 195: downloads need the completeness signal,
+      // not just blocks — a flagged chapter (pagination cut
+      // short, or only a verification wall's preview) must
+      // fail loudly instead of being stored as complete.
+      final result = await NovelApi.contentDetailed(item, chapter);
+      if (result.verificationRequired) {
+        throw StateError('源站要求完成验证后才能阅读全文，这一章暂时下不了');
+      }
+      if (result.possiblyTruncated) {
+        throw StateError('这一章没有取完整，已跳过（可稍后重试）');
+      }
+      blocks = result.blocks;
+    } on StateError {
+      rethrow;
     } catch (e) {
       throw StateError('这一章的内容抓取失败：$e');
     }
@@ -190,7 +203,19 @@ class NovelDownloadStore {
               await dio.download(
                 url,
                 target.path,
-                options: Options(headers: headers),
+                // Batch 252: same header completion as
+                // the reader (UA / Referer / cookies) —
+                // a bare fetch stored the CDN's refusal
+                // page as the image.
+                options: Options(
+                  headers: novelImageRequestHeaders(
+                    blockHeaders: headers,
+                    sourceHeaders: NovelApi.headersFor(item),
+                    chapterUrl: chapter.url,
+                    imageUrl: url,
+                    cookieHeader: novelCookieHeaderFor(url),
+                  ),
+                ),
               );
             }
             serialized.add({'t': 'img', 'file': name});

@@ -110,6 +110,11 @@ class _NovelFeatureRepoPageState extends State<NovelFeatureRepoPage> {
       await TtsPlayer.instance.stop();
     }
     await NovelFeatures.setInstalled(def.id, false);
+    // Batch 251: same missing feedback as the other
+    // zones' repo pages — toast the uninstall.
+    if (mounted) {
+      AnikumoDialog.showToast(message: '已卸载「${def.name}」');
+    }
   }
 
   Future<void> _addRepo() async {
@@ -165,9 +170,15 @@ class _NovelFeatureRepoPageState extends State<NovelFeatureRepoPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Icon(
-              def.id == NovelFeatures.ttsId
-                  ? AnikumoIcons.volume_up_rounded
-                  : AnikumoIcons.library_books_rounded,
+              switch (def.id) {
+                NovelFeatures.ttsId => AnikumoIcons.volume_up_rounded,
+                NovelFeatures.autoUpdateId => Icons.system_update_rounded,
+                NovelFeatures.deepPrefetchId =>
+                  Icons.rocket_launch_rounded,
+                NovelFeatures.readerThemesId => Icons.palette_rounded,
+                NovelFeatures.ttsSleepId => AnikumoIcons.timer_rounded,
+                _ => AnikumoIcons.library_books_rounded,
+              },
               size: 28,
             ),
             const SizedBox(width: 12),
@@ -280,6 +291,9 @@ class _NovelFeatureRepoPageState extends State<NovelFeatureRepoPage> {
                 icon: const Icon(AnikumoIcons.delete_outline, size: 20),
                 onPressed: () async {
                   await NovelFeatures.removeRepo(url);
+                  if (mounted) {
+                    AnikumoDialog.showToast(message: '已移除仓库');
+                  }
                   await _refreshRemote();
                 },
               ),

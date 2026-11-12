@@ -101,15 +101,33 @@ class MoyuanHost {
     }
   }
 
-  bool get isStarted => _runtime != null;
+  bool get isStarted => _engineReady;
 
   // ---------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------
 
+  /// Batch 202: readiness means the bundle is evaluated
+  /// AND the engine object exists — not merely that the
+  /// runtime object was created. _start() assigns
+  /// _runtime before its first await (the bundle load),
+  /// so keying readiness off _runtime let every caller
+  /// that arrived during start-up race ahead and evaluate
+  /// against a half-built engine ('MoYuan' is not
+  /// defined / '__moyuanEngine' is not defined, or a slot
+  /// promise that never settles). On the home tab that
+  /// was the cold-entry wedge: sections fired together
+  /// at zone entry, all but the first start lost the
+  /// race, and only a later direct call (the category
+  /// page's 「全部」) — made once the engine was warm —
+  /// ever loaded.
+  bool _engineReady = false;
+
   Future<void> ensureStarted() {
-    if (_runtime != null) return Future.value();
-    return _starting ??= _start().catchError((Object e) {
+    if (_engineReady) return Future.value();
+    return _starting ??= _start().then((_) {
+      _engineReady = true;
+    }).catchError((Object e) {
       // A failed start must not poison the singleton:
       // the next call retries instead of re-awaiting the
       // same failed future for the rest of the session.
@@ -130,7 +148,7 @@ class MoyuanHost {
         rootBundle.loadString('assets/moyuan/moyuan.js'));
     _evaluate(bundle);
     _buildEngine();
-    await syncSourcesIfChanged(force: true);
+    await _syncSourcesBody(force: true);
   }
 
   /// (Re)create the engine + bridge objects inside the
@@ -387,6 +405,15 @@ class MoyuanHost {
   /// take effect; a no-op while nothing changed.
   Future<void> syncSourcesIfChanged({bool force = false}) async {
     await ensureStarted();
+    await _syncSourcesBody(force: force);
+  }
+
+  /// The sync itself, for callers that have already
+  /// established readiness. _start() must use this one:
+  /// the public entry gates on ensureStarted(), and
+  /// _start awaiting its own start future through that
+  /// gate would deadlock (batch 202).
+  Future<void> _syncSourcesBody({bool force = false}) async {
     final installed =
         GStorage.getSetting(SettingsKeys.novelInstalledSourcesJson);
     final rss = GStorage.getSetting(SettingsKeys.novelRssSourcesJson);
@@ -403,7 +430,7 @@ class MoyuanHost {
     if (rss.trim().isNotEmpty) {
       final defs = _parseJsonArray(rss);
       if (defs.isNotEmpty) {
-        await callAsync(
+        await _callAsyncReady(
           '__moyuanEngine.rss.registerMany(${jsonEncode(defs)})',
         );
       }
@@ -538,6 +565,16 @@ class MoyuanHost {
     Duration timeout = const Duration(seconds: 120),
   }) async {
     await ensureStarted();
+    return _callAsyncReady(promiseExpr, timeout: timeout);
+  }
+
+  /// [callAsync] for callers that have already
+  /// established readiness — start-up internals must not
+  /// gate on their own start future (batch 202).
+  Future<dynamic> _callAsyncReady(
+    String promiseExpr, {
+    Duration timeout = const Duration(seconds: 120),
+  }) async {
     final id = _evaluate('String(__moyuanSlot(($promiseExpr)))');
     final deadline = DateTime.now().add(timeout);
     while (true) {
@@ -808,6 +845,56 @@ class MoyuanHost {
       '__moyuanEngine.requests.cookieJar.setCookie('
       '${jsonEncode(url)}, ${jsonEncode(name)}, ${jsonEncode(value)})',
     );
+  }
+
+  /// Batch 197: the jar's Cookie header for [url] ('' when
+  /// the jar holds nothing for it), so a Dart-side fetch —
+  /// a verification image, its form post — rides the same
+  /// session the engine's own requests use. The challenge
+  /// code a site issues is bound to that session; fetching
+  /// the image under any other one would solve nothing.
+  String cookieHeaderFor(String url) {
+    try {
+      final out = evalJson(
+        '__moyuanEngine.requests.cookieJar.getCookieHeader('
+        '${jsonEncode(url)})',
+      );
+      return out is String ? out : '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  /// Batch 197: parse Set-Cookie header values into
+  /// (name, value) pairs — attributes (Path, Expires…)
+  /// are dropped; the jar re-derives scope from the URL
+  /// the cookie is planted under.
+  static List<(String, String)> parseSetCookiePairs(
+    List<String> headers,
+  ) {
+    final pairs = <(String, String)>[];
+    for (final header in headers) {
+      final first = header.split(';').first.trim();
+      final eq = first.indexOf('=');
+      if (eq <= 0) continue;
+      pairs.add((
+        first.substring(0, eq).trim(),
+        first.substring(eq + 1).trim(),
+      ));
+    }
+    return pairs;
+  }
+
+  /// Batch 197: plant every cookie a Dart-side response
+  /// set (a verification image or its form post) into the
+  /// engine jar, keyed under [url] — the response may have
+  /// rotated the session the challenge is bound to, and
+  /// the engine's next fetch must carry the new one.
+  Future<void> plantSetCookies(String url, List<String> headers) async {
+    for (final (name, value) in parseSetCookiePairs(headers)) {
+      if (name.isEmpty || value.isEmpty) continue;
+      await setCookie(url, name, value);
+    }
   }
 
   /// Forget a source's login: its stored form values

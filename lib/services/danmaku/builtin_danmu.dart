@@ -6,13 +6,17 @@ import 'package:anikumo/services/tmdb/tmdb_episodes.dart';
 
 /// Batch 163: the app's own danmaku service (a self-hosted
 /// instance speaking the usual v2 search/bangumi/comment
-/// protocol). It is a silent fallback: active only when
-/// the build carries its token AND the user has not
-/// configured their own danmaku credentials — user
-/// configuration always wins.
+/// protocol).
 ///
-/// There is deliberately no setting, no label and no UI
-/// for it anywhere in the app.
+/// Batch 194: it is the backup line. The official API is
+/// primary whenever a credential pair exists (the user's
+/// own or the build-carried pair); this service takes over
+/// when the official line errors or answers empty. It is
+/// reachable only when the build carries its token AND
+/// the user's switch for it is on.
+///
+/// The only UI for it is that one switch; no address, no
+/// token and no name for it appears anywhere in the app.
 class BuiltinDanmu {
   BuiltinDanmu._();
 

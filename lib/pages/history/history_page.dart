@@ -8,10 +8,10 @@ import 'package:anikumo/modules/collect/collect_type.dart';
 import 'package:anikumo/modules/history/history_module.dart';
 import 'package:anikumo/pages/collect/collect_controller.dart';
 import 'package:anikumo/pages/history/history_controller.dart';
+import 'package:anikumo/bean/widget/search_stage.dart';
 import 'package:anikumo/pages/history/history_list_view.dart';
 import 'package:anikumo/pages/history/history_other_media.dart';
-import 'package:anikumo/pages/search/cross_search_widgets.dart';
-import 'package:anikumo/services/manga/cross_media.dart';
+import 'package:anikumo/pages/liuguang/film_history_page.dart';
 import 'package:anikumo/pages/history/history_record_tile.dart';
 import 'package:anikumo/navigation.dart';
 import 'package:anikumo/services/manga/manga_library.dart';
@@ -31,9 +31,17 @@ class HistoryPage extends StatefulWidget {
   State<HistoryPage> createState() => _HistoryPageState();
 }
 
+/// Batch 224: the history page's own view switch. It used
+/// to ride the cross-search mode enum; the film view the
+/// user asked for （历史记录加上电视剧） is a history-only
+/// surface, so the page keeps a local enum instead of
+/// growing a dead mode in the search switch.
+enum _HistoryView { all, anime, manga, novel, film }
+
 class _HistoryPageState extends State<HistoryPage> with RouteAware {
   // Batch 80: 全部 / 动漫 / 漫画 / 小说 medium switch.
-  CrossSearchMode _mode = CrossSearchMode.anime;
+  // Batch 224: a 影视 view joins it.
+  _HistoryView _view = _HistoryView.anime;
   bool _editing = false;
   bool _clearing = false;
   final Set<String> _deleting = {};
@@ -108,7 +116,8 @@ class _HistoryPageState extends State<HistoryPage> with RouteAware {
         icon: const Icon(AnikumoIcons.delete_sweep_outlined),
         title: const Text('清空历史记录？'),
         content: Text(
-            '将删除全部 ${widget.controller.histories.length} 条观看记录，包括在线和缓存记录。此操作无法撤销。'),
+          '将删除全部 ${widget.controller.histories.length} 条观看记录，包括在线和缓存记录。此操作无法撤销。',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -116,8 +125,9 @@ class _HistoryPageState extends State<HistoryPage> with RouteAware {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.error,
-                foregroundColor: Theme.of(context).colorScheme.onError),
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('清空全部'),
           ),
@@ -140,100 +150,130 @@ class _HistoryPageState extends State<HistoryPage> with RouteAware {
 
   @override
   Widget build(BuildContext context) {
-    return Observer(builder: (context) {
-      final entries = widget.controller.histories.toList();
-      return PopScope(
-        canPop: !_editing,
-        onPopInvokedWithResult: (didPop, result) {
-          if (!didPop && _editing) {
-            setState(() => _editing = false);
-          }
-        },
-        child: Scaffold(
-          appBar: SysAppBar(
-            title: Text('历史记录',
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.w700)),
-            actions: [
-              // Batch 80: edit / clear manage the ANIME
-              // history; the other modes are views onto
-              // their own zones' progress stores.
-              if (_mode == CrossSearchMode.anime && entries.isNotEmpty) ...[
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: _editing
-                      ? FilledButton.tonal(
-                          onPressed: _clearing
-                              ? null
-                              : () => setState(() => _editing = false),
-                          child: const Text('完成'),
-                        )
-                      : IconButton.filledTonal(
-                          tooltip: '管理历史记录',
-                          onPressed: () => setState(() => _editing = true),
-                          icon: const Icon(AnikumoIcons.edit_outlined),
-                        ),
+    return Observer(
+      builder: (context) {
+        final entries = widget.controller.histories.toList();
+        return PopScope(
+          canPop: !_editing,
+          onPopInvokedWithResult: (didPop, result) {
+            if (!didPop && _editing) {
+              setState(() => _editing = false);
+            }
+          },
+          child: Scaffold(
+            appBar: SysAppBar(
+              title: Text(
+                '历史记录',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
                 ),
-                if (_editing)
-                  IconButton(
-                    tooltip: '清空全部历史记录',
-                    onPressed: _clearing || _deleting.isNotEmpty
-                        ? null
-                        : _clearHistory,
-                    icon: const Icon(AnikumoIcons.delete_sweep_outlined),
+              ),
+              actions: [
+                // Batch 80: edit / clear manage the ANIME
+                // history; the other modes are views onto
+                // their own zones' progress stores.
+                if (_view == _HistoryView.anime && entries.isNotEmpty) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: _editing
+                        ? FilledButton.tonal(
+                            onPressed: _clearing
+                                ? null
+                                : () => setState(() => _editing = false),
+                            child: const Text('完成'),
+                          )
+                        : IconButton.filledTonal(
+                            tooltip: '管理历史记录',
+                            onPressed: () => setState(() => _editing = true),
+                            icon: const Icon(AnikumoIcons.edit_outlined),
+                          ),
                   ),
+                  if (_editing)
+                    IconButton(
+                      tooltip: '清空全部历史记录',
+                      onPressed: _clearing || _deleting.isNotEmpty
+                          ? null
+                          : _clearHistory,
+                      icon: const Icon(AnikumoIcons.delete_sweep_outlined),
+                    ),
+                ],
               ],
-            ],
-          ),
-          body: SafeArea(
-            top: false,
-            bottom: false,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: CrossSearchModeSwitch(
-                      mode: _mode,
-                      onChanged: (mode) => setState(() {
-                        _mode = mode;
-                        if (mode != CrossSearchMode.anime) {
-                          _editing = false;
-                        }
-                      }),
+            ),
+            body: SafeArea(
+              top: false,
+              bottom: false,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: PillSwitch<_HistoryView>(
+                        value: _view,
+                        onChanged: (view) => setState(() {
+                          _view = view;
+                          if (view != _HistoryView.anime) {
+                            _editing = false;
+                          }
+                        }),
+                        options: const [
+                          PillSwitchOption(
+                            value: _HistoryView.all,
+                            label: '全部',
+                            icon: AnikumoIcons.dashboard_rounded,
+                          ),
+                          PillSwitchOption(
+                            value: _HistoryView.anime,
+                            label: '动漫',
+                            icon: AnikumoIcons.smart_display_rounded,
+                          ),
+                          PillSwitchOption(
+                            value: _HistoryView.manga,
+                            label: '漫画',
+                            icon: AnikumoIcons.menu_book_rounded,
+                          ),
+                          PillSwitchOption(
+                            value: _HistoryView.novel,
+                            label: '小说',
+                            icon: AnikumoIcons.import_contacts_rounded,
+                          ),
+                          PillSwitchOption(
+                            value: _HistoryView.film,
+                            label: '影视',
+                            icon: AnikumoIcons.live_tv_rounded,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                Expanded(
-                  child: switch (_mode) {
-                    CrossSearchMode.anime => HistoryListView(
+                  Expanded(
+                    child: switch (_view) {
+                      _HistoryView.anime => HistoryListView(
                         entries: entries,
                         editing: _editing,
-                        itemBuilder: (history, borderRadius) =>
-                            _HistoryCard(
+                        itemBuilder: (history, borderRadius) => _HistoryCard(
                           history: history,
                           borderRadius: borderRadius,
                           editing: _editing,
-                          busy:
-                              _clearing || _deleting.contains(history.key),
+                          busy: _clearing || _deleting.contains(history.key),
                           onDelete: () => _deleteHistory(history),
                         ),
                       ),
-                    CrossSearchMode.manga => const MangaHistoryList(),
-                    CrossSearchMode.novel => const NovelHistoryList(),
-                    CrossSearchMode.all =>
-                      AllHistoryList(animeHistories: entries),
-                  },
-                ),
-              ],
+                      _HistoryView.manga => const MangaHistoryList(),
+                      _HistoryView.novel => const NovelHistoryList(),
+                      _HistoryView.all => AllHistoryList(
+                        animeHistories: entries,
+                      ),
+                      _HistoryView.film => const FilmHistoryList(),
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   }
 }
 
@@ -276,7 +316,8 @@ class _HistoryCardState extends State<_HistoryCard> with AnikumoDialogOwner {
       switch (result) {
         case HistoryPlaybackReady(:final args):
           task.withContext(
-              (context) => context.pushNamed('/video/', arguments: args));
+            (context) => context.pushNamed('/video/', arguments: args),
+          );
         case HistoryPlaybackUnavailable(:final reason):
           AnikumoDialog.showToast(message: reason);
       }
@@ -287,8 +328,10 @@ class _HistoryCardState extends State<_HistoryCard> with AnikumoDialogOwner {
     if (_updatingCollect) return;
     setState(() => _updatingCollect = true);
     try {
-      await _collectController.addCollect(widget.history.bangumiItem,
-          type: type.value);
+      await _collectController.addCollect(
+        widget.history.bangumiItem,
+        type: type.value,
+      );
     } catch (_) {
       AnikumoDialog.showToast(message: '修改收藏状态失败，请稍后重试');
     } finally {
@@ -298,27 +341,31 @@ class _HistoryCardState extends State<_HistoryCard> with AnikumoDialogOwner {
 
   @override
   Widget build(BuildContext context) {
-    return Observer(builder: (context) {
-      // getCollectType reads storage, so track the observable list explicitly.
-      _collectController.collectibles.length;
-      return HistoryRecordTile(
-        history: widget.history,
-        borderRadius: widget.borderRadius,
-        editing: widget.editing,
-        busy: widget.busy,
-        onPlay: _play,
-        onDelete: widget.onDelete,
-        onDetails: () {
-          if (TapDebouncer.accept(
-              'info:${widget.history.bangumiItem.id}')) {
-            context.pushNamed('/info/',
-                arguments: widget.history.bangumiItem);
-          }
-        },
-        collectType: CollectType.fromValue(
-            _collectController.getCollectType(widget.history.bangumiItem)),
-        onChangeCollect: _updatingCollect ? null : _changeCollect,
-      );
-    });
+    return Observer(
+      builder: (context) {
+        // getCollectType reads storage, so track the observable list explicitly.
+        _collectController.collectibles.length;
+        return HistoryRecordTile(
+          history: widget.history,
+          borderRadius: widget.borderRadius,
+          editing: widget.editing,
+          busy: widget.busy,
+          onPlay: _play,
+          onDelete: widget.onDelete,
+          onDetails: () {
+            if (TapDebouncer.accept('info:${widget.history.bangumiItem.id}')) {
+              context.pushNamed(
+                '/info/',
+                arguments: widget.history.bangumiItem,
+              );
+            }
+          },
+          collectType: CollectType.fromValue(
+            _collectController.getCollectType(widget.history.bangumiItem),
+          ),
+          onChangeCollect: _updatingCollect ? null : _changeCollect,
+        );
+      },
+    );
   }
 }

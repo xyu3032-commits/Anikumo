@@ -704,7 +704,13 @@ class _PlayerItemPanelState extends State<PlayerItemPanel> {
   // playback start, since mpv properties persist per player).
   Future<void> _openPlayerEnhance() async {
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const PlayerEnhancePage()),
+      MaterialPageRoute<void>(
+        builder: (_) => const PlayerEnhancePage(),
+        // Batch 251: named as a settings route so the
+        // mini player treats it as one (see
+        // miniPlayerZoneForRoute).
+        settings: const RouteSettings(name: '/settings/player-enhance'),
+      ),
     );
     if (!mounted) return;
     final runningPlayer = playerController.playback.mediaPlayer;

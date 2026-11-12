@@ -1,10 +1,15 @@
+import 'dart:typed_data';
+import 'dart:io';
 import 'package:anikumo/utils/tap_debouncer.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:anikumo/bean/dialog/dialog_helper.dart';
 import 'package:anikumo/bean/widget/motion_kit.dart';
 import 'package:anikumo/modules/manga/manga_item.dart';
 import 'package:anikumo/pages/manga/manga_widgets.dart';
+import 'package:anikumo/services/manga/manga_cbz_export.dart';
+import 'package:anikumo/services/manga/manga_features.dart';
 import 'package:anikumo/services/manga/manga_downloads.dart';
 import 'package:anikumo/services/manga/manga_extras.dart';
 import 'package:anikumo/bean/widget/anikumo_icons.dart';
@@ -42,6 +47,36 @@ class _MangaDownloadsPageState extends State<MangaDownloadsPage> {
   String get _sizeLabel {
     final mb = _sizeBytes / (1024 * 1024);
     return mb >= 100 ? '${mb.toStringAsFixed(0)} MB' : '${mb.toStringAsFixed(1)} MB';
+  }
+
+  /// Batch 234 （章节导出 pack): pack one downloaded
+  /// chapter into a CBZ and let the user save it.
+  Future<void> _exportEntry(MangaDownloadEntry entry) async {
+    final pages = await MangaDownloadStore.localPages(
+      entry.source,
+      entry.mangaId,
+      entry.chapterId,
+    );
+    if (pages == null || pages.isEmpty) {
+      if (mounted) {
+        AnikumoDialog.showToast(message: '这一话的本地文件不完整，无法导出');
+      }
+      return;
+    }
+    final bytesList = <Uint8List>[];
+    for (final page in pages) {
+      final path = Uri.parse(page.url).toFilePath();
+      bytesList.add(await File(path).readAsBytes());
+    }
+    final cbz = buildCbzBytes(bytesList);
+    final saved = await FilePicker.platform.saveFile(
+      dialogTitle: '保存 CBZ',
+      fileName: cbzFileName(entry.mangaTitle, entry.chapterLabel),
+      bytes: cbz,
+    );
+    if (mounted && saved != null) {
+      AnikumoDialog.showToast(message: '已导出 ${bytesList.length} 页');
+    }
   }
 
   @override
@@ -97,13 +132,28 @@ class _MangaDownloadsPageState extends State<MangaDownloadsPage> {
                         subtitle: Text(
                           '${_entries[i].pageCount} 页 · ${_entries[i].source}',
                         ),
-                        trailing: IconButton(
-                          icon: const Icon(AnikumoIcons.delete_outline),
-                          tooltip: '删除这一话',
-                          onPressed: () async {
-                            await MangaDownloadStore.deleteEntry(_entries[i]);
-                            await _load();
-                          },
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Batch 234 （章节导出 pack).
+                            if (MangaFeatures.isInstalled(
+                                MangaFeatures.cbzExportId))
+                              IconButton(
+                                icon: const Icon(
+                                    AnikumoIcons.folder_zip_outlined),
+                                tooltip: '导出 CBZ',
+                                onPressed: () => _exportEntry(_entries[i]),
+                              ),
+                            IconButton(
+                              icon: const Icon(AnikumoIcons.delete_outline),
+                              tooltip: '删除这一话',
+                              onPressed: () async {
+                                await MangaDownloadStore.deleteEntry(
+                                    _entries[i]);
+                                await _load();
+                              },
+                            ),
+                          ],
                         ),
                         onTap: () {
                           if (TapDebouncer.accept(

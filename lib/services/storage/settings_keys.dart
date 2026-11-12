@@ -98,6 +98,7 @@ class SettingsKeys {
     true,
     group: SettingGroup.danmaku,
   );
+
   /// Off on desktop and on on mobile, like the B 站 client.
   static final pauseOnDanmakuEdit = SettingKey<bool>(
     'pauseOnDanmakuEdit',
@@ -162,13 +163,12 @@ class SettingsKeys {
     group: SettingGroup.danmaku,
   );
 
-  // Batch 18: user-supplied DanDanPlay API credentials. Release
-  // builds inject them via --dart-define (DANDANAPI_APPID /
-  // DANDANAPI_KEY); when those are empty (self-built packages)
-  // every danmaku request is signed with empty credentials and
-  // the API answers 403 — danmaku search and display both die
-  // silently. Users can register their own app at
-  // open.dandanplay.net and paste the pair here instead.
+  // Batch 18: user-supplied DanDanPlay API credentials.
+  // Batch 193: the settings entry for them is gone and the
+  // build carries its own pair (obfuscated injection, see
+  // dandan_key.dart). These keys remain only so a pair a
+  // user stored with an earlier version keeps working —
+  // and keeps priority over the built-in pair.
   static const danmakuAppId = SettingKey<String>(
     'danmakuAppId',
     '',
@@ -454,6 +454,393 @@ class SettingsKeys {
     group: SettingGroup.misc,
   );
 
+  /// Batch 203: the 影视 (video) zone's installed interface
+  /// sources, JSON array of source entries (id/name/apiJson).
+  /// The zone is powered by the vendored 流光 LiuGuang
+  /// engine; like the other zones it ships with NO built-in
+  /// content sources — everything here is user-imported.
+  static const videoInstalledSourcesJson = SettingKey<String>(
+    'videoInstalledSourcesJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 203: user-added video repository addresses
+  /// （仓库）, JSON array of {name, url}. A repository serves
+  /// one configuration document listing many interface
+  /// sources at once.
+  static const videoRepositoriesJson = SettingKey<String>(
+    'videoRepositoriesJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 209: last source health check per installed
+  /// interface source id ({ok, latencyMs, message, atMs}),
+  /// so the sources tab can show 上次检测 state across
+  /// restarts instead of starting blank every time.
+  static const videoSourceHealthJson = SettingKey<String>(
+    'videoSourceHealthJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 235 （追书自动更新 pack): auto-check
+  /// bookkeeping for the novel zone (JSON {lastAtMs,
+  /// stamps: {storageKey: chapterCount}, pending: []}).
+  static const novelUpdateCheckJson = SettingKey<String>(
+    'novelUpdateCheckJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 237: the film home page's per-channel source
+  /// pins (JSON {kindName: sourceEntryId}); a channel with
+  /// no pin races every enabled source as before.
+  static const filmHomeSourceJson = SettingKey<String>(
+    'filmHomeSourceJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 237 (speed half): the film zone's per-source
+  /// speed-test table (JSON {entryId: {ms, at}}; ms -1 =
+  /// the probe failed). Shared by the sources tab, the
+  /// settings 测速 row and the home page's fastest-first
+  /// automatic order.
+  static const filmSourceSpeedJson = SettingKey<String>(
+    'filmSourceSpeedJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 250: the film zone's 看剧取源 pin — the
+  /// source entry id whose copy of a work the detail
+  /// page settles on; '' means 最快优先 (the speed
+  /// table decides). Shares the source list and speed
+  /// table with 主页接口 / 自动测速； it is NOT a home
+  /// pin (those live in filmHomeSourceJson).
+  static const filmPlaybackSourceId = SettingKey<String>(
+    'filmPlaybackSourceId',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 238: the film discover page's source choice —
+  /// a source entry id, '__all__' for the aggregated
+  /// all-source mode, or '' for the default (first
+  /// enabled source, single).
+  static const filmDiscoverSourceId = SettingKey<String>(
+    'filmDiscoverSourceId',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 240: the zone switcher's presentation style —
+  /// a ZoneSwitcherStyle key ('panel' default, 'wheel',
+  /// 'slide', 'grid', 'segment'); '' reads as the panel.
+  static const zoneSwitcherStyle = SettingKey<String>(
+    'zoneSwitcherStyle',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 235 （排版主题 pack): the novel reader theme —
+  /// '' (follow the app), 'paper', 'eye' or 'night'.
+  static const novelReaderTheme = SettingKey<String>(
+    'novelReaderTheme',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 233: the anime zone's feature-repository
+  /// install state (JSON array of feature ids) — same
+  /// repository pattern as the novel and film zones.
+  static const animeFeatureInstallsJson = SettingKey<String>(
+    'animeFeatureInstallsJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 233: user-added feature catalog addresses for
+  /// the anime zone (JSON array of URLs).
+  static const animeFeatureReposJson = SettingKey<String>(
+    'animeFeatureReposJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 233 （单集进度同步）: episodes already reported
+  /// to Bangumi as watched (JSON array of "bangumiId:ep").
+  static const animeBgmSyncedJson = SettingKey<String>(
+    'animeBgmSyncedJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 233 （追番自动更新）: auto-check bookkeeping
+  /// (JSON {lastAtMs, stamps: {id: episodeCount},
+  /// pending: [message, ...]}).
+  static const animeUpdateCheckJson = SettingKey<String>(
+    'animeUpdateCheckJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 233 （弹幕个性化）: per-anime danmaku on/off
+  /// memory (JSON object: bangumiId → bool).
+  static const animeDanmakuPrefsJson = SettingKey<String>(
+    'animeDanmakuPrefsJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 234: the manga zone's feature-repository
+  /// install state (JSON array of feature ids).
+  static const mangaFeatureInstallsJson = SettingKey<String>(
+    'mangaFeatureInstallsJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 234: user-added feature catalog addresses for
+  /// the manga zone (JSON array of URLs).
+  static const mangaFeatureReposJson = SettingKey<String>(
+    'mangaFeatureReposJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 234 （阅读滤镜 pack): the reader color filter —
+  /// '' (off), 'gray', 'invert' or 'warm'.
+  static const mangaReaderFilter = SettingKey<String>(
+    'mangaReaderFilter',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 234 （自动滚动 pack): auto-scroll speed for the
+  /// continuous reader, in logical pixels per second.
+  static const mangaAutoScrollSpeed = SettingKey<int>(
+    'mangaAutoScrollSpeed',
+    60,
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 232: the film zone's feature-repository install
+  /// state (JSON array of feature ids) — the twin of the
+  /// novel zone's key; uninstalled features do not exist
+  /// anywhere in the zone.
+  static const filmFeatureInstallsJson = SettingKey<String>(
+    'filmFeatureInstallsJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 232: user-added feature catalog addresses for
+  /// the film zone (JSON array of URLs).
+  static const filmFeatureReposJson = SettingKey<String>(
+    'filmFeatureReposJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 232 （线路测速优选）: per-source preferred line
+  /// order (JSON object: sourceId → line titles, fastest
+  /// first), written by the detail page's speed probe.
+  static const filmLineSpeedJson = SettingKey<String>(
+    'filmLineSpeedJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 232 （追剧自动更新）: auto-check bookkeeping
+  /// (JSON {lastAtMs, pending: [message, ...]}).
+  static const filmUpdateCheckJson = SettingKey<String>(
+    'filmUpdateCheckJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 211: TVmaze cover cache for the film zone's
+  /// series (normalizedTitle|year → poster URL, '' for a
+  /// confirmed miss). Film zone only — the anime zone's
+  /// covers come from its own metadata and never read this.
+  static const videoTvmazeCoverCacheJson = SettingKey<String>(
+    'videoTvmazeCoverCacheJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 229: TMDB enrichment cache for the film zone's
+  /// detail pages (normalizedTitle|year|kind → enrichment
+  /// JSON, '' for a confirmed no-match). Written by
+  /// TmdbEnrichService; entries go stale after a week.
+  static const videoTmdbEnrichCacheJson = SettingKey<String>(
+    'videoTmdbEnrichCacheJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 243: TMDB poster cache for the film zone's
+  /// cards (mode|normalizedTitle|year|kind → poster URL,
+  /// '' for a confirmed miss). Written by TmdbPosterService.
+  static const videoTmdbPosterCacheJson = SettingKey<String>(
+    'videoTmdbPosterCacheJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 243: the film zone's TMDB data mode — false
+  /// （国内） pulls zh-CN metadata; true （海外） pulls
+  /// TMDB's default (original-language) metadata.
+  static const filmTmdbOverseas = SettingKey<bool>(
+    'filmTmdbOverseas',
+    false,
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 254: the film zone's TMDB account session
+  /// (v3 auth dance result). Local only; cleared on
+  /// logout. The Bangumi side reuses the app-wide
+  /// bangumiAccessToken instead of a second credential.
+  static const filmTmdbSessionId = SettingKey<String>(
+    'filmTmdbSessionId',
+    '',
+    group: SettingGroup.misc,
+  );
+  static const filmTmdbAccountId = SettingKey<int>(
+    'filmTmdbAccountId',
+    0,
+    group: SettingGroup.misc,
+  );
+  static const filmTmdbUsername = SettingKey<String>(
+    'filmTmdbUsername',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 254: display name of the connected Bangumi
+  /// account (the token itself is bangumiAccessToken).
+  static const filmBangumiUsername = SettingKey<String>(
+    'filmBangumiUsername',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 257: the user-center display name (local only,
+  /// shown in the profile header; not an account).
+  static const profileDisplayName = SettingKey<String>(
+    'profileDisplayName',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 257: GitHub access token from the device-code
+  /// sign-in. Lives only in this device's settings box —
+  /// never logged, never synced anywhere.
+  static const githubAccessToken = SettingKey<String>(
+    'githubAccessToken',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 257: GitHub login name / avatar of the
+  /// connected account (display cache).
+  static const githubUsername = SettingKey<String>(
+    'githubUsername',
+    '',
+    group: SettingGroup.misc,
+  );
+  static const githubAvatarUrl = SettingKey<String>(
+    'githubAvatarUrl',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 257: the repository (owner/name) Anikumo syncs
+  /// its backup file to; '' until the user picks or
+  /// auto-creates one.
+  static const githubSyncRepo = SettingKey<String>(
+    'githubSyncRepo',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 257: exportedAt of the backup payload this
+  /// device last pushed or pulled — the ordering marker
+  /// the sync decision compares the remote file against.
+  static const githubLastKnownExportedAt = SettingKey<String>(
+    'githubLastKnownExportedAt',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 257: wall-clock time of the last successful
+  /// sync (display only).
+  static const githubLastSyncAt = SettingKey<String>(
+    'githubLastSyncAt',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 245: Bangumi film-metadata cache for the film
+  /// zone (normalizedTitle|year|kind → resolved subject
+  /// data JSON). Written by BangumiFilmService.
+  static const videoBangumiFilmCacheJson = SettingKey<String>(
+    'videoBangumiFilmCacheJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 244: TMDB episode-name cache for the film
+  /// zone's series (mode|normalizedTitle|year →
+  /// {episodeNumber: name} JSON, {} for a confirmed miss).
+  static const videoTmdbEpisodeNamesCacheJson = SettingKey<String>(
+    'videoTmdbEpisodeNamesCacheJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 212: backfilled source-poster cache (mediaId →
+  /// poster URL, '' for confirmed none) for stations whose
+  /// list payloads carry no poster field.
+  static const videoSourcePosterCacheJson = SettingKey<String>(
+    'videoSourcePosterCacheJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 207: film-zone playback preferences — skip
+  /// intro/outro lengths (seconds), default speed, danmaku
+  /// default, and per-favorite update stamps (mediaId →
+  /// remarks) for the favorites update check.
+  static const videoSkipIntroSeconds = SettingKey<int>(
+    'videoSkipIntroSeconds',
+    0,
+    group: SettingGroup.misc,
+  );
+  static const videoSkipOutroSeconds = SettingKey<int>(
+    'videoSkipOutroSeconds',
+    0,
+    group: SettingGroup.misc,
+  );
+  static const videoDefaultSpeed = SettingKey<double>(
+    'videoDefaultSpeed',
+    1.0,
+    group: SettingGroup.misc,
+  );
+  static const videoDanmakuEnabled = SettingKey<bool>(
+    'videoDanmakuEnabled',
+    true,
+    group: SettingGroup.misc,
+  );
+  static const videoFavoriteStampsJson = SettingKey<String>(
+    'videoFavoriteStampsJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
   /// Batch 158: installed optional features of the novel
   /// zone's feature repository, JSON array of feature ids.
   static const novelFeatureInstallsJson = SettingKey<String>(
@@ -694,6 +1081,16 @@ class SettingsKeys {
     group: SettingGroup.misc,
   );
 
+  /// Batch 199: which engine runs the JS manga sources —
+  /// 'mangakit' (the default) or 'legacy'. Switchable in
+  /// 漫画设置 → 漫画引擎； both engines share the same
+  /// persisted source data, settings and cookies.
+  static const mangaEngineKind = SettingKey<String>(
+    'mangaEngineKind',
+    'mangakit',
+    group: SettingGroup.misc,
+  );
+
   /// Batch 101: the JS sources' cookie jar (host → name →
   /// value), persisted so anti-bot / session cookies survive
   /// engine restarts and app restarts. Until this batch the
@@ -870,6 +1267,16 @@ class SettingsKeys {
   static const mangaReaderDim = SettingKey<double>(
     'mangaReaderDim',
     0,
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 252: manga/novel reader chrome (UI) auto-hide
+  /// delay in seconds — user-adjustable 0.5–5, default
+  /// 1.5. Read live every time a reader arms its hide
+  /// timer (see reader_chrome_prefs.dart).
+  static const readerChromeHideSeconds = SettingKey<double>(
+    'readerChromeHideSeconds',
+    1.5,
     group: SettingGroup.misc,
   );
   static const privateMode = SettingKey<bool>(
@@ -1463,7 +1870,7 @@ class SettingsKeys {
   static List<SettingKey<Object?>> byGroup(SettingGroup group) {
     return [
       for (final key in all)
-        if (key.group == group) key
+        if (key.group == group) key,
     ];
   }
 

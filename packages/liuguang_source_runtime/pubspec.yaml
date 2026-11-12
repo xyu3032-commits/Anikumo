@@ -1,0 +1,13 @@
+name: liuguang_source_runtime
+description: Source registry, gate, health.
+version: 0.1.0
+publish_to: none
+environment:
+  sdk: '>=3.10.0 <4.0.0'
+dependencies:
+  liuguang_models:
+    path: ../liuguang_models
+  liuguang_source_sdk:
+    path: ../liuguang_source_sdk
+dev_dependencies:
+  test: ^1.25.0

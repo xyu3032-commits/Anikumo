@@ -1,0 +1,15 @@
+name: liuguang_metadata
+description: Metadata providers, merger, deduplicator.
+version: 0.1.0
+publish_to: none
+environment:
+  sdk: '>=3.10.0 <4.0.0'
+dependencies:
+  liuguang_models:
+    path: ../liuguang_models
+  liuguang_matcher:
+    path: ../liuguang_matcher
+  liuguang_network:
+    path: ../liuguang_network
+dev_dependencies:
+  test: ^1.25.0

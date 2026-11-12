@@ -144,10 +144,31 @@ class NovelImageBlock extends NovelBlock {
 /// chapter may continue beyond them — the reader must not
 /// present such a chapter as verified-complete.
 class NovelContentResult {
-  const NovelContentResult(this.blocks, {this.possiblyTruncated = false});
+  const NovelContentResult(
+    this.blocks, {
+    this.possiblyTruncated = false,
+    this.verificationRequired = false,
+    this.verification,
+  });
 
   final List<NovelBlock> blocks;
   final bool possiblyTruncated;
+
+  /// Batch 195: the chapter stopped at a verification wall —
+  /// the site answered with a short preview plus a captcha
+  /// gate, so the blocks are only the chapter's opening and
+  /// the full text needs the reader to pass a check in a
+  /// browser view first. Distinct from [possiblyTruncated]
+  /// (which it implies) because the reader can act on it.
+  final bool verificationRequired;
+
+  /// Batch 197: the wall's challenge descriptor when the
+  /// engine could extract one (an image-code form: image
+  /// URL, code field, submit target, hidden fields). The
+  /// reader offers an in-place solve prompt when this is
+  /// present; other challenge shapes leave it null and
+  /// the browser view remains the way through.
+  final Map<String, dynamic>? verification;
 }
 
 /// Batch 184: does this block list carry anything a
@@ -162,6 +183,20 @@ bool novelBlocksHaveContent(List<NovelBlock> blocks) => blocks.any(
         NovelTextBlock(:final text) => text.trim().isNotEmpty,
         NovelImageBlock(:final url) => url.isNotEmpty,
       },
+    );
+
+/// Batch 201: the chapter came back as pictures only —
+/// some books on text sources are image-served (comic
+/// books listed beside novels, or a text chapter the
+/// site renders as page images). There is no captcha
+/// and no text in that shape; the reader says so at the
+/// chapter's tail instead of letting a bare 「本章完」
+/// leave the reader guessing why no verification was
+/// ever offered.
+bool novelChapterIsImageOnly(List<NovelBlock> blocks) =>
+    blocks.any((b) => b is NovelImageBlock && b.url.isNotEmpty) &&
+    !blocks.any(
+      (b) => b is NovelTextBlock && b.text.trim().isNotEmpty,
     );
 
 /// A named explore section of a source (from its exploreUrl

@@ -8,7 +8,7 @@ publish_to: "none"
 # legacy Kazumi-line numbers (last: 20405), so overwrite
 # installs keep working. patch must stay <= 9 in this
 # scheme; if it would reach 10, bump minor instead.
-version: 1.0.2+100228
+version: 1.0.3+100321
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
@@ -20,7 +20,6 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   app_links: ^7.2.2
-  cupertino_icons: ^1.0.6
   flutter_modular: ^7.1.0
   mobx: ^2.6.0
   flutter_mobx: ^2.3.0
@@ -120,6 +119,18 @@ dependencies:
     git:
       url: https://github.com/venera-app/flutter_qjs.git
       ref: 8feae95df7fb00455df129ad7a0dfec1d0e8d8e4
+  # Batch 203: 流光 LiuGuang engine, vendored into packages/
+  # from ~/workspace/liuguang (21 pure-Dart packages). The
+  # video zone (影视专区) is built on this facade; the engine
+  # itself stays UI-free and Anikumo-agnostic.
+  liuguang_core:
+    path: ./packages/liuguang_core
+  liuguang_storage:
+    path: ./packages/liuguang_storage
+  liuguang_network:
+    path: ./packages/liuguang_network
+  liuguang_download:
+    path: ./packages/liuguang_download
 
 dev_dependencies:
   path_provider_platform_interface: ^2.1.2
@@ -179,17 +190,26 @@ msix_config:
 flutter:
   uses-material-design: true
   assets:
-    - assets/images/
+    # Batch 239: the old "- assets/images/" directory entry
+    # silently shipped the platform icon masters too
+    # (logo_android/ios/adaptive, ~3.7 MB of 1024px PNGs) —
+    # directory asset entries are recursive, which defeated
+    # Batch 87's intent. Only the files the app actually
+    # loads are listed now; the masters stay on disk for
+    # icon generation and no longer ship inside the app.
+    - assets/images/danmaku_off.svg
+    - assets/images/danmaku_setting.svg
+    - assets/images/forward_80.png
+    - assets/images/loading.png
+    - assets/images/noface.jpeg
     - assets/shaders/
-    # Batch 87: only the two logo files the tray service actually
-    # loads are bundled. The platform icon masters stay on disk in
-    # assets/images/logo/ but no longer ship inside the app.
     - assets/images/logo/logo_rounded.png
     - assets/images/logo/logo_lanczos.ico
     - assets/statements/
     # Batch 174: the MoYuan novel engine bundle (single
     # file, loaded into the QuickJS host at runtime).
     - assets/moyuan/moyuan.js
+    - assets/mangakit/
     - assets/venera/
     - assets/legado/
     - licenses/ech_http/

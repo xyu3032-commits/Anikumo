@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:anikumo/bean/dialog/dialog.dart';
 import 'package:anikumo/services/manga/js/js_manga_source.dart';
+import 'package:anikumo/services/manga/js/mangakit_source.dart';
 import 'package:anikumo/services/manga/manga_sources.dart';
 
 /// Batch 191: the expanded panel under a JS source's row
@@ -10,6 +11,23 @@ import 'package:anikumo/services/manga/manga_sources.dart';
 /// input / switch / callback), applied to the persisted
 /// KV the runtime reads. This is the in-app replacement
 /// for "go change it on the source's website".
+/// Batch 198: one-line summary of the framework's
+/// registration diagnostics for this source (surfaces the
+/// compat layer could not map, init warnings) — shown in
+/// the info block instead of silently swallowing them.
+String mangaDiagnosticsText(Map<String, dynamic> diagnostics) {
+  final parts = <String>[];
+  final unmapped = diagnostics['unmappedSurfaces'];
+  if (unmapped is List && unmapped.isNotEmpty) {
+    parts.add('以下功能暂未适配：${unmapped.join('、')}');
+  }
+  final warning = diagnostics['initWarning']?.toString() ?? '';
+  if (warning.isNotEmpty) parts.add('初始化提示：$warning');
+  return parts.isEmpty
+      ? '兼容性检查：全部通过'
+      : '兼容性提示：${parts.join('；')}';
+}
+
 class MangaSourceSettingsPanel extends StatefulWidget {
   const MangaSourceSettingsPanel({
     super.key,
@@ -18,7 +36,7 @@ class MangaSourceSettingsPanel extends StatefulWidget {
     required this.onActivate,
   });
 
-  final JsMangaSource source;
+  final JsBackedMangaSource source;
   final bool isActive;
   final VoidCallback onActivate;
 
@@ -85,6 +103,10 @@ class _MangaSourceSettingsPanelState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final source = widget.source;
+    // Registration diagnostics exist only on the MangaKit
+    // engine (batch 198); the legacy engine has none to show.
+    final diagnostics =
+        source is MangaKitMangaSource ? source.diagnostics : null;
     final origin = MangaSources.originOfKey(source.jsKey);
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -114,6 +136,15 @@ class _MangaSourceSettingsPanelState
             SelectableText(
               '来源：$origin',
               style: theme.textTheme.bodySmall,
+            ),
+          ],
+          if (diagnostics != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              mangaDiagnosticsText(diagnostics),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
           if (!widget.isActive) ...[

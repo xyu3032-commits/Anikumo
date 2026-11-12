@@ -52,6 +52,10 @@ class NovelFeatures {
 
   static const ttsId = 'tts';
   static const localBooksId = 'local_books';
+  static const autoUpdateId = 'auto_update';
+  static const deepPrefetchId = 'deep_prefetch';
+  static const readerThemesId = 'reader_themes';
+  static const ttsSleepId = 'tts_sleep';
 
   static const builtinCatalog = <NovelFeatureDef>[
     NovelFeatureDef(
@@ -67,6 +71,38 @@ class NovelFeatures {
       name: '本地书籍',
       description: '把 EPUB / TXT 文件导入本地书架，离线阅读；'
           '本地书籍也会出现在小说搜索和发现里。卸载后书籍文件保留，重装即恢复。',
+      version: '1.0',
+      sizeLabel: '内置功能',
+    ),
+    NovelFeatureDef(
+      id: autoUpdateId,
+      name: '追书自动更新',
+      description: '打开小说区时自动检查收藏的书有没有新章（每 6 小时最多一次），'
+          '有更新会在收藏页顶部提醒。',
+      version: '1.0',
+      sizeLabel: '内置功能',
+    ),
+    NovelFeatureDef(
+      id: deepPrefetchId,
+      name: '深度预读',
+      description: '原本读完一章只预读下一章；装后一次预读后面三章，'
+          '连读时翻章不再等加载（会多用一点流量）。',
+      version: '1.0',
+      sizeLabel: '内置功能',
+    ),
+    NovelFeatureDef(
+      id: readerThemesId,
+      name: '排版主题',
+      description: '给阅读器换纸面：纸黄、护眼绿、夜间三套底色与行距，'
+          '在「小说设置 → 阅读设置」里选；不装时阅读器跟随应用主题。',
+      version: '1.0',
+      sizeLabel: '内置功能',
+    ),
+    NovelFeatureDef(
+      id: ttsSleepId,
+      name: '听书定时关闭',
+      description: '配合「语音朗读」使用：朗读时多一个定时按钮，可选读完本章停、'
+          '或 15 / 30 / 60 分钟后自动停，睡前听书不用担心整夜在读。',
       version: '1.0',
       sizeLabel: '内置功能',
     ),

@@ -15,9 +15,16 @@ import 'package:anikumo/services/logging/logger.dart';
 /// by BYTES instead: comfortably above what a normal
 /// session needs for resume-reading (the count caps still
 /// apply underneath), far below the old worst case.
-const int mangaPageCacheBudgetBytes = 512 * 1024 * 1024;
-const int mangaCoverCacheBudgetBytes = 192 * 1024 * 1024;
-const int sharedImageCacheBudgetBytes = 256 * 1024 * 1024;
+// Batch 239 ("less cache" pass): every budget tightened
+// — pages 512 -> 256 MB, manga covers 192 -> 96 MB,
+// shared 256 -> 128 MB — and the film zone's poster store
+// joins with its own 96 MB budget (it previously had a
+// count cap only). Evicted entries simply re-download on
+// next access; no feature reads these stores as data.
+const int mangaPageCacheBudgetBytes = 256 * 1024 * 1024;
+const int mangaCoverCacheBudgetBytes = 96 * 1024 * 1024;
+const int sharedImageCacheBudgetBytes = 128 * 1024 * 1024;
+const int filmCoverCacheBudgetBytes = 96 * 1024 * 1024;
 
 /// Trims [dir] down to [budgetBytes] by deleting the
 /// oldest-modified files first. Returns the bytes freed.
@@ -99,6 +106,7 @@ Future<void> trimImageCachesToBudgets() async {
   await _trimStore('anikumoMangaPages', mangaPageCacheBudgetBytes);
   await _trimStore('anikumoMangaCovers', mangaCoverCacheBudgetBytes);
   await _trimStore(DefaultCacheManager.key, sharedImageCacheBudgetBytes);
+  await _trimStore('anikumoFilmCovers', filmCoverCacheBudgetBytes);
 }
 
 /// Called when leaving the manga reader — the moment a long

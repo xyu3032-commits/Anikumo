@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_modular/flutter_modular.dart';
 import 'package:flutter/services.dart';
 import 'package:anikumo/bean/dialog/adaptive_bottom_sheet.dart';
 import 'package:anikumo/bean/dialog/dialog_helper.dart';
@@ -197,7 +196,7 @@ class _DanmakuSourceSheetState extends State<_DanmakuSourceSheet> {
         var detail = error.toString();
         if (detail.length > 90) detail = '${detail.substring(0, 90)}…';
         _error = detail.contains('403')
-            ? '弹幕接口鉴权失败（403）：请在 设置 → 弹幕设置 填入弹弹Play 的 AppId / AppKey'
+            ? '弹幕接口鉴权失败（403）'
             : '搜索失败：$detail';
       });
     }
@@ -474,26 +473,13 @@ class _DanmakuSourceSheetState extends State<_DanmakuSourceSheet> {
     );
   }
 
-  Future<void> _openDanmakuSettings() async {
-    await context.pushNamed('/settings/danmaku/');
-    if (!mounted) return;
-    if (DanmakuClient.hasCredentials || BuiltinDanmu.available) {
-      unawaited(_searchAnime());
-    }
-  }
-
   Widget _buildAnimeList() {
     if (_needsCredentials) {
       return GeneralEmptyState(
         compact: true,
         icon: AnikumoIcons.key_rounded,
-        title: '弹幕接口未设置：在弹弹Play 免费注册后填入 AppId / AppKey 即可搜索弹幕（只需填一次）',
+        title: '弹幕服务未配置，暂时无法搜索弹幕',
         actions: [
-          StateActionButton(
-            onPressed: _openDanmakuSettings,
-            icon: AnikumoIcons.settings_rounded,
-            text: '去设置',
-          ),
           StateActionButton.tonal(onPressed: _goBack, text: '返回搜索'),
         ],
       );

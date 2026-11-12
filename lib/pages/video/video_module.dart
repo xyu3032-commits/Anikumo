@@ -35,8 +35,18 @@ final videoModule = createModule(
         // Batch 127: an explicit episode pick never resumes
         // the mini session — the user chose a specific episode,
         // so the session ends and the pick starts fresh.
+        // Batch 220: external (film) args always carry an
+        // initial episode — treating that as a session-ending
+        // explicit pick made every return from the mini window
+        // restart the film from its stale entry offset. For
+        // external args the resume decision moves into
+        // resumeArgsFor, which can tell an expand (the
+        // session's own args / same work, same episode) from
+        // a deliberate different-episode pick.
         final explicitPick =
-            args is OnlineVideoPlaybackArgs && args.initialEpisode != null;
+            args is OnlineVideoPlaybackArgs &&
+            args.initialEpisode != null &&
+            !args.externalPlayback;
         final resumeArgs = explicitPick ? null : session.resumeArgsFor(args);
         final resume = resumeArgs != null;
         if (session.hasSession && !resume) {
