@@ -78,6 +78,25 @@ Anikumo 是一款**使用 Kazumi 的整体框架制作的动漫软件**，漫画
 - 本应用需要 Android 7.0 或以上，7.0 以下装不了；不知道自己手机是哪种，先下 arm64，提示不兼容再换 v7a。
 - 安卓版与已发布版本同签名，可直接覆盖安装，不用卸载。
 
+## 界面预览
+
+> 截图中的作品名、海报与封面已做示例化处理（替换为渐变色块与「示例番剧 / 示例漫画」），不对应任何真实作品。
+
+<table>
+  <tr>
+    <td align="center"><img src="screenshots/01_featured.jpg" width="240" alt="精选"><br>精选</td>
+    <td align="center"><img src="screenshots/02_discover.jpg" width="240" alt="发现 · 漫画与小说专区"><br>发现 · 专区入口</td>
+    <td align="center"><img src="screenshots/03_explore.jpg" width="240" alt="内容发现"><br>内容发现</td>
+    <td align="center"><img src="screenshots/06_timeline.jpg" width="240" alt="放送时间表"><br>放送时间表</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/05_time.jpg" width="240" alt="时光 · 继续观看与收藏夹"><br>时光</td>
+    <td align="center"><img src="screenshots/04_toolbox.jpg" width="240" alt="工具箱"><br>工具箱</td>
+    <td align="center"><img src="screenshots/07_mine.jpg" width="240" alt="我的 · 内容与偏好"><br>我的</td>
+    <td></td>
+  </tr>
+</table>
+
 ## 功能一览
 
 ### 动漫区
