@@ -15,14 +15,6 @@ import 'package:anikumo/utils/async_single_flight.dart';
 class WebDav {
   static const String _syncRootPath = '/anikumoSync';
 
-  /// Pre-rename sync roots, newest first. Existing users
-  /// have real backup data under one of these on their own
-  /// servers; the first init after a rename copies it over
-  /// (see _migrateLegacySyncRoot) instead of orphaning it.
-  static const List<String> _legacySyncRootPaths = [
-    '/hunkuSync',
-    '/kazumiSync',
-  ];
   static const String _historyRootPath = '$_syncRootPath/history';
   static const String _historyChangesPath = '$_historyRootPath/changes';
   static const String _historySnapshotPath = '$_historyRootPath/snapshot.json';
@@ -73,7 +65,6 @@ class WebDav {
       await client.ping();
       await _ensureRemoteDirectory(_syncRootPath);
       await _ensureLocalTempDirectory();
-      await _migrateLegacySyncRoot();
       initialized = true;
       AnikumoLogger().i('WebDav: webDav backup directory ready');
     } catch (e) {
@@ -573,72 +564,6 @@ class WebDav {
   Future<void> _ensureLocalTempDirectory() async {
     if (!await webDavLocalTempDirectory.exists()) {
       await webDavLocalTempDirectory.create(recursive: true);
-    }
-  }
-
-  /// Batch 53: one-time copy of the pre-rename sync folder
-  /// into the new root. Runs only while the new root is
-  /// still empty and the legacy one exists; any failure is
-  /// logged and retried on the next init (the persistent
-  /// flag is set only after a clean pass or when there is
-  /// provably nothing to migrate). The legacy folder is
-  /// left untouched on the server as a fallback.
-  Future<void> _migrateLegacySyncRoot() async {
-    if (GStorage.getSetting(SettingsKeys.webDavSyncRootMigrated)) {
-      return;
-    }
-    try {
-      var newRootHasData = false;
-      try {
-        newRootHasData = (await client.readDir(_syncRootPath)).isNotEmpty;
-      } catch (_) {
-        // Unreadable new root — treat as empty and try the
-        // legacy copy below; failures surface there.
-      }
-      if (!newRootHasData) {
-        for (final legacyRoot in _legacySyncRootPaths) {
-          List<webdav.File> legacyEntries;
-          try {
-            legacyEntries = await client.readDir(legacyRoot);
-          } catch (_) {
-            legacyEntries = const [];
-          }
-          if (legacyEntries.isNotEmpty) {
-            await _copyRemoteTree(legacyRoot, _syncRootPath);
-            AnikumoLogger()
-                .i('WebDav: migrated legacy sync folder to $_syncRootPath');
-            break;
-          }
-        }
-      }
-      await GStorage.putSetting(SettingsKeys.webDavSyncRootMigrated, true);
-    } catch (e) {
-      AnikumoLogger()
-          .w('WebDav: legacy sync migration failed, will retry', error: e);
-    }
-  }
-
-  Future<void> _copyRemoteTree(String from, String to) async {
-    await _ensureRemoteDirectory(to);
-    final entries = await client.readDir(from);
-    for (final entry in entries) {
-      final name = entry.name;
-      if (name == null || name.isEmpty) continue;
-      final sourcePath = '$from/$name';
-      final targetPath = '$to/$name';
-      if (entry.isDir ?? false) {
-        await _copyRemoteTree(sourcePath, targetPath);
-      } else {
-        final tempFile = File(
-          '${webDavLocalTempDirectory.path}/sync_migrate_${name.hashCode.abs()}',
-        );
-        try {
-          await client.read2File(sourcePath, tempFile.path);
-          await client.writeFromFile(tempFile.path, targetPath);
-        } finally {
-          if (await tempFile.exists()) await tempFile.delete();
-        }
-      }
     }
   }
 

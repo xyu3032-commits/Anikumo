@@ -1,11 +1,11 @@
 import 'dart:convert';
 
 // Batch 53: rule share links are generated as anikumo://.
-// The legacy kazumi:// prefix stays ACCEPTED (invisible
-// data compatibility): links users shared before the
-// rename must still import.
+// The pre-rename prefixes (hunku://, kazumi://) were
+// accepted for a transition period; they are no longer
+// recognised — only anikumo:// links import.
 final RegExp _anikumoRuleLinkSchemePattern = RegExp(
-  r'(?:anikumo|hunku|kazumi):(?://)?',
+  r'anikumo:(?://)?',
   caseSensitive: false,
 );
 
