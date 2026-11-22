@@ -53,6 +53,42 @@ class TtsHandler(context: Context, private val channel: MethodChannel) :
         }
     }
 
+    // Batch 280 (#14): voice/pitch for ONE utterance.
+    // Narration (altVoice=false) re-applies the global
+    // settings, undoing any dialogue override the previous
+    // utterance left on the engine. Dialogue asks for a
+    // voice different from the narration voice; engines
+    // with a single voice keep the narration voice and
+    // take the caller's shifted pitch instead.
+    private fun applyUtteranceVoice(
+        engine: TextToSpeech,
+        altVoice: Boolean,
+        altPitch: Double?,
+    ) {
+        engine.setSpeechRate(speechRate)
+        val narrationVoice: android.speech.tts.Voice? =
+            if (voiceName.isEmpty()) {
+                defaultVoice
+            } else {
+                engine.voices?.firstOrNull { it.name == voiceName }
+                    ?: defaultVoice
+            }
+        if (!altVoice) {
+            narrationVoice?.let { engine.voice = it }
+            engine.setPitch(speechPitch)
+            return
+        }
+        val alternate =
+            engine.voices?.firstOrNull { it.name != narrationVoice?.name }
+        if (alternate != null) {
+            engine.voice = alternate
+            engine.setPitch(speechPitch)
+        } else {
+            narrationVoice?.let { engine.voice = it }
+            engine.setPitch((altPitch ?: speechPitch.toDouble()).toFloat())
+        }
+    }
+
     init {
         tts = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
@@ -113,6 +149,12 @@ class TtsHandler(context: Context, private val channel: MethodChannel) :
                     result.error("not_ready", "Speech engine is not ready", null)
                     return
                 }
+                // Batch 280 (#14): dialogue utterances carry
+                // altVoice (and a fallback pitch); narration
+                // carries neither and re-applies the globals.
+                val altVoice = call.argument<Boolean>("altVoice") ?: false
+                val altPitch = call.argument<Double>("pitch")
+                applyUtteranceVoice(engine, altVoice, altPitch)
                 engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, id)
                 result.success(null)
             }

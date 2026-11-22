@@ -8,6 +8,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:anikumo/bean/widget/motion_kit.dart';
 import 'package:anikumo/modules/manga/manga_item.dart';
 import 'package:anikumo/services/manga/manga_image_pipeline.dart';
+import 'package:anikumo/services/manga/manga_trim.dart';
 import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
 /// Shared building blocks for the manga zone's own visual language:
@@ -203,6 +204,68 @@ class _MangaTransformedImageState extends State<MangaTransformedImage> {
           data,
           width: widget.width,
           height: widget.height,
+          fit: widget.fit,
+          cacheWidth: widget.memCacheWidth,
+          gaplessPlayback: true,
+          errorBuilder: (context, _, _) => widget.errorWidget,
+        );
+      },
+    );
+  }
+}
+
+/// Batch 279 (#8): a reader page image that runs its
+/// bytes through the auto-trim (see MangaTrim) before
+/// display. The reader supplies [loadBytes] — the same
+/// byte source the untrimmed path would have used (disk
+/// file, processed pipeline bytes, or the page cache) —
+/// so trimming changes only the crop, never where the
+/// page comes from. Pages with no cuttable border show
+/// their original bytes untouched.
+class MangaTrimmedPageImage extends StatefulWidget {
+  const MangaTrimmedPageImage({
+    super.key,
+    required this.loadBytes,
+    required this.fit,
+    required this.placeholder,
+    required this.errorWidget,
+    this.memCacheWidth,
+  });
+
+  final Future<Uint8List> Function() loadBytes;
+  final BoxFit fit;
+  final int? memCacheWidth;
+  final Widget placeholder;
+  final Widget errorWidget;
+
+  @override
+  State<MangaTrimmedPageImage> createState() => _MangaTrimmedPageImageState();
+}
+
+class _MangaTrimmedPageImageState extends State<MangaTrimmedPageImage> {
+  late Future<Uint8List> _bytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _bytes = _load();
+  }
+
+  Future<Uint8List> _load() async {
+    final original = await widget.loadBytes();
+    return await MangaTrim.trimmed(original) ?? original;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Uint8List>(
+      future: _bytes,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return widget.errorWidget;
+        final data = snapshot.data;
+        if (data == null) return widget.placeholder;
+        return Image.memory(
+          data,
           fit: widget.fit,
           cacheWidth: widget.memCacheWidth,
           gaplessPlayback: true,

@@ -389,6 +389,16 @@ class _ReadingSettingsPageState extends State<_ReadingSettingsPage> {
             setState(() {});
           },
         ),
+        // Batch 279 (#8): auto-trim page borders.
+        _SwitchRow(
+          title: '自动裁边',
+          subtitle: '自动切掉页面四周的纯色边',
+          value: GStorage.getSetting(SettingsKeys.mangaAutoTrim),
+          onChanged: (value) {
+            GStorage.putSetting(SettingsKeys.mangaAutoTrim, value);
+            setState(() {});
+          },
+        ),
         // Batch 234 （阅读滤镜 pack): filter choice lives
         // here while the pack is installed.
         if (MangaFeatures.isInstalled(MangaFeatures.readerFiltersId))

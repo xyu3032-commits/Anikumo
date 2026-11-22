@@ -13,6 +13,7 @@ import 'package:anikumo/pages/player/controller/player_aspect_ratio.dart';
 import 'package:anikumo/pages/player/controller/player_super_resolution.dart';
 import 'package:anikumo/bean/widget/embedded_native_control_area.dart';
 import 'package:anikumo/pages/player/player_panel_hold.dart';
+import 'package:anikumo/pages/player/play_queue_sheet.dart';
 import 'package:anikumo/pages/player/player_track_sheets.dart';
 import 'package:anikumo/services/player/danmaku_heatmap.dart';
 import 'package:anikumo/pages/player/pip_settings_sheet.dart';
@@ -66,6 +67,7 @@ class PlayerItemPanel extends StatefulWidget {
     required this.showVideoInfo,
     required this.showSyncPlayPanel,
     required this.pauseForTimedShutdown,
+    required this.changeEpisode,
     this.disableAnimations = false,
     this.showSourceSwitch,
   });
@@ -96,6 +98,12 @@ class PlayerItemPanel extends StatefulWidget {
   final VoidCallback showVideoInfo;
   final VoidCallback showSyncPlayPanel;
   final VoidCallback pauseForTimedShutdown;
+
+  /// Batch 277 (#1): same-work episode switching for the
+  /// play queue sheet (the page-level wrapper, so queue
+  /// plays behave exactly like episode picks).
+  final Future<void> Function(int episode, {int currentRoad, int offset})
+      changeEpisode;
   final bool disableAnimations;
 
   /// Batch 116: switch the playback source from inside the player
@@ -944,6 +952,22 @@ class _PlayerItemPanelState extends State<PlayerItemPanel> {
                     ),
                   ),
               if (compact) _buildDanmakuToggleButton(context),
+              // Batch 277 (#1): play queue. Online anime
+              // sessions only — queue entries resolve
+              // through the anime source/history path.
+              if (!videoPageController.isExternalPlayback &&
+                  !videoPageController.isOfflineMode)
+                IconButton(
+                  color: Colors.white,
+                  icon: const Icon(AnikumoIcons.playlist_play_rounded),
+                  tooltip: S.t('播放队列'),
+                  onPressed: () => showPlayQueueSheet(
+                    context,
+                    currentBangumiId: videoPageController.bangumiItem.id,
+                    currentAdapterName: videoPageController.currentPlugin.name,
+                    changeEpisode: widget.changeEpisode,
+                  ),
+                ),
               PlayerPanelHoldCollectButton(
                 acquirePlayerPanelHold: widget.acquirePlayerPanelHold,
                 bangumiItem: videoPageController.bangumiItem,
@@ -1059,6 +1083,51 @@ class _PlayerItemPanelState extends State<PlayerItemPanel> {
                   AnikumoMenuItem(
                     onPressed: widget.handleRecordGif,
                     label: S.t('录制 GIF'),
+                  ),
+                  // Batch 277 (#2): A-B segment loop. The
+                  // submenu label mirrors the armed points
+                  // so the state is visible before opening.
+                  SubmenuButton(
+                    menuChildren: [
+                      AnikumoMenuItem(
+                        onPressed: playerController.playback.setAbLoopA,
+                        label: S.t('设为 A 点'),
+                      ),
+                      AnikumoMenuItem(
+                        onPressed: playerController.playback.setAbLoopB,
+                        label: S.t('设为 B 点'),
+                      ),
+                      AnikumoMenuItem(
+                        onPressed: playerController.playback.clearAbLoop,
+                        label: S.t('清除 AB 点'),
+                      ),
+                    ],
+                    child: Observer(
+                      builder: (_) {
+                        final a = playerController.playback.abLoopA;
+                        final b = playerController.playback.abLoopB;
+                        return Text(
+                          a == null
+                              ? S.t('AB 循环')
+                              : b == null
+                                  ? S.f('AB 循环 · A {}',
+                                      [durationToString(a)])
+                                  : S.f('AB 循环 · {} - {}', [
+                                      durationToString(a),
+                                      durationToString(b),
+                                    ]),
+                        );
+                      },
+                    ),
+                  ),
+                  // Batch 277 (#4): accidental-touch lock.
+                  // The unlock path is the hold chip on the
+                  // touch-lock overlay, not this menu.
+                  AnikumoMenuItem(
+                    onPressed: () {
+                      playerController.panel.touchLocked = true;
+                    },
+                    label: S.t('锁定触控'),
                   ),
                   SubmenuButton(
                     menuChildren: [

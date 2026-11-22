@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:anikumo/bean/dialog/dialog_helper.dart';
 import 'package:anikumo/bean/settings/settings_detail_scaffold.dart';
+import 'package:anikumo/bean/settings/settings_dropdown_tile.dart';
 import 'package:anikumo/bean/settings/settings_list.dart';
 import 'package:anikumo/bean/widget/loading_indicator.dart';
 import 'package:anikumo/services/download/download_directory_service.dart';
@@ -24,6 +25,8 @@ class _DownloadSettingsPageState extends State<DownloadSettingsPage> {
   late int parallelEpisodes;
   late int parallelSegments;
   late bool downloadDanmaku;
+  late bool wifiOnlyDownloads;
+  late int rateLimitKbps;
   String downloadDirectory = '';
   String defaultDownloadDirectory = '';
   bool isSelectingDirectory = false;
@@ -36,6 +39,8 @@ class _DownloadSettingsPageState extends State<DownloadSettingsPage> {
     parallelSegments =
         GStorage.getSetting(SettingsKeys.downloadParallelSegments);
     downloadDanmaku = GStorage.getSetting(SettingsKeys.downloadDanmaku);
+    wifiOnlyDownloads = GStorage.getSetting(SettingsKeys.wifiOnlyDownloads);
+    rateLimitKbps = GStorage.getSetting(SettingsKeys.downloadRateLimitKbps);
     downloadDirectory = _directoryService.customDirectory;
     _loadDefaultDownloadDirectory();
   }
@@ -182,6 +187,45 @@ class _DownloadSettingsPageState extends State<DownloadSettingsPage> {
                   S.t('下载视频时同时缓存弹幕数据'),
                 ),
                 initialValue: downloadDanmaku,
+              ),
+            ],
+          ),
+          SettingsSection(
+            title: Text(S.t('网络')),
+            tiles: [
+              SettingsTile.switchTile(
+                leading: AnikumoIcons.network_ping_rounded,
+                onToggle: (value) {
+                  setState(
+                      () => wifiOnlyDownloads = value ?? !wifiOnlyDownloads);
+                  GStorage.putSetting(
+                      SettingsKeys.wifiOnlyDownloads, wifiOnlyDownloads);
+                },
+                title: Text(S.t('仅在 Wi-Fi 下下载')),
+                description: Text(
+                  S.t('开启后，移动网络下不启动新的动漫/漫画下载与自动同步，已排队的任务等到 Wi-Fi 时继续'),
+                ),
+                initialValue: wifiOnlyDownloads,
+              ),
+              SettingsDropdownTile<int>(
+                leading: AnikumoIcons.speed_rounded,
+                title: Text(S.t('下载限速')),
+                description: Text(S.t('动漫与漫画下载共用一个总限速，只作用于下载，不影响在线播放')),
+                value: rateLimitKbps,
+                options: {
+                  0: S.t('不限速'),
+                  256: '256 KB/s',
+                  512: '512 KB/s',
+                  1024: '1 MB/s',
+                  2048: '2 MB/s',
+                  5120: '5 MB/s',
+                },
+                fallbackLabel: S.t('不限速'),
+                onChanged: (value) {
+                  setState(() => rateLimitKbps = value);
+                  GStorage.putSetting(
+                      SettingsKeys.downloadRateLimitKbps, rateLimitKbps);
+                },
               ),
             ],
           ),

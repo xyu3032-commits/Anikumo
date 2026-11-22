@@ -1,5 +1,7 @@
 import 'package:anikumo/utils/tap_debouncer.dart';
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -40,6 +42,8 @@ import 'package:anikumo/utils/date_time.dart';
 import 'package:anikumo/utils/search_parser.dart';
 import 'package:anikumo/bean/widget/anikumo_icons.dart';
 import 'package:anikumo/services/i18n/app_strings.dart';
+import 'package:anikumo/services/search/scan_dispatch.dart';
+import 'package:anikumo/services/search/voice_search.dart';
 
 part 'search_filter_sheet.dart';
 part 'search_widgets.dart';
@@ -122,6 +126,15 @@ class _SearchPageState extends State<SearchPage> {
   SearchPageController get _controller => widget.controller;
   bool get _hasSearched => _submittedQuery != null;
 
+  // Batch 284 (#18/#19): voice input and the in-app
+  // scanner. Both entries earn their place only when the
+  // platform can actually serve them — voice availability
+  // is probed once (recognizer + permission), and the
+  // scanner exists on the mobile platforms only.
+  bool _voiceAvailable = false;
+
+  bool get _scanAvailable => Platform.isAndroid || Platform.isIOS;
+
   @override
   void initState() {
     super.initState();
@@ -132,6 +145,46 @@ class _SearchPageState extends State<SearchPage> {
         if (mounted) _submit(widget.initialQuery);
       });
     }
+    unawaited(() async {
+      final available = await VoiceSearchService.instance.isAvailable();
+      if (mounted && available) setState(() => _voiceAvailable = true);
+    }());
+  }
+
+  /// Batch 284 (#19): opens the scanner and acts on the
+  /// dispatched result — a search term is filled in and
+  /// submitted; a LAN payload routes to the backup page
+  /// with the endpoint prefilled. Deep links never come
+  /// back here: the scan page opens them in place.
+  Future<void> _openScanner() async {
+    final result = await context.pushNamed<Object?>('/search/scan/');
+    if (!mounted || result == null) return;
+    switch (result) {
+      case ScanSearch(:final query):
+        _writeInput(query);
+        await _submit(query);
+      case ScanLanReceive(:final endpoint):
+        await context.pushNamed(
+          '/settings/toolbox/backup/',
+          arguments: endpoint,
+        );
+      default:
+        break;
+    }
+  }
+
+  /// Batch 284 (#18): the listening sheet — live
+  /// transcript while the recognizer runs; the final
+  /// utterance fills the search box and submits.
+  Future<void> _startVoiceSearch() async {
+    final text = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => const _VoiceListenSheet(),
+    );
+    if (!mounted || text == null || text.trim().isEmpty) return;
+    _writeInput(text.trim());
+    await _submit(text.trim());
   }
 
   @override
@@ -964,6 +1017,21 @@ class _SearchPageState extends State<SearchPage> {
           icon: const Icon(AnikumoIcons.search_rounded),
         ),
         trailing: [
+          // Batch 284 (#19): in-app scanner (mobile only).
+          if (_scanAvailable)
+            IconButton(
+              tooltip: S.t('扫码'),
+              onPressed: _openScanner,
+              icon: const Icon(AnikumoIcons.scanner),
+            ),
+          // Batch 284 (#18): voice input, shown only when
+          // the recognizer probe said yes.
+          if (_voiceAvailable)
+            IconButton(
+              tooltip: S.t('语音搜索'),
+              onPressed: _startVoiceSearch,
+              icon: const Icon(Icons.mic_rounded),
+            ),
           if (value.text.isNotEmpty || _hasSearched)
             IconButton(
               tooltip: S.t('清空搜索'),
@@ -1446,6 +1514,123 @@ class _SearchPageState extends State<SearchPage> {
               ],
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+/// Batch 284 (#18): the voice-input sheet. Starts the
+/// recognizer on open, shows the live transcript, and
+/// pops with the final utterance; closing it any other
+/// way (or an empty final) pops with null and nothing is
+/// searched.
+class _VoiceListenSheet extends StatefulWidget {
+  const _VoiceListenSheet();
+
+  @override
+  State<_VoiceListenSheet> createState() => _VoiceListenSheetState();
+}
+
+class _VoiceListenSheetState extends State<_VoiceListenSheet> {
+  final VoiceSearchService _service = VoiceSearchService.instance;
+  String _liveText = '';
+  bool _finished = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _service.onListeningDone = _handleDone;
+    unawaited(
+      _service.startListening(
+        onResult: (words, isFinal) {
+          if (!mounted || _finished) return;
+          if (isFinal) {
+            _finish(words.trim());
+          } else {
+            setState(() => _liveText = words);
+          }
+        },
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    if (_service.onListeningDone == _handleDone) {
+      _service.onListeningDone = null;
+    }
+    unawaited(_service.cancelListening());
+    super.dispose();
+  }
+
+  void _handleDone() {
+    if (!mounted || _finished) return;
+    // The recognizer stopped on its own: keep whatever
+    // partial transcript we have, like a final result.
+    _finish(_liveText.trim());
+  }
+
+  void _finish(String text) {
+    if (_finished) return;
+    _finished = true;
+    unawaited(_service.stopListening());
+    if (mounted) Navigator.of(context).pop(text.isEmpty ? null : text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.mic_rounded,
+              size: 44,
+              color: theme.colorScheme.primary,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              S.t('正在聆听，说出想搜的作品名'),
+              style: theme.textTheme.titleMedium,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              _liveText.isEmpty ? S.t('聆听中…') : _liveText,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: _liveText.isEmpty
+                    ? theme.colorScheme.outline
+                    : theme.colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                TextButton(
+                  onPressed: () {
+                    // Mark finished first: a final result
+                    // landing in the same frame must not
+                    // pop a second time (it would pop the
+                    // search page underneath).
+                    _finished = true;
+                    unawaited(_service.cancelListening());
+                    Navigator.of(context).pop();
+                  },
+                  child: Text(S.t('取消')),
+                ),
+                const SizedBox(width: 12),
+                FilledButton(
+                  onPressed: () => _finish(_liveText.trim()),
+                  child: Text(S.t('完成')),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

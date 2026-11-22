@@ -1,5 +1,34 @@
 part of 'collect_library_view.dart';
 
+/// Batch 283 (#22): the multi-select check badge,
+/// shared by the poster card and the list tile. Only
+/// built while selection mode is on (selected != null
+/// at the call sites).
+Widget _selectionBadge(BuildContext context, bool selected) {
+  final colors = Theme.of(context).colorScheme;
+  return Container(
+    width: 26,
+    height: 26,
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      color: selected
+          ? colors.primary
+          : colors.surface.withValues(alpha: 0.85),
+      border: Border.all(
+        color: selected ? colors.primary : colors.outline,
+        width: 2,
+      ),
+    ),
+    child: selected
+        ? Icon(
+            AnikumoIcons.check_rounded,
+            size: 15,
+            color: colors.onPrimary,
+          )
+        : null,
+  );
+}
+
 class _CollectPosterCard extends StatelessWidget {
   const _CollectPosterCard({
     super.key,
@@ -8,6 +37,8 @@ class _CollectPosterCard extends StatelessWidget {
     required this.showStatus,
     required this.onOpen,
     required this.onChangeType,
+    this.onLongPress,
+    this.selected,
   });
 
   final CollectedBangumi entry;
@@ -15,6 +46,11 @@ class _CollectPosterCard extends StatelessWidget {
   final bool showStatus;
   final VoidCallback onOpen;
   final ValueChanged<CollectType>? onChangeType;
+  final VoidCallback? onLongPress;
+
+  /// Null outside selection mode; otherwise whether
+  /// this entry is in the batch selection.
+  final bool? selected;
 
   static const _coverRatio = 0.65;
   static bool _isCompact(double width) => width < 160;
@@ -192,16 +228,27 @@ class _CollectPosterCard extends StatelessWidget {
           ].join('，'),
           child: InkWell(
             onTap: onOpen,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            onLongPress: onLongPress,
+            child: Stack(
               children: [
-                ExcludeSemantics(
-                  child: AspectRatio(
-                    aspectRatio: _coverRatio,
-                    child: _CollectCover(item: item),
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ExcludeSemantics(
+                      child: AspectRatio(
+                        aspectRatio: _coverRatio,
+                        child: _CollectCover(item: item),
+                      ),
+                    ),
+                    Expanded(child: footer),
+                  ],
                 ),
-                Expanded(child: footer),
+                if (selected != null)
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    child: _selectionBadge(context, selected!),
+                  ),
               ],
             ),
           ),
@@ -218,12 +265,19 @@ class _CollectListTile extends StatelessWidget {
     required this.showRating,
     required this.onOpen,
     required this.onChangeType,
+    this.onLongPress,
+    this.selected,
   });
 
   final CollectedBangumi entry;
   final bool showRating;
   final VoidCallback onOpen;
   final ValueChanged<CollectType>? onChangeType;
+  final VoidCallback? onLongPress;
+
+  /// Null outside selection mode; otherwise whether
+  /// this entry is in the batch selection.
+  final bool? selected;
 
   @override
   Widget build(BuildContext context) {
@@ -249,9 +303,15 @@ class _CollectListTile extends StatelessWidget {
             child: Semantics(
               button: true,
               label: [title, ...metadata].join('，'),
-              child: InkWell(onTap: onOpen),
+              child: InkWell(onTap: onOpen, onLongPress: onLongPress),
             ),
           ),
+          if (selected != null)
+            Positioned(
+              top: 10,
+              left: 10,
+              child: _selectionBadge(context, selected!),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 16, 8),
             child: Row(

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:anikumo/bean/widget/anikumo_icons.dart';
@@ -10,6 +12,7 @@ import 'package:anikumo/services/liuguang/film_prefs.dart';
 import 'package:anikumo/services/liuguang/film_probes.dart';
 import 'package:anikumo/services/liuguang/tmdb_enrich.dart';
 import 'package:anikumo/services/liuguang/video_engine.dart';
+import 'package:anikumo/services/notifications/update_notification_service.dart';
 import 'package:anikumo/services/storage/storage.dart';
 
 /// Batches 203–208: 设置 — since Batch 208 the zone plays
@@ -49,6 +52,8 @@ class FilmSettingsTab extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             const _TmdbModeSection(),
+            const SizedBox(height: 14),
+            const _FilmNotifySection(),
             const SizedBox(height: 14),
             const FilmAccountSection(),
             const SizedBox(height: 14),
@@ -178,6 +183,74 @@ class _TmdbModeSectionState extends State<_TmdbModeSection> {
               GStorage.putSetting(SettingsKeys.filmTmdbOverseas, value);
             } catch (_) {
               // The in-memory choice still applies.
+            }
+          },
+        ),
+      ],
+    );
+  }
+}
+
+/// Batch 281: 追剧更新通知 — the film lane of the shared
+/// launch-time update checker (the anime lane's toggle
+/// lives in the app settings, the novel lane's in its own
+/// zone; each zone hosts its own switch). Turning it on
+/// asks for the notification permission and runs a check
+/// right away, like the other lanes.
+class _FilmNotifySection extends StatefulWidget {
+  const _FilmNotifySection();
+
+  @override
+  State<_FilmNotifySection> createState() => _FilmNotifySectionState();
+}
+
+class _FilmNotifySectionState extends State<_FilmNotifySection> {
+  bool _enabled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    try {
+      _enabled = GStorage.getSetting(SettingsKeys.notifyFilmUpdates);
+    } catch (_) {
+      _enabled = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Text(S.t('提醒'),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+          ),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          secondary: const Icon(Icons.notifications_rounded),
+          title: Text(S.t('追剧更新通知')),
+          subtitle: Text(S.t('打开 App 时检查收藏的剧集，有新集就通知')),
+          value: _enabled,
+          onChanged: (value) async {
+            setState(() => _enabled = value);
+            try {
+              await GStorage.putSetting(
+                SettingsKeys.notifyFilmUpdates,
+                value,
+              );
+            } catch (_) {
+              // The in-memory choice still applies.
+            }
+            if (value) {
+              await UpdateNotificationService.requestPermission();
+              unawaited(
+                UpdateNotificationService.runChecksIfEnabled(force: true),
+              );
             }
           },
         ),

@@ -1,4 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Batch 284 (#31): Android TV support is optional —
+         the app stays installable on phones (required=false),
+         and touchscreens are not mandatory either. -->
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <application
         android:label="Anikumo"
         android:name="${applicationName}"
@@ -19,6 +24,7 @@
             android:supportsPictureInPicture="true"
             android:resizeableActivity="true"
             android:theme="@style/LaunchTheme"
+            android:banner="@mipmap/ic_launcher"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
@@ -37,6 +43,13 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <!-- Batch 284 (#31): TV launchers look for this
+                 category; the banner above is the app icon
+                 as a placeholder until a TV banner ships. -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW"/>
@@ -88,8 +101,26 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/continue_widget_info" />
         </receiver>
+        <!-- Batch 284 (#32): today's-schedule home-screen widget. -->
+        <receiver
+            android:name=".CalendarWidgetProvider"
+            android:exported="false"
+            android:label="Anikumo 今日放送">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/calendar_widget_info" />
+        </receiver>
     </application>
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Batch 284 (#18): voice search. speech_to_text's
+         own manifest is empty, so the permission and the
+         recognition-service query live here. (The camera
+         permission for #19 scanning is merged from the
+         mobile_scanner plugin itself.) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
@@ -111,6 +142,11 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- Batch 284 (#18): lets the speech plugin see the
+             device's recognition service on Android 11+. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
         </intent>
     </queries>
 </manifest>

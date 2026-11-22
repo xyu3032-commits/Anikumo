@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'package:anikumo/modules/manga/manga_item.dart';
+import 'package:anikumo/services/download/download_gate.dart';
+import 'package:anikumo/services/network/metered_network_service.dart';
 
 import 'manga_downloads.dart';
 
@@ -21,9 +23,17 @@ import 'manga_downloads.dart';
 /// [MangaDownloadStore]'s index as before — the queue is
 /// the work list, not the library.
 class MangaDownloadQueue extends ChangeNotifier {
-  MangaDownloadQueue._();
+  MangaDownloadQueue._() {
+    // Batch 282 (#25): queued chapters start when the
+    // network turns unmetered again.
+    MeteredNetworkService.listenable.addListener(_onNetworkChanged);
+  }
 
   static final MangaDownloadQueue instance = MangaDownloadQueue._();
+
+  void _onNetworkChanged() {
+    if (!MeteredNetworkService.isMetered) _pump();
+  }
 
   static const int maxConcurrent = 2;
 
@@ -78,6 +88,10 @@ class MangaDownloadQueue extends ChangeNotifier {
 
   void _pump() {
     if (_paused) return;
+    // Batch 282 (#25): the Wi-Fi-only gate holds new
+    // chapter starts on metered networks; running
+    // chapters are never interrupted.
+    if (DownloadGate.blockedNow()) return;
     while (_running < maxConcurrent) {
       final next = _jobs
           .where((job) => job.status == MangaDownloadJobStatus.queued)

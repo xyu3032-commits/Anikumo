@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_modular/flutter_modular.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:anikumo/bean/appbar/sys_app_bar.dart';
 import 'package:anikumo/bean/dialog/dialog.dart';
 import 'package:anikumo/bean/glass/glass_surface.dart';
@@ -14,6 +17,7 @@ import 'package:anikumo/services/manga/manga_downloads.dart';
 import 'package:anikumo/services/manga/manga_library.dart';
 import 'package:anikumo/services/novel/novel_library.dart';
 import 'package:anikumo/services/storage/storage.dart';
+import 'package:anikumo/services/sync/lan_transfer.dart';
 import 'package:anikumo/utils/constants.dart';
 import 'package:anikumo/bean/widget/anikumo_icons.dart';
 import 'package:anikumo/services/i18n/app_strings.dart';
@@ -22,7 +26,12 @@ import 'package:anikumo/services/i18n/app_strings.dart';
 /// file, or merge a previously exported file back in. Complements —
 /// does not replace — the WebDAV sync: no account, no server.
 class BackupPage extends StatefulWidget {
-  const BackupPage({super.key});
+  const BackupPage({super.key, this.lanEndpoint});
+
+  /// Batch 284 (#33): a LAN transfer endpoint handed over
+  /// by the scanner (search page) — receiving starts as
+  /// soon as the page opens.
+  final LanTransferEndpoint? lanEndpoint;
 
   @override
   State<BackupPage> createState() => _BackupPageState();
@@ -30,6 +39,7 @@ class BackupPage extends StatefulWidget {
 
 class _BackupPageState extends State<BackupPage> {
   bool _busy = false;
+  LanTransferServer? _lanServer;
 
   // Batch 83: the manga download index lives in a file, so
   // its count loads asynchronously.
@@ -41,6 +51,19 @@ class _BackupPageState extends State<BackupPage> {
     MangaDownloadStore.loadIndex().then((entries) {
       if (mounted) setState(() => _mangaDownloadCount = entries.length);
     });
+    final endpoint = widget.lanEndpoint;
+    if (endpoint != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_receiveViaLan(endpoint));
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    final server = _lanServer;
+    if (server != null) unawaited(server.close());
+    super.dispose();
   }
 
   String get _fileName {
@@ -211,6 +234,22 @@ class _BackupPageState extends State<BackupPage> {
           (file.path == null ? null : await File(file.path!).readAsBytes());
       if (bytes == null) throw const FileSystemException('无法读取所选文件');
       if (!mounted) return;
+      await _processImportBytes(bytes);
+    } catch (_) {
+      if (mounted) {
+        AnikumoDialog.showToast(context: context, message: S.t('导入失败，请稍后重试'));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// The restore half of an import — decrypt if needed,
+  /// unpack a bundle, confirm with the usual counts
+  /// dialog, apply. Shared by the file picker above and
+  /// the LAN receiver (#33) below; errors propagate to
+  /// the caller's catch.
+  Future<void> _processImportBytes(List<int> bytes) async {
       // Batch 274 (#40): an encrypted backup asks for
       // its password first and then flows through the
       // plain-JSON path below.
@@ -295,6 +334,109 @@ class _BackupPageState extends State<BackupPage> {
             : S.t('恢复完成'),
       );
       setState(() {});
+  }
+
+  /// Batch 284 (#33): serves the full bundle on the LAN
+  /// behind a one-time token and shows the address as a
+  /// QR code + selectable text until the dialog closes
+  /// or the server retires itself (one download, or five
+  /// minutes — see LanTransferServer).
+  Future<void> _sendViaLan() async {
+    setState(() => _busy = true);
+    LanTransferServer? server;
+    try {
+      final bytes = await LocalBackup.exportBundleBytes();
+      server = await LanTransferServer.start(bytes: bytes);
+      _lanServer = server;
+      if (!mounted) return;
+      if (server.endpoint.host == '127.0.0.1') {
+        await server.close();
+        _lanServer = null;
+        if (!mounted) return;
+        AnikumoDialog.showToast(
+          context: context,
+          message: S.t('未找到可用的局域网地址，请确认已连接 Wi-Fi'),
+        );
+        return;
+      }
+      final payload = server.endpoint.payload;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(S.t('通过局域网发送备份')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              QrImageView(
+                data: payload,
+                version: QrVersions.auto,
+                size: 220,
+                backgroundColor: Colors.white,
+              ),
+              const SizedBox(height: 12),
+              SelectableText(
+                payload,
+                textAlign: TextAlign.center,
+                style: Theme.of(dialogContext).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                S.t('在另一台设备上打开「从局域网接收备份」，扫码或输入上面的地址下载这份备份。'),
+                textAlign: TextAlign.center,
+                style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(dialogContext).colorScheme.outline,
+                    ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                S.t('这份地址 5 分钟内有效，且只能下载一次。'),
+                textAlign: TextAlign.center,
+                style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(dialogContext).colorScheme.outline,
+                    ),
+              ),
+            ],
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(S.t('完成')),
+            ),
+          ],
+        ),
+      );
+      await server.close();
+      if (_lanServer == server) _lanServer = null;
+    } catch (_) {
+      if (server != null) await server.close();
+      if (_lanServer == server) _lanServer = null;
+      if (mounted) {
+        AnikumoDialog.showToast(
+          context: context,
+          message: S.t('发送失败，请确认已连接 Wi-Fi 后重试'),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Batch 284 (#33): downloads the bundle behind
+  /// [endpoint] and runs it through the normal restore
+  /// (bundle check first, confirmation dialog included).
+  Future<void> _receiveViaLan(LanTransferEndpoint endpoint) async {
+    setState(() => _busy = true);
+    try {
+      final bytes = await LanTransferClient.download(endpoint);
+      if (!mounted) return;
+      await _processImportBytes(bytes);
+    } on LanTransferException {
+      if (mounted) {
+        AnikumoDialog.showToast(
+          context: context,
+          message: S.t('下载失败，请确认两台设备在同一局域网且发送方仍在等待'),
+        );
+      }
     } catch (_) {
       if (mounted) {
         AnikumoDialog.showToast(context: context, message: S.t('导入失败，请稍后重试'));
@@ -302,6 +444,88 @@ class _BackupPageState extends State<BackupPage> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Batch 284 (#33): the manual receive form — paste the
+  /// sender's address (and token, when the address does
+  /// not carry one), or scan the sender's QR code.
+  Future<void> _promptLanReceive() async {
+    final address = TextEditingController();
+    final token = TextEditingController();
+    final endpoint = await showDialog<LanTransferEndpoint>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(S.t('从局域网接收备份')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: address,
+              keyboardType: TextInputType.url,
+              decoration: InputDecoration(labelText: S.t('传输地址')),
+            ),
+            TextField(
+              controller: token,
+              decoration: InputDecoration(
+                labelText: S.t('传输令牌（地址不含令牌时填写）'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              S.t('也可以点下方「扫码」，对准发送方显示的二维码。'),
+              style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(dialogContext).colorScheme.outline,
+                  ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              final raw = await context.pushNamed<Object?>(
+                '/search/scan/',
+                arguments: 'raw',
+              );
+              if (raw is! String) return;
+              final parsed = parseLanEndpoint(raw);
+              if (parsed != null) {
+                if (dialogContext.mounted) {
+                  Navigator.of(dialogContext).pop(parsed);
+                }
+              } else if (mounted) {
+                AnikumoDialog.showToast(
+                  context: context,
+                  message: S.t('这不是局域网传输二维码'),
+                );
+              }
+            },
+            child: Text(S.t('扫码')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(S.t('取消')),
+          ),
+          FilledButton(
+            onPressed: () {
+              final parsed = parseLanAddressInput(address.text, token.text);
+              if (parsed == null) {
+                AnikumoDialog.showToast(
+                  context: dialogContext,
+                  message: S.t('地址或令牌不正确'),
+                );
+                return;
+              }
+              Navigator.of(dialogContext).pop(parsed);
+            },
+            child: Text(S.t('开始接收')),
+          ),
+        ],
+      ),
+    );
+    address.dispose();
+    token.dispose();
+    if (endpoint == null || !mounted) return;
+    await _receiveViaLan(endpoint);
   }
 
   @override
@@ -405,6 +629,19 @@ class _BackupPageState extends State<BackupPage> {
             onPressed: _busy ? null : _import,
             icon: const Icon(AnikumoIcons.file_download_outlined),
             label: Text(S.t('从文件恢复')),
+          ),
+          const SizedBox(height: 10),
+          // Batch 284 (#33): device-to-device LAN transfer.
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _sendViaLan,
+            icon: const Icon(AnikumoIcons.wifi_tethering),
+            label: Text(S.t('通过局域网发送备份')),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _promptLanReceive,
+            icon: const Icon(AnikumoIcons.lan),
+            label: Text(S.t('从局域网接收备份')),
           ),
           const SizedBox(height: StyleString.sectionSpace),
           // Batch 274 (#41): automatic backup schedule.

@@ -8,6 +8,8 @@ import 'package:anikumo/modules/collect/collect_type.dart';
 import 'package:anikumo/modules/history/history_module.dart';
 import 'package:anikumo/pages/collect/collect_controller.dart';
 import 'package:anikumo/pages/history/history_controller.dart';
+import 'package:anikumo/services/collect/batch_selection.dart';
+import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/bean/widget/search_stage.dart';
 import 'package:anikumo/pages/history/history_list_view.dart';
 import 'package:anikumo/pages/history/history_other_media.dart';
@@ -47,6 +49,172 @@ class _HistoryPageState extends State<HistoryPage> with RouteAware {
   bool _editing = false;
   bool _clearing = false;
   final Set<String> _deleting = {};
+
+  // Batch 283 (#22): in editing mode the anime rows
+  // are multi-selectable (tap toggles); the bottom bar
+  // runs the batch delete / mark-watched actions.
+  Set<String> _selectedKeys = {};
+  bool _batchBusy = false;
+  final CollectController _collectController = inject<CollectController>();
+
+  void _setEditing(bool editing) {
+    setState(() {
+      _editing = editing;
+      if (!editing) _selectedKeys = {};
+    });
+  }
+
+  List<History> _selectedHistories(List<History> entries) => [
+        for (final history in entries)
+          if (_selectedKeys.contains(history.key)) history,
+      ];
+
+  Future<void> _batchDelete(List<History> entries) async {
+    final selected = _selectedHistories(entries);
+    if (selected.isEmpty || _batchBusy) return;
+    final confirmed = await AnikumoDialog.show<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(S.t('删除所选记录？')),
+        content: Text(S.f('将删除 {} 条观看记录。此操作无法撤销。', [selected.length])),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(S.t('取消')),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(S.t('删除')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _batchBusy = true);
+    var deleted = 0;
+    try {
+      for (final history in selected) {
+        await widget.controller.deleteHistory(history);
+        deleted++;
+      }
+    } catch (_) {
+      if (mounted) {
+        AnikumoDialog.showToast(
+          context: context,
+          message: S.t('批量删除失败，请稍后重试'),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _batchBusy = false;
+          _selectedKeys = {};
+        });
+        if (deleted > 0) {
+          AnikumoDialog.showToast(
+            context: context,
+            message: S.f('已删除 {} 条记录', [deleted]),
+          );
+        }
+        if (widget.controller.histories.isEmpty) _setEditing(false);
+      }
+    }
+  }
+
+  Future<void> _batchMarkWatched(List<History> entries) async {
+    final selected = _selectedHistories(entries);
+    if (selected.isEmpty || _batchBusy) return;
+    final collectedIds = {
+      for (final c in GStorage.collectibles.values) c.bangumiItem.id,
+    };
+    final plan = planMarkWatched(
+      selected.map((h) => h.bangumiItem.id),
+      collectedIds,
+    );
+    setState(() => _batchBusy = true);
+    try {
+      final items = [
+        for (final history in selected)
+          if (plan.toMark.contains(history.bangumiItem.id))
+            history.bangumiItem,
+      ];
+      final changed = await _collectController.applyBatchType(
+        items,
+        CollectType.watched.value,
+      );
+      if (!mounted) return;
+      final parts = <String>[
+        if (changed > 0) S.f('已标记 {} 部为看过', [changed]),
+        if (plan.skipped > 0) S.f('{} 部未收藏已跳过', [plan.skipped]),
+      ];
+      AnikumoDialog.showToast(
+        context: context,
+        message: parts.isEmpty ? S.t('所选条目状态没有变化') : parts.join('，'),
+      );
+      setState(() => _selectedKeys = {});
+    } catch (_) {
+      if (mounted) {
+        AnikumoDialog.showToast(
+          context: context,
+          message: S.t('批量标记失败，请稍后重试'),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _batchBusy = false);
+    }
+  }
+
+  Widget _batchBar(BuildContext context, List<History> entries) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surfaceContainer,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+          child: Row(
+            children: [
+              Text(
+                S.f('已选 {} 项', [_selectedKeys.length]),
+                style: theme.textTheme.titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const Spacer(),
+              TextButton(
+                onPressed: _batchBusy
+                    ? null
+                    : () => setState(() {
+                          _selectedKeys = BatchSelection.selectAll(
+                            entries.map((h) => h.key),
+                          );
+                        }),
+                child: Text(S.t('全选')),
+              ),
+              TextButton(
+                onPressed: _batchBusy || _selectedKeys.isEmpty
+                    ? null
+                    : () => _batchMarkWatched(entries),
+                child: Text(S.t('标记已看完')),
+              ),
+              TextButton(
+                onPressed: _batchBusy || _selectedKeys.isEmpty
+                    ? null
+                    : () => _batchDelete(entries),
+                child: Text(
+                  S.t('批量删除'),
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -99,7 +267,7 @@ class _HistoryPageState extends State<HistoryPage> with RouteAware {
     try {
       await widget.controller.deleteHistory(history);
       if (mounted && widget.controller.histories.isEmpty) {
-        setState(() => _editing = false);
+        _setEditing(false);
       }
     } catch (_) {
       if (mounted) {
@@ -140,7 +308,7 @@ class _HistoryPageState extends State<HistoryPage> with RouteAware {
     setState(() => _clearing = true);
     try {
       await widget.controller.clearAll();
-      if (mounted) setState(() => _editing = false);
+      if (mounted) _setEditing(false);
     } catch (_) {
       if (mounted) {
         AnikumoDialog.showToast(context: context, message: S.t('清空失败，请稍后重试'));
@@ -181,10 +349,13 @@ class _HistoryPageState extends State<HistoryPage> with RouteAware {
           canPop: !_editing,
           onPopInvokedWithResult: (didPop, result) {
             if (!didPop && _editing) {
-              setState(() => _editing = false);
+              _setEditing(false);
             }
           },
           child: Scaffold(
+            bottomNavigationBar: _editing && _view == _HistoryView.anime
+                ? _batchBar(context, entries)
+                : null,
             appBar: SysAppBar(
               title: Text(
                 S.t('历史记录'),
@@ -203,12 +374,12 @@ class _HistoryPageState extends State<HistoryPage> with RouteAware {
                         ? FilledButton.tonal(
                             onPressed: _clearing
                                 ? null
-                                : () => setState(() => _editing = false),
+                                : () => _setEditing(false),
                             child: Text(S.t('完成')),
                           )
                         : IconButton.filledTonal(
                             tooltip: S.t('管理历史记录'),
-                            onPressed: () => setState(() => _editing = true),
+                            onPressed: () => _setEditing(true),
                             icon: const Icon(AnikumoIcons.edit_outlined),
                           ),
                   ),
@@ -238,6 +409,7 @@ class _HistoryPageState extends State<HistoryPage> with RouteAware {
                           _view = view;
                           if (view != _HistoryView.anime) {
                             _editing = false;
+                            _selectedKeys = {};
                           }
                         }),
                         options: [
@@ -281,6 +453,15 @@ class _HistoryPageState extends State<HistoryPage> with RouteAware {
                           editing: _editing,
                           busy: _clearing || _deleting.contains(history.key),
                           onDelete: () => _deleteHistory(history),
+                          selected: _editing
+                              ? _selectedKeys.contains(history.key)
+                              : null,
+                          onToggleSelect: () => setState(() {
+                            _selectedKeys = BatchSelection.toggle(
+                              _selectedKeys,
+                              history.key,
+                            );
+                          }),
                         ),
                       ),
                       _HistoryView.manga => const MangaHistoryList(),
@@ -308,6 +489,8 @@ class _HistoryCard extends StatefulWidget {
     required this.editing,
     required this.busy,
     required this.borderRadius,
+    this.selected,
+    this.onToggleSelect,
   });
 
   final History history;
@@ -315,6 +498,11 @@ class _HistoryCard extends StatefulWidget {
   final bool busy;
   final Future<void> Function() onDelete;
   final BorderRadius borderRadius;
+
+  /// Batch 283 (#22): batch selection state from the
+  /// page (null outside editing mode).
+  final bool? selected;
+  final VoidCallback? onToggleSelect;
 
   @override
   State<_HistoryCard> createState() => _HistoryCardState();
@@ -374,6 +562,8 @@ class _HistoryCardState extends State<_HistoryCard> with AnikumoDialogOwner {
           borderRadius: widget.borderRadius,
           editing: widget.editing,
           busy: widget.busy,
+          selected: widget.selected,
+          onToggleSelect: widget.onToggleSelect,
           onPlay: _play,
           onDelete: widget.onDelete,
           onDetails: () {

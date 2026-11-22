@@ -11,6 +11,7 @@ enum MyDestination {
   rules,
   history,
   downloads,
+  notifications,
   sync,
   storage,
   about,
@@ -31,11 +32,16 @@ class MySpaceView extends StatelessWidget {
     required this.stats,
     required this.onOpen,
     required this.onSettings,
+    this.notificationUnread = 0,
   });
 
   final WatchStats stats;
   final ValueChanged<MyDestination> onOpen;
   final VoidCallback onSettings;
+
+  /// Batch 282 (#20): unread rows in the notification
+  /// inbox, shown as a badge on the 通知中心 row.
+  final int notificationUnread;
 
   @override
   Widget build(BuildContext context) {
@@ -55,11 +61,13 @@ class MySpaceView extends StatelessWidget {
                     stats: stats,
                     onOpen: onOpen,
                     onSettings: onSettings,
+                    notificationUnread: notificationUnread,
                   )
                 : _CompactSpaceLayout(
                     stats: stats,
                     onOpen: onOpen,
                     onSettings: onSettings,
+                    notificationUnread: notificationUnread,
                   ),
           ),
         ),
@@ -165,12 +173,17 @@ class _FeatureRow extends StatelessWidget {
     required this.title,
     required this.caption,
     required this.onTap,
+    this.badgeCount = 0,
   });
 
   final IconData icon;
   final String title;
   final String caption;
   final VoidCallback onTap;
+
+  /// When > 0, a small count badge sits before the
+  /// trailing arrow (Batch 282: notification unread).
+  final int badgeCount;
 
   @override
   Widget build(BuildContext context) {
@@ -209,6 +222,24 @@ class _FeatureRow extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (badgeCount > 0) ...[
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: scheme.error,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      badgeCount > 99 ? '99+' : '$badgeCount',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onError,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                ],
                 Icon(
                   AnikumoIcons.arrow_forward_ios_rounded,
                   size: 14,
@@ -228,11 +259,13 @@ class _CompactSpaceLayout extends StatelessWidget {
     required this.stats,
     required this.onOpen,
     required this.onSettings,
+    this.notificationUnread = 0,
   });
 
   final WatchStats stats;
   final ValueChanged<MyDestination> onOpen;
   final VoidCallback onSettings;
+  final int notificationUnread;
 
   @override
   Widget build(BuildContext context) {
@@ -255,6 +288,15 @@ class _CompactSpaceLayout extends StatelessWidget {
               ? S.t('管理离线内容')
               : S.f('{} 集下载任务', [stats.downloadTaskCount]),
           onTap: () => onOpen(MyDestination.downloads),
+        ),
+        _FeatureRow(
+          icon: AnikumoIcons.inbox_rounded,
+          title: S.t('通知中心'),
+          caption: notificationUnread == 0
+              ? S.t('查看更新与同步通知')
+              : S.f('{} 条未读通知', [notificationUnread]),
+          badgeCount: notificationUnread,
+          onTap: () => onOpen(MyDestination.notifications),
         ),
         EditorialSectionHeader(
           index: '01',
@@ -323,11 +365,13 @@ class _WideSpaceLayout extends StatelessWidget {
     required this.stats,
     required this.onOpen,
     required this.onSettings,
+    this.notificationUnread = 0,
   });
 
   final WatchStats stats;
   final ValueChanged<MyDestination> onOpen;
   final VoidCallback onSettings;
+  final int notificationUnread;
 
   @override
   Widget build(BuildContext context) {
@@ -360,6 +404,15 @@ class _WideSpaceLayout extends StatelessWidget {
               ),
             ),
           ],
+        ),
+        _FeatureRow(
+          icon: AnikumoIcons.inbox_rounded,
+          title: S.t('通知中心'),
+          caption: notificationUnread == 0
+              ? S.t('查看更新与同步通知')
+              : S.f('{} 条未读通知', [notificationUnread]),
+          badgeCount: notificationUnread,
+          onTap: () => onOpen(MyDestination.notifications),
         ),
         EditorialSectionHeader(
           index: '01',

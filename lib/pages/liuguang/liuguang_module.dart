@@ -10,6 +10,7 @@ import 'package:anikumo/pages/liuguang/film_history_page.dart';
 import 'package:anikumo/pages/liuguang/film_downloads_page.dart';
 import 'package:anikumo/pages/liuguang/film_feature_repo_page.dart';
 import 'package:anikumo/pages/liuguang/film_main_page.dart';
+import 'package:anikumo/pages/liuguang/film_person_page.dart';
 import 'package:anikumo/pages/liuguang/film_search_page.dart';
 import 'package:anikumo/pages/route_error_page.dart';
 import 'package:anikumo/services/i18n/app_strings.dart';
@@ -108,6 +109,19 @@ final liuguangModule = createModule(
         '/calendar',
         child: (context, state) =>
             const VioletZone(child: FilmCalendarPage()),
+        transition: _filmTransition,
+      )
+      // Batch 281: the person page behind the detail
+      // page's cast row (TMDB cast members with an id).
+      ..route(
+        '/person',
+        child: (context, state) {
+          final args = state.arguments;
+          if (args is! FilmPersonArgs || args.id <= 0) {
+            return RouteErrorPage(message: S.t('参数无效，请返回后重新打开。'));
+          }
+          return VioletZone(child: FilmPersonPage(args: args));
+        },
         transition: _filmTransition,
       )
       // Batch 208: no zone-local player route — playback

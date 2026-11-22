@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 
 import 'package:anikumo/bean/settings/settings_detail_scaffold.dart';
+import 'package:anikumo/bean/settings/settings_dropdown_tile.dart';
 import 'package:anikumo/bean/settings/settings_list.dart';
 import 'package:anikumo/bean/widget/state_presentation.dart';
 import 'package:anikumo/pages/settings/sync/sync_settings_widgets.dart';
@@ -226,6 +227,53 @@ class _WebDavSyncPageState extends State<WebDavSyncPage> {
                   enabled: !_busy,
                   onPressed: (_) async {
                     await context.pushNamed('/settings/webdav/conflicts');
+                    if (mounted) setState(() {});
+                  },
+                ),
+              ],
+            ),
+            // Batch 282 (#24): timed auto sync of the
+            // zone bundles (+ GitHub when signed in).
+            SettingsSection(
+              title: Text(S.t('自动同步')),
+              margin: EdgeInsets.zero,
+              tiles: [
+                SettingsTile.switchTile(
+                  leading: AnikumoIcons.schedule_rounded,
+                  title: Text(S.t('自动同步分区数据')),
+                  description: Text(
+                    S.t('打开 App 时与运行期间按间隔自动同步漫画、小说、影视分区数据；已登录 GitHub 同步时也会一并同步。冲突不会自动处理，会记录到通知中心。'),
+                  ),
+                  initialValue:
+                      GStorage.getSetting(SettingsKeys.autoSyncEnabled),
+                  enabled: !_busy,
+                  onToggle: (value) async {
+                    await GStorage.putSetting(
+                      SettingsKeys.autoSyncEnabled,
+                      value ??
+                          !GStorage.getSetting(SettingsKeys.autoSyncEnabled),
+                    );
+                    if (mounted) setState(() {});
+                  },
+                ),
+                SettingsDropdownTile<int>(
+                  leading: AnikumoIcons.schedule_rounded,
+                  title: Text(S.t('同步间隔')),
+                  value:
+                      GStorage.getSetting(SettingsKeys.autoSyncIntervalHours),
+                  options: {
+                    6: S.t('每 6 小时'),
+                    12: S.t('每 12 小时'),
+                    24: S.t('每 24 小时'),
+                  },
+                  fallbackLabel: S.t('每 24 小时'),
+                  enabled: !_busy &&
+                      GStorage.getSetting(SettingsKeys.autoSyncEnabled),
+                  onChanged: (value) async {
+                    await GStorage.putSetting(
+                      SettingsKeys.autoSyncIntervalHours,
+                      value,
+                    );
                     if (mounted) setState(() {});
                   },
                 ),

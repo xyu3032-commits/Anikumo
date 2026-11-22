@@ -12,7 +12,9 @@ import 'package:anikumo/pages/video/video_playback_args.dart';
 import 'package:anikumo/services/logging/logger.dart';
 import 'package:anikumo/utils/format.dart';
 import 'package:anikumo/bean/widget/anikumo_icons.dart';
+import 'package:anikumo/services/download/download_gate.dart';
 import 'package:anikumo/services/i18n/app_strings.dart';
+import 'package:anikumo/services/network/metered_network_service.dart';
 
 class DownloadPage extends StatefulWidget {
   const DownloadPage({
@@ -46,32 +48,80 @@ class _DownloadPageState extends State<DownloadPage> {
     );
   }
 
+  /// Batch 282 (#25): shown while the Wi-Fi-only gate
+  /// holds queued episodes on a metered network.
+  Widget _wifiGateBanner(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      width: double.infinity,
+      color: scheme.secondaryContainer,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          Icon(
+            AnikumoIcons.network_ping_rounded,
+            size: 18,
+            color: scheme.onSecondaryContainer,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              S.t('仅 Wi-Fi 下载已开启：当前是移动网络，排队中的下载将在 Wi-Fi 下继续'),
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: scheme.onSecondaryContainer),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: SysAppBar(title: Text(S.t('下载管理'))),
-      body: Observer(builder: (context) {
-        final recordKeys = downloadController.recordKeys.toList();
-        _expanded.removeWhere((key, _) => !recordKeys.contains(key));
-        if (recordKeys.isEmpty) {
-          return GeneralEmptyState(
-            icon: AnikumoIcons.download_rounded,
-            title: S.t('还没有下载记录'),
-          );
-        }
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: recordKeys.length,
-          itemBuilder: (context, index) {
-            return Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1000),
-                child: _buildRecordCard(recordKeys[index]),
-              ),
+      body: ValueListenableBuilder<bool>(
+        valueListenable: MeteredNetworkService.listenable,
+        builder: (context, _, _) => Observer(builder: (context) {
+          final recordKeys = downloadController.recordKeys.toList();
+          _expanded.removeWhere((key, _) => !recordKeys.contains(key));
+          if (recordKeys.isEmpty) {
+            return GeneralEmptyState(
+              icon: AnikumoIcons.download_rounded,
+              title: S.t('还没有下载记录'),
             );
-          },
-        );
-      }),
+          }
+          final hasPending = recordKeys.any((key) =>
+              downloadController
+                  .getRecordSnapshot(key)
+                  ?.episodes
+                  .values
+                  .any((e) => e.status == DownloadStatus.pending) ??
+              false);
+          final list = ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: recordKeys.length,
+            itemBuilder: (context, index) {
+              return Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1000),
+                  child: _buildRecordCard(recordKeys[index]),
+                ),
+              );
+            },
+          );
+          if (hasPending && DownloadGate.blockedNow()) {
+            return Column(
+              children: [
+                _wifiGateBanner(context),
+                Expanded(child: list),
+              ],
+            );
+          }
+          return list;
+        }),
+      ),
     );
   }
 

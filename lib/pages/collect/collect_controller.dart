@@ -197,6 +197,51 @@ abstract class _CollectController with Store {
     loadCollectibles();
   }
 
+  /// Batch 283 (#22): batch status change from the
+  /// collect page's multi-select mode. Deliberately a
+  /// LOCAL write per item — the same repository write
+  /// and change-log append the single-item local path
+  /// performs, without the per-item Bangumi sync
+  /// prompts (a batch of twenty cannot ask twenty
+  /// questions); the appended changes ride the normal
+  /// WebDAV/Bangumi change sync afterwards. Returns
+  /// how many entries actually changed status.
+  Future<int> applyBatchType(List<BangumiItem> items, int type) async {
+    var changed = 0;
+    for (final item in items) {
+      final current = getCollectType(item);
+      if (current == type) continue;
+      await _collectCrudRepository.addCollectible(item, type);
+      await GStorage.appendCollectChange(
+        bangumiId: item.id,
+        action: current == 0 ? 1 : 2,
+        type: type,
+      );
+      changed++;
+    }
+    if (changed > 0) loadCollectibles();
+    return changed;
+  }
+
+  /// Batch 283 (#22): batch removal, same local-write
+  /// contract as [applyBatchType]. Returns how many
+  /// entries were removed.
+  Future<int> applyBatchRemove(List<BangumiItem> items) async {
+    var removed = 0;
+    for (final item in items) {
+      if (getCollectType(item) == 0) continue;
+      await _collectCrudRepository.deleteCollectible(item.id);
+      await GStorage.appendCollectChange(
+        bangumiId: item.id,
+        action: 3,
+        type: 5,
+      );
+      removed++;
+    }
+    if (removed > 0) loadCollectibles();
+    return removed;
+  }
+
   void _reportSyncError(String message, ValueChanged<String> onError,
       {Object? error}) {
     if (error != null) {

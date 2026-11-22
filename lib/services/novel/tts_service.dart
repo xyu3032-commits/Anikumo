@@ -55,6 +55,100 @@ List<String> splitTextForSpeech(String text, {int maxLen = 500}) {
   return out;
 }
 
+/// Batch 280 (#14): one span of speech text — narration
+/// or dialogue. [text] keeps the quote marks, so joining
+/// the segments reproduces the input exactly.
+class SpeechSegment {
+  const SpeechSegment(this.text, {this.dialogue = false});
+
+  final String text;
+  final bool dialogue;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SpeechSegment &&
+      other.text == text &&
+      other.dialogue == dialogue;
+
+  @override
+  int get hashCode => Object.hash(text, dialogue);
+}
+
+/// Quote pairs the segmenter recognises: corner brackets,
+/// fullwidth curly quotes, straight double quotes and
+/// single curly quotes. A straight " opens and closes
+/// with itself, handled by the stack logic below.
+const _speechQuotePairs = <String, String>{
+  '「': '」',
+  '『': '』',
+  '“': '”',
+  '‘': '’',
+  '"': '"',
+};
+
+/// Batch 280 (#14): split [text] into narration / dialogue
+/// spans for multi-voice reading. Text inside the
+/// outermost quote pair is dialogue; quotes nested inside
+/// dialogue stay dialogue. An unclosed quote makes the
+/// whole input narration — half-split dialogue would read
+/// worse than none. Adjacent same-kind spans merge and
+/// empty spans drop, so the output is the minimal span
+/// list whose texts join back to [text].
+List<SpeechSegment> segmentSpeechText(String text) {
+  if (text.isEmpty) return const [];
+  final stack = <String>[]; // Expected closers, innermost last.
+  final out = <SpeechSegment>[];
+  final buf = StringBuffer();
+  var dialogue = false;
+
+  void flush() {
+    if (buf.isEmpty) return;
+    final piece = buf.toString();
+    buf.clear();
+    if (out.isNotEmpty && out.last.dialogue == dialogue) {
+      out[out.length - 1] = SpeechSegment(
+        out.last.text + piece,
+        dialogue: dialogue,
+      );
+    } else {
+      out.add(SpeechSegment(piece, dialogue: dialogue));
+    }
+  }
+
+  for (var i = 0; i < text.length; i++) {
+    final ch = text[i];
+    if (stack.isNotEmpty && ch == stack.last) {
+      // A closer: part of the current span; the span kind
+      // flips only when the outermost pair closes.
+      buf.write(ch);
+      stack.removeLast();
+      if (stack.isEmpty) {
+        flush();
+        dialogue = false;
+      }
+      continue;
+    }
+    final closer = _speechQuotePairs[ch];
+    if (closer != null && !(ch == '"' && stack.isNotEmpty)) {
+      // An opener: at depth 0 it starts a dialogue span.
+      if (stack.isEmpty) {
+        flush();
+        dialogue = true;
+      }
+      buf.write(ch);
+      stack.add(closer);
+      continue;
+    }
+    buf.write(ch);
+  }
+  if (stack.isNotEmpty) {
+    // Unclosed quote: read it all as narration.
+    return [SpeechSegment(text)];
+  }
+  flush();
+  return out;
+}
+
 /// Batch 158: the read-aloud player (feature repository's
 /// 语音朗读）. Drives the platform speech engine through the
 /// novel_tts method channel: Dart keeps the chunk queue
@@ -63,6 +157,16 @@ List<String> splitTextForSpeech(String text, {int maxLen = 500}) {
 /// the queue. Pause is stop-and-resume-from-chunk (system
 /// engines have no real pause), so a resumed chunk starts
 /// from its beginning.
+/// Batch 280 (#14): one queued utterance — a speech
+/// chunk plus whether it is dialogue (read in the second
+/// voice while multi-voice reading is on).
+class _Utterance {
+  const _Utterance(this.text, {this.dialogue = false});
+
+  final String text;
+  final bool dialogue;
+}
+
 class TtsPlayer extends ChangeNotifier {
   TtsPlayer._() {
     _channel.setMethodCallHandler(_onPlatformCall);
@@ -73,6 +177,7 @@ class TtsPlayer extends ChangeNotifier {
       rate = GStorage.getSetting(SettingsKeys.novelTtsRate);
       pitch = GStorage.getSetting(SettingsKeys.novelTtsPitch);
       voiceName = GStorage.getSetting(SettingsKeys.novelTtsVoice);
+      multiVoice = GStorage.getSetting(SettingsKeys.novelTtsMultiVoice);
     } catch (_) {
       // Keep the field defaults.
     }
@@ -96,6 +201,15 @@ class TtsPlayer extends ChangeNotifier {
   double pitch = 1.0;
   String voiceName = '';
 
+  /// Batch 280 (#14): dialogue lines are read in a second
+  /// voice (the platform picks another engine voice, or
+  /// falls back to [dialoguePitch] when it has only one).
+  bool multiVoice = false;
+
+  /// The pitch dialogue is read at when the engine has no
+  /// second voice: the narration pitch shifted up 15%.
+  double get dialoguePitch => (pitch * 1.15).clamp(0.5, 2.0);
+
   int currentChunk = 0;
   int totalChunks = 0;
 
@@ -103,7 +217,7 @@ class TtsPlayer extends ChangeNotifier {
   /// to continue into the next chapter).
   void Function()? onQueueFinished;
 
-  List<String> _queue = const [];
+  List<_Utterance> _queue = const [];
   var _session = 0;
 
   /// Generation of the live utterance: a stopped utterance
@@ -151,16 +265,30 @@ class TtsPlayer extends ChangeNotifier {
   }
 
   /// Start reading [paragraphs] (raw chapter paragraphs;
-  /// chunking happens inside).
+  /// chunking happens inside). With multi-voice reading
+  /// on, each paragraph is first split into narration /
+  /// dialogue spans (batch 280) and the spans are chunked
+  /// separately, so an utterance never mixes the two.
   Future<void> speakParagraphs(List<String> paragraphs) async {
-    final chunks = <String>[
-      for (final p in paragraphs) ...splitTextForSpeech(p),
-    ];
+    final utterances = <_Utterance>[];
+    for (final p in paragraphs) {
+      if (multiVoice) {
+        for (final segment in segmentSpeechText(p)) {
+          for (final chunk in splitTextForSpeech(segment.text)) {
+            utterances.add(_Utterance(chunk, dialogue: segment.dialogue));
+          }
+        }
+      } else {
+        for (final chunk in splitTextForSpeech(p)) {
+          utterances.add(_Utterance(chunk));
+        }
+      }
+    }
     await stop();
-    if (chunks.isEmpty) return;
+    if (utterances.isEmpty) return;
     _session++;
-    _queue = chunks;
-    totalChunks = chunks.length;
+    _queue = utterances;
+    totalChunks = utterances.length;
     currentChunk = 0;
     speaking = true;
     paused = false;
@@ -171,10 +299,16 @@ class TtsPlayer extends ChangeNotifier {
   Future<void> _speakCurrent() async {
     if (currentChunk >= _queue.length) return;
     _liveId = 'u$_session-$currentChunk-${++_gen}';
+    final utterance = _queue[currentChunk];
     try {
       await _channel.invokeMethod<void>('speak', {
-        'text': _queue[currentChunk],
+        'text': utterance.text,
         'id': _liveId,
+        // Batch 280 (#14): dialogue utterances ask the
+        // platform for its alternate voice; the pitch is
+        // the fallback for single-voice engines.
+        if (utterance.dialogue) 'altVoice': true,
+        if (utterance.dialogue) 'pitch': dialoguePitch,
       });
     } catch (_) {
       // Engine vanished mid-chapter: end the session
@@ -283,6 +417,17 @@ class TtsPlayer extends ChangeNotifier {
     try {
       await _channel.invokeMethod<void>('setVoice', {'name': name});
       await GStorage.putSetting(SettingsKeys.novelTtsVoice, name);
+    } catch (_) {}
+    notifyListeners();
+  }
+
+  /// Batch 280 (#14): toggle multi-voice reading. Takes
+  /// effect from the next speakParagraphs call; a session
+  /// already playing keeps the queue it started with.
+  Future<void> setMultiVoice(bool value) async {
+    multiVoice = value;
+    try {
+      await GStorage.putSetting(SettingsKeys.novelTtsMultiVoice, value);
     } catch (_) {}
     notifyListeners();
   }

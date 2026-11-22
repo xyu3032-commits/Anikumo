@@ -51,6 +51,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
   late int defaultOpSkipSeconds;
   late int defaultEdSkipSeconds;
   late bool autoSwitchRoad;
+  late String onlineSubtitleApiKey;
 
   @override
   void initState() {
@@ -100,6 +101,42 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     defaultEdSkipSeconds =
         GStorage.getSetting<int>(SettingsKeys.defaultEdSkipSeconds);
     autoSwitchRoad = GStorage.getSetting<bool>(SettingsKeys.autoSwitchRoad);
+    onlineSubtitleApiKey =
+        GStorage.getSetting<String>(SettingsKeys.onlineSubtitleApiKey);
+  }
+
+  /// Batch 278: the online-subtitle service key dialog,
+  /// mirroring the TMDB key flow — the value lives only
+  /// in settings storage and is never shown back.
+  Future<void> _editOnlineSubtitleApiKey() async {
+    final controller = TextEditingController(text: onlineSubtitleApiKey);
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(S.t('字幕服务密钥')),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            hintText: S.t('粘贴你的字幕服务 API 密钥'),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(S.t('取消')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(S.t('保存')),
+          ),
+        ],
+      ),
+    );
+    if (saved != true || !mounted) return;
+    final value = controller.text.trim();
+    await GStorage.putSetting(SettingsKeys.onlineSubtitleApiKey, value);
+    setState(() => onlineSubtitleApiKey = value);
   }
 
   Future<void> resetPlayerSettings() async {
@@ -655,6 +692,26 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                     mode: S.t(mode.label),
                 },
                 onChanged: updateDefaultAspectRatioMode,
+              ),
+            ],
+          ),
+          SettingsSection(
+            title: Text(S.t('字幕')),
+            tiles: [
+              SettingsTile(
+                leading: AnikumoIcons.key_rounded,
+                title: Text(S.t('字幕服务密钥')),
+                description: Text(
+                  onlineSubtitleApiKey.isNotEmpty
+                      ? S.t('已设置（内容隐藏）— 在线字幕可用')
+                      : S.t('未设置 — 在线字幕不可用'),
+                ),
+                onPressed: (_) => _editOnlineSubtitleApiKey(),
+              ),
+              SettingsTile(
+                leading: AnikumoIcons.info_outline_rounded,
+                title: Text(S.t('这个密钥做什么')),
+                description: Text(S.t('填入后，播放器的字幕面板可以按作品名在线搜索并下载字幕；密钥只保存在本机，不填则该入口保持关闭。')),
               ),
             ],
           ),

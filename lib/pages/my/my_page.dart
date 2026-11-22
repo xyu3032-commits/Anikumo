@@ -5,6 +5,7 @@ import 'package:flutter_modular/flutter_modular.dart';
 import 'package:anikumo/pages/menu/route_visibility.dart';
 import 'package:anikumo/pages/my/my_controller.dart';
 import 'package:anikumo/pages/my/my_space_view.dart';
+import 'package:anikumo/services/notifications/notification_inbox.dart';
 
 class MyPage extends StatefulWidget {
   const MyPage({super.key, required this.controller});
@@ -57,6 +58,7 @@ class _MyPageState extends State<MyPage> {
         MyDestination.rules => '/settings/plugin/',
         MyDestination.history => '/settings/history/',
         MyDestination.downloads => '/settings/download/',
+        MyDestination.notifications => '/settings/notifications',
         MyDestination.sync => '/settings/sync',
         MyDestination.storage => '/settings/storage',
         MyDestination.about => '/settings/about/',
@@ -74,6 +76,7 @@ class _MyPageState extends State<MyPage> {
             stats: widget.controller.watchStats,
             onOpen: _open,
             onSettings: () => context.pushNamed('/settings/'),
+            notificationUnread: NotificationInbox.unreadCount(),
           ),
         ),
       ),

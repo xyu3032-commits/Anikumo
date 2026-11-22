@@ -2,10 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:liuguang_core/liuguang_core.dart';
 import 'package:anikumo/models/novel_item.dart';
 import 'package:anikumo/modules/bangumi/episode_item.dart';
 import 'package:anikumo/request/apis/bangumi_api.dart';
 import 'package:anikumo/services/i18n/app_strings.dart';
+import 'package:anikumo/services/liuguang/video_engine.dart';
+import 'package:anikumo/services/notifications/notification_inbox.dart';
 import 'package:anikumo/services/novel/novel_api.dart';
 import 'package:anikumo/services/novel/novel_library.dart';
 import 'package:anikumo/services/logging/logger.dart';
@@ -21,12 +24,18 @@ import 'package:anikumo/services/storage/storage.dart';
 /// novel has more chapters, a local notification is posted.
 /// The first sighting of any work only records the baseline;
 /// enabling the feature never spams the back-catalogue.
+///
+/// Batch 281: a third lane — the film zone's favorited
+/// series. Favorite snapshots carry no episode counts, so
+/// each series' current total comes from its source detail
+/// (the fullest play line); movies are skipped.
 class UpdateNotificationService {
   UpdateNotificationService._();
 
   static const _channelId = 'anikumo_updates';
   static const _maxAnimePerRun = 30;
   static const _maxNovelsPerRun = 15;
+  static const _maxFilmPerRun = 15;
   static const _throttle = Duration(hours: 3);
 
   static final _plugin = FlutterLocalNotificationsPlugin();
@@ -58,6 +67,26 @@ class UpdateNotificationService {
   /// whether to notify. Baselines never notify.
   static bool shouldNotify(int? known, int current) =>
       known != null && current > known;
+
+  /// Batch 281: a film series' current episode total from
+  /// its detail lines. A detail's seasons are its play
+  /// lines, which mirror the same series, so the fullest
+  /// line is the total; no lines (or no episodes anywhere)
+  /// counts 0 and never notifies.
+  static int filmEpisodeTotal(List<Season> seasons) {
+    var best = 0;
+    for (final season in seasons) {
+      if (season.episodes.length > best) best = season.episodes.length;
+    }
+    return best;
+  }
+
+  /// Batch 281: how many episodes a film series gained
+  /// since the last check, or null when there is nothing
+  /// to announce — a first sighting baselines silently,
+  /// and an unchanged or shrunk total stays quiet.
+  static int? filmUpdateDelta(int? known, int current) =>
+      shouldNotify(known, current) ? current - known! : null;
 
   static Map<String, int> decodeKnown(String raw) {
     if (raw.isEmpty) return <String, int>{};
@@ -127,6 +156,14 @@ class UpdateNotificationService {
     required String title,
     required String body,
   }) async {
+    // Batch 282 (#20): every posted notification is
+    // also recorded in the in-app inbox; the lane is
+    // the key's prefix ('anime' / 'novel' / 'film').
+    await NotificationInbox.record(
+      title: title,
+      body: body,
+      category: key.split(':').first,
+    );
     try {
       await _plugin.show(
         key.hashCode & 0x7fffffff,
@@ -136,7 +173,7 @@ class UpdateNotificationService {
           android: AndroidNotificationDetails(
             _channelId,
             '更新提醒',
-            channelDescription: '追番与追更的新内容提醒',
+            channelDescription: '追番、追剧与追更的新内容提醒',
             importance: Importance.defaultImportance,
             priority: Priority.defaultPriority,
           ),
@@ -156,7 +193,8 @@ class UpdateNotificationService {
   static Future<void> runChecksIfEnabled({bool force = false}) async {
     final animeOn = GStorage.getSetting(SettingsKeys.notifyAnimeUpdates);
     final novelOn = GStorage.getSetting(SettingsKeys.notifyNovelUpdates);
-    if (!animeOn && !novelOn) return;
+    final filmOn = GStorage.getSetting(SettingsKeys.notifyFilmUpdates);
+    if (!animeOn && !novelOn && !filmOn) return;
     if (!force) {
       final last = GStorage.getSetting(SettingsKeys.notifyLastCheckMs);
       final elapsed = DateTime.now().millisecondsSinceEpoch - last;
@@ -169,6 +207,7 @@ class UpdateNotificationService {
     );
     if (animeOn) await _checkAnime();
     if (novelOn) await _checkNovels();
+    if (filmOn) await _checkFilm();
   }
 
   static Future<void> _checkAnime() async {
@@ -264,6 +303,69 @@ class UpdateNotificationService {
       }
     } catch (e) {
       AnikumoLogger().w('UpdateNotify: novel check failed', error: e);
+    }
+  }
+
+  /// Batch 281: the film lane. Favorites store only a
+  /// metadata snapshot (no episode counts), so each
+  /// favorited series' total is read from its source
+  /// detail — one call per series, capped like the novel
+  /// lane, and every failure just skips that series.
+  static Future<void> _checkFilm() async {
+    try {
+      final engine = await VideoEngineService.instance.engine();
+      final favorites = await engine.favorites.list();
+      final series = <MediaItem>[];
+      for (final favorite in favorites) {
+        if (favorite.mediaSnapshot.isEmpty) continue;
+        try {
+          final item = TVSeries.mediaFromJson(favorite.mediaSnapshot);
+          if (item.mediaType == MediaType.series) series.add(item);
+        } catch (_) {
+          // A snapshot that no longer parses is skipped.
+        }
+        if (series.length >= _maxFilmPerRun) break;
+      }
+      if (series.isEmpty) return;
+      final known = decodeKnown(
+        GStorage.getSetting(SettingsKeys.notifyKnownFilmJson),
+      );
+      var changed = false;
+      for (final item in series) {
+        MediaDetail? detail;
+        try {
+          detail = await engine.getDetail(item.id);
+        } catch (_) {
+          continue; // one bad source never blocks the rest
+        }
+        if (detail == null) continue;
+        final total = filmEpisodeTotal(detail.seasons);
+        if (total <= 0) continue;
+        final prev = known[item.id];
+        if (prev == null) {
+          known[item.id] = total;
+          changed = true;
+          continue;
+        }
+        final delta = filmUpdateDelta(prev, total);
+        if (delta != null) {
+          known[item.id] = total;
+          changed = true;
+          await _show(
+            key: 'film:${item.id}',
+            title: S.t('追剧更新'),
+            body: S.f('《{}》更新了 {} 集', [item.title, delta]),
+          );
+        }
+      }
+      if (changed) {
+        await GStorage.putSetting(
+          SettingsKeys.notifyKnownFilmJson,
+          encodeKnown(known),
+        );
+      }
+    } catch (e) {
+      AnikumoLogger().w('UpdateNotify: film check failed', error: e);
     }
   }
 }

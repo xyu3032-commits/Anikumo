@@ -8,6 +8,7 @@ import 'package:anikumo/bean/theme/violet_glass.dart';
 import 'package:anikumo/bean/widget/empty_state_widget.dart';
 import 'package:anikumo/modules/manga/manga_item.dart';
 import 'package:anikumo/bean/widget/motion_kit.dart';
+import 'package:anikumo/pages/manga/manga_title_import_sheet.dart';
 import 'package:anikumo/pages/manga/manga_widgets.dart';
 import 'package:anikumo/services/manga/manga_api.dart';
 import 'package:anikumo/services/manga/manga_extras.dart';
@@ -248,6 +249,12 @@ class _MangaFavoritesTabState extends State<MangaFavoritesTab> {
                           tooltip: S.t('检查更新'),
                           onPressed: _checkUpdates,
                         ),
+                      // Batch 279 (#11): title-list import.
+                      IconButton(
+                        icon: const Icon(AnikumoIcons.upload_outlined),
+                        tooltip: S.t('导入清单'),
+                        onPressed: () => runMangaTitleImport(context),
+                      ),
                       PopupMenuButton<MangaFavoriteSort>(
                         icon: const Icon(AnikumoIcons.sort_rounded),
                         tooltip: S.t('排序'),

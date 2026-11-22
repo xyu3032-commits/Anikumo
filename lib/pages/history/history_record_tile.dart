@@ -19,6 +19,8 @@ class HistoryRecordTile extends StatelessWidget {
     this.borderRadius = const BorderRadius.all(Radius.circular(24)),
     this.editing = false,
     this.busy = false,
+    this.selected,
+    this.onToggleSelect,
   });
 
   final History history;
@@ -30,6 +32,13 @@ class HistoryRecordTile extends StatelessWidget {
   final BorderRadius borderRadius;
   final bool editing;
   final bool busy;
+
+  /// Batch 283 (#22): multi-select state — null when
+  /// the page is not selecting; otherwise whether this
+  /// row is in the batch selection. In editing mode a
+  /// card tap toggles instead of playing.
+  final bool? selected;
+  final VoidCallback? onToggleSelect;
 
   String get _position {
     final progress = history.progresses[history.lastWatchEpisode]?.progress;
@@ -87,7 +96,7 @@ class HistoryRecordTile extends StatelessWidget {
             // Keep menu focus outside the card's InkWell to prevent stuck highlights.
             Positioned.fill(
               child: Semantics(
-                button: !editing && !busy,
+                button: !busy,
                 label: [
                   title,
                   episode,
@@ -96,9 +105,41 @@ class HistoryRecordTile extends StatelessWidget {
                   history.adapterName,
                   time
                 ].where((text) => text.isNotEmpty).join('，'),
-                child: InkWell(onTap: editing || busy ? null : onPlay),
+                child: InkWell(
+                  onTap: busy
+                      ? null
+                      : editing
+                          ? onToggleSelect
+                          : onPlay,
+                ),
               ),
             ),
+            if (selected != null)
+              Positioned(
+                top: 10,
+                left: 10,
+                child: Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: selected!
+                        ? colors.primary
+                        : colors.surface.withValues(alpha: 0.85),
+                    border: Border.all(
+                      color: selected! ? colors.primary : colors.outline,
+                      width: 2,
+                    ),
+                  ),
+                  child: selected!
+                      ? Icon(
+                          AnikumoIcons.check_rounded,
+                          size: 15,
+                          color: colors.onPrimary,
+                        )
+                      : null,
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.all(16),
               child: LayoutBuilder(builder: (context, constraints) {

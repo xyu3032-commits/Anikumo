@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:image/image.dart' as img;
+import 'package:anikumo/pages/player/live_translate_overlay.dart';
 import 'package:anikumo/pages/player/local_danmaku_mount.dart';
 import 'package:anikumo/pages/player/player_item_panel.dart';
 import 'package:anikumo/pages/player/player_keyboard_shortcuts.dart';
@@ -9,6 +10,9 @@ import 'package:anikumo/pages/player/controller/player_super_resolution.dart';
 import 'package:anikumo/pages/player/player_panel_hold.dart';
 import 'package:anikumo/pages/player/player_pointer_interaction.dart';
 import 'package:anikumo/pages/player/player_gesture_detector.dart';
+import 'package:anikumo/pages/player/play_queue_sheet.dart';
+import 'package:anikumo/pages/player/touch_lock_overlay.dart';
+import 'package:anikumo/services/player/play_queue.dart';
 import 'package:anikumo/pages/player/player_screenshot_feedback_overlay.dart';
 import 'package:anikumo/pages/player/player_screenshot_sheet.dart';
 import 'package:anikumo/pages/player/controller/player_screenshot_controller.dart';
@@ -135,6 +139,13 @@ class _PlayerItemState extends State<PlayerItem>
   String? _midPrefetchKey;
   String? _loopHandledKey;
   String? _countdownSuppressedKey;
+
+  // Batch 277 (#1, #3): per-episode guards for the
+  // play-queue completion advance and the 80% late
+  // prefetch.
+  String? _queueAdvanceKey;
+  bool _queueAdvanceFailed = false;
+  String? _latePrefetchKey;
   final ValueNotifier<int?> _nextCountdownSeconds =
       ValueNotifier<int?>(null);
 
@@ -1370,6 +1381,10 @@ class _PlayerItemState extends State<PlayerItem>
         } else if (playerController.playback.resumedNearEnd) {
           // Replay stale near-end resumes instead of advancing to the next episode.
           unawaited(playerController.playback.restartFromBeginning());
+        } else if (_handleQueueAdvance(playingSelection)) {
+          // Batch 277 (#1): a queued episode owns this
+          // completion; the advance runs asynchronously
+          // inside _handleQueueAdvance.
         } else if (playingSelection.episode < playingRoadData.data.length &&
             autoPlayNext &&
             _countdownSuppressedKey !=
@@ -1398,6 +1413,65 @@ class _PlayerItemState extends State<PlayerItem>
   String _episodeKey(VideoEpisodeSelection selection) =>
       '${videoPageController.bangumiItem.id}:${selection.episode}:${selection.road}';
 
+  /// Batch 277 (#1): plays a queue entry from this player
+  /// (in-place switch for the same work, a pushed player
+  /// page for any other work).
+  Future<bool> _playQueueEntry(PlayQueueEntry entry) {
+    return playPlayQueueEntry(
+      context,
+      entry: entry,
+      currentBangumiId: videoPageController.bangumiItem.id,
+      currentAdapterName: videoPageController.isOfflineMode
+          ? ''
+          : videoPageController.currentPlugin.name,
+      changeEpisode: widget.changeEpisode,
+    );
+  }
+
+  /// Batch 277 (#1): when a completed episode leaves a
+  /// non-empty play queue, the queue head plays next
+  /// instead of the regular auto-next episode. Returns
+  /// true while a queue advance owns this completion
+  /// (running or done); false falls through to auto-next —
+  /// including after a failed cross-work resolve, so one
+  /// dead source cannot stall playback for good.
+  bool _handleQueueAdvance(VideoEpisodeSelection selection) {
+    if (videoPageController.isExternalPlayback ||
+        videoPageController.isOfflineMode) {
+      return false;
+    }
+    final key = _episodeKey(selection);
+    if (_queueAdvanceKey != key) {
+      _queueAdvanceKey = null;
+      _queueAdvanceFailed = false;
+    }
+    if (_queueAdvanceFailed) return false;
+    if (_queueAdvanceKey == key) return true;
+    final head = PlayQueue.head;
+    if (head == null) return false;
+    _queueAdvanceKey = key;
+    unawaited(_runQueueAdvance(head));
+    return true;
+  }
+
+  Future<void> _runQueueAdvance(PlayQueueEntry head) async {
+    var ok = false;
+    try {
+      ok = await _playQueueEntry(head);
+    } catch (_) {}
+    if (ok) {
+      // Consume only if the head is still the entry that
+      // just played (the user may have edited the queue
+      // from the sheet in the meantime).
+      final currentHead = PlayQueue.head;
+      if (currentHead != null && currentHead.sameTarget(head)) {
+        await PlayQueue.consumeHead();
+      }
+    } else {
+      _queueAdvanceFailed = true;
+    }
+  }
+
   /// Per-second playback enhancements: OP/ED skip, mid-playback
   /// prefetch retry and the next-episode countdown chip.
   void _handlePlaybackEnhancements() {
@@ -1405,12 +1479,15 @@ class _PlayerItemState extends State<PlayerItem>
       _opSkipHandledKey = null;
       _edSkipHandledKey = null;
       _midPrefetchKey = null;
+      _latePrefetchKey = null;
       _nextCountdownSeconds.value = null;
       return;
     }
     final playback = playerController.playback;
     if (!playback.completed) {
       _loopHandledKey = null;
+      _queueAdvanceKey = null;
+      _queueAdvanceFailed = false;
     }
     if (!playback.playerPlaying || playback.playerCompleted) {
       _nextCountdownSeconds.value = null;
@@ -1439,6 +1516,17 @@ class _PlayerItemState extends State<PlayerItem>
     if (_midPrefetchKey != key &&
         position.inMilliseconds * 2 >= duration.inMilliseconds) {
       _midPrefetchKey = key;
+      videoPageController.ensureNextEpisodePrefetch();
+    }
+
+    // Batch 277 (#3): late prefetch — past 80% the
+    // start-of-episode prefetch may have failed, or its
+    // cached resolution expired during a long episode, so
+    // refresh the next episode's resolution once more
+    // before the switch actually happens.
+    if (_latePrefetchKey != key &&
+        position.inMilliseconds * 5 >= duration.inMilliseconds * 4) {
+      _latePrefetchKey = key;
       videoPageController.ensureNextEpisodePrefetch();
     }
 
@@ -1838,6 +1926,7 @@ class _PlayerItemState extends State<PlayerItem>
                             handleRecordGif: handleRecordGif,
                             showScreenshotCandidates: showScreenshotCandidates,
                             skipOP: skipOP,
+                            changeEpisode: widget.changeEpisode,
                           ),
                     ValueListenableBuilder<int?>(
                       valueListenable: _nextCountdownSeconds,
@@ -1969,6 +2058,23 @@ class _PlayerItemState extends State<PlayerItem>
                               },
                             ),
                     ),
+                    // Batch 278: live machine-translation
+                    // line, painted under the touch-lock
+                    // shield (display-only, never hit-tested).
+                    LiveTranslateOverlay(
+                      playerController: playerController,
+                    ),
+                    // Batch 277 (#4): touch lock shield —
+                    // topmost in the stack so no gesture
+                    // layer or panel control stays reachable
+                    // while the lock is on.
+                    if (playerController.panel.touchLocked)
+                      Positioned.fill(
+                        child: TouchLockOverlay(
+                          onUnlock: () =>
+                              playerController.panel.touchLocked = false,
+                        ),
+                      ),
                   ]),
                 ),
               ),

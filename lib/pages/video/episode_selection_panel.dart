@@ -20,6 +20,7 @@ class EpisodeSelectionPanel extends StatefulWidget {
     required this.onEpisodeSelected,
     required this.downloads,
     this.onDownload,
+    this.onAddToQueue,
     this.isOffline = false,
     this.isPlaying = false,
     this.disableAnimations = false,
@@ -31,6 +32,11 @@ class EpisodeSelectionPanel extends StatefulWidget {
   final int selectedEpisode;
   final void Function(int episode, int road) onEpisodeSelected;
   final ValueChanged<int>? onDownload;
+
+  /// Batch 277 (#1): per-episode "add to play queue"
+  /// action. Null hides the button (offline / external
+  /// sessions cannot resolve queue entries later).
+  final void Function(int episode, int road)? onAddToQueue;
   final Map<String, DownloadEpisode> downloads;
   final bool isOffline;
   final bool isPlaying;
@@ -225,6 +231,12 @@ class EpisodeSelectionPanelState extends State<EpisodeSelectionPanel> {
                         disableAnimations: widget.disableAnimations,
                         onTap: () =>
                             widget.onEpisodeSelected(episode, _visibleRoad),
+                        onQueue: widget.onAddToQueue == null
+                            ? null
+                            : () => widget.onAddToQueue!(
+                                  episode,
+                                  _visibleRoad,
+                                ),
                       );
                     },
                   ),
@@ -522,6 +534,7 @@ class _EpisodeRow extends StatefulWidget {
     required this.disableAnimations,
     required this.onTap,
     this.download,
+    this.onQueue,
   });
 
   final String name;
@@ -533,6 +546,10 @@ class _EpisodeRow extends StatefulWidget {
   final bool disableAnimations;
   final VoidCallback onTap;
   final DownloadEpisode? download;
+
+  /// Batch 277 (#1): queue-this-episode action; null
+  /// hides the button.
+  final VoidCallback? onQueue;
 
   @override
   State<_EpisodeRow> createState() => _EpisodeRowState();
@@ -653,32 +670,51 @@ class _EpisodeRowState extends State<_EpisodeRow>
                 child: Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Text(
-                        widget.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          color: foreground,
-                          fontWeight: widget.selected
-                              ? FontWeight.w700
-                              : FontWeight.w500,
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                color: foreground,
+                                fontWeight: widget.selected
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                              ),
+                            ),
+                            if (supportingText.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                supportingText,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: widget.selected
+                                      ? foreground
+                                      : status == DownloadStatus.failed
+                                          ? colors.error
+                                          : colors.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
-                      if (supportingText.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          supportingText,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: widget.selected
-                                ? foreground
-                                : status == DownloadStatus.failed
-                                    ? colors.error
-                                    : colors.onSurfaceVariant,
+                      if (widget.onQueue != null) ...[
+                        const SizedBox(width: 8),
+                        IconButton(
+                          tooltip: S.t('加入队列'),
+                          color: foreground,
+                          icon: const Icon(
+                            AnikumoIcons.playlist_add_outlined,
+                            size: 20,
                           ),
+                          onPressed: widget.onQueue,
                         ),
                       ],
                     ],

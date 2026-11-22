@@ -17,6 +17,7 @@ import 'package:anikumo/pages/collect/collect_library_view.dart';
 import 'package:anikumo/pages/collect/collect_sync_dialog.dart';
 import 'package:anikumo/services/anime/anime_auto_update.dart';
 import 'package:anikumo/services/anime/anime_features.dart';
+import 'package:anikumo/services/collect/batch_selection.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/bean/widget/anikumo_icons.dart';
 import 'package:anikumo/services/i18n/app_strings.dart';
@@ -38,6 +39,176 @@ class _CollectPageState extends State<CollectPage> with AnikumoDialogOwner {
   bool get _syncDialogOpen => dialogs.isRunning;
   final Set<int> _pendingIds = {};
   late CollectLayout _layout;
+
+  // Batch 283 (#22): multi-select mode (long press to
+  // enter). Selection is by bangumi id and survives
+  // category switches inside the library view.
+  bool _selectionMode = false;
+  Set<int> _selectedIds = {};
+  bool _batchBusy = false;
+
+  void _enterSelection(BangumiItem item) {
+    if (_syncDialogOpen) return;
+    setState(() {
+      _selectionMode = true;
+      _selectedIds = {item.id};
+    });
+  }
+
+  void _toggleSelect(BangumiItem item) {
+    setState(() {
+      _selectedIds = BatchSelection.toggle(_selectedIds, item.id);
+    });
+  }
+
+  void _exitSelection() {
+    setState(() {
+      _selectionMode = false;
+      _selectedIds = {};
+    });
+  }
+
+  List<BangumiItem> get _selectedItems => [
+        for (final entry in collectController.collectibles)
+          if (_selectedIds.contains(entry.bangumiItem.id)) entry.bangumiItem,
+      ];
+
+  Future<void> _batchSetType(CollectType type) async {
+    final items = _selectedItems;
+    if (items.isEmpty || _batchBusy) return;
+    setState(() => _batchBusy = true);
+    try {
+      final changed =
+          await collectController.applyBatchType(items, type.value);
+      if (!mounted) return;
+      AnikumoDialog.showToast(
+        context: context,
+        message: changed > 0
+            ? S.f('已将 {} 部改为「{}」', [changed, S.t(type.label)])
+            : S.t('所选条目状态没有变化'),
+      );
+      _exitSelection();
+    } catch (_) {
+      if (mounted) {
+        AnikumoDialog.showToast(
+          context: context,
+          message: S.t('批量修改失败，请稍后重试'),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _batchBusy = false);
+    }
+  }
+
+  Future<void> _batchRemove() async {
+    final items = _selectedItems;
+    if (items.isEmpty || _batchBusy) return;
+    final confirmed = await AnikumoDialog.show<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(S.t('移除所选收藏？')),
+        content: Text(S.f('将从收藏中移除 {} 部番剧。此操作无法撤销。', [items.length])),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(S.t('取消')),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(S.t('移除')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _batchBusy = true);
+    try {
+      final removed = await collectController.applyBatchRemove(items);
+      if (!mounted) return;
+      AnikumoDialog.showToast(
+        context: context,
+        message: S.f('已移除 {} 部收藏', [removed]),
+      );
+      _exitSelection();
+    } catch (_) {
+      if (mounted) {
+        AnikumoDialog.showToast(
+          context: context,
+          message: S.t('批量移除失败，请稍后重试'),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _batchBusy = false);
+    }
+  }
+
+  Widget _batchBar(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surfaceContainer,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+          child: Row(
+            children: [
+              Text(
+                S.f('已选 {} 项', [_selectedIds.length]),
+                style: theme.textTheme.titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const Spacer(),
+              TextButton(
+                onPressed: _batchBusy
+                    ? null
+                    : () => setState(() {
+                          _selectedIds = BatchSelection.selectAll(
+                            collectController.collectibles
+                                .map((e) => e.bangumiItem.id),
+                          );
+                        }),
+                child: Text(S.t('全选')),
+              ),
+              MenuAnchor(
+                builder: (context, controller, _) => TextButton(
+                  onPressed: _batchBusy || _selectedIds.isEmpty
+                      ? null
+                      : () =>
+                          controller.isOpen ? controller.close() : controller.open(),
+                  child: Text(S.t('改状态')),
+                ),
+                menuChildren: [
+                  for (final type
+                      in CollectType.values.where((t) => t.isCollected))
+                    MenuItemButton(
+                      onPressed: () => _batchSetType(type),
+                      child: Text(S.t(type.label)),
+                    ),
+                ],
+              ),
+              TextButton(
+                onPressed:
+                    _batchBusy || _selectedIds.isEmpty ? null : _batchRemove,
+                child: Text(
+                  S.t('移除'),
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
+              ),
+              IconButton(
+                tooltip: S.t('退出多选'),
+                onPressed: _batchBusy ? null : _exitSelection,
+                icon: const Icon(AnikumoIcons.close_rounded),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Future<bool> _syncStep(
     CollectSyncStep step, {
@@ -113,6 +284,7 @@ class _CollectPageState extends State<CollectPage> with AnikumoDialogOwner {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
+      bottomNavigationBar: _selectionMode ? _batchBar(context) : null,
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -168,7 +340,8 @@ class _CollectPageState extends State<CollectPage> with AnikumoDialogOwner {
                         message: S.t('同步收藏'),
                         child: StateActionButton.tonal(
                           text: S.t('同步'),
-                          onPressed: _syncDialogOpen ||
+                          onPressed: _selectionMode ||
+                                  _syncDialogOpen ||
                                   _pendingIds.isNotEmpty
                               ? null
                               : _sync,
@@ -188,8 +361,14 @@ class _CollectPageState extends State<CollectPage> with AnikumoDialogOwner {
                       GStorage.getSetting(SettingsKeys.showRating),
                   layout: _layout,
                   onLayoutChanged: _changeLayout,
+                  selectionMode: _selectionMode,
+                  selectedIds: _selectedIds,
+                  onToggleSelect: _toggleSelect,
+                  onLongPressItem: _enterSelection,
                   canEdit: (item) =>
-                      !_syncDialogOpen && !_pendingIds.contains(item.id),
+                      !_selectionMode &&
+                      !_syncDialogOpen &&
+                      !_pendingIds.contains(item.id),
                   onOpen: (item) {
                     if (TapDebouncer.accept('info:${item.id}')) {
                       context.pushNamed('/info/', arguments: item);

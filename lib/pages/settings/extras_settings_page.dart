@@ -349,6 +349,22 @@ class _ExtrasSettingsPageState extends State<ExtrasSettingsPage> {
                 if (mounted) setState(() {});
               },
             ),
+            SettingsTile.switchTile(
+              leading: AnikumoIcons.inventory_2_rounded,
+              title: Text(S.t('完结自动归档')),
+              description: Text(S.t('在看的番剧全集播完且全部看完时，自动移入「看过」')),
+              initialValue:
+                  GStorage.getSetting(SettingsKeys.autoArchiveFinished),
+              onToggle: (value) async {
+                final enabled = value ??
+                    !GStorage.getSetting(SettingsKeys.autoArchiveFinished);
+                await GStorage.putSetting(
+                  SettingsKeys.autoArchiveFinished,
+                  enabled,
+                );
+                if (mounted) setState(() {});
+              },
+            ),
           ]),
           SettingsSection(title: Text(S.t('安全')), tiles: [
             SettingsTile(

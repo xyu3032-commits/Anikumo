@@ -54,6 +54,24 @@ class NovelLibraryStore {
     return loadFavorites().any((f) => f.storageKey == item.storageKey);
   }
 
+  /// Batch 280 (#13): batch-add for the title-list
+  /// import — skips anything already collected and
+  /// returns how many were actually added. Mirrors
+  /// MangaLibraryStore.addFavorites.
+  static Future<int> addFavorites(List<NovelItem> incoming) async {
+    if (incoming.isEmpty) return 0;
+    final favorites = loadFavorites();
+    final known = {for (final f in favorites) f.storageKey};
+    final fresh = [
+      for (final item in incoming)
+        if (known.add(item.storageKey)) item,
+    ];
+    if (fresh.isEmpty) return 0;
+    await saveFavorites([...fresh, ...favorites]);
+    _bump();
+    return fresh.length;
+  }
+
   static Future<bool> toggleFavorite(NovelItem item) async {
     final favorites = loadFavorites();
     final index =

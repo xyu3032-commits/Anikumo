@@ -20,6 +20,13 @@ abstract class _PlayerPanelController with Store {
   // 播放器界面控制
   @observable
   bool lockPanel = false;
+
+  /// Batch 277 (#4): accidental-touch lock. Unlike
+  /// [lockPanel] (which pins the control layer open), this
+  /// swallows every touch on the player surface until the
+  /// user long-presses the unlock chip.
+  @observable
+  bool touchLocked = false;
   @observable
   bool showVideoController = true;
   @observable
@@ -43,6 +50,7 @@ abstract class _PlayerPanelController with Store {
   @action
   void reset() {
     lockPanel = false;
+    touchLocked = false;
     showVideoController = true;
     showSeekTime = false;
     seekCancelPending = false;

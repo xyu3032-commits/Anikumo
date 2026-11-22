@@ -1,6 +1,7 @@
 package com.anikumo.app
 
 import android.app.PendingIntent
+import android.app.UiModeManager
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.BroadcastReceiver
@@ -148,6 +149,18 @@ class MainActivity: AudioServiceFragmentActivity() {
                 val path = call.argument<String>("path") ?: filesDir.absolutePath
                 val availableBytes = getAvailableStorage(path)
                 result.success(availableBytes)
+            } else {
+                result.notImplemented()
+            }
+        }
+
+        // Batch 284 (#31): TV detection for TvModeService —
+        // the platform's own UI-mode answer, nothing fancier.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.anikumo.app/tv").setMethodCallHandler { call, result ->
+            if (call.method == "isTelevision") {
+                val uiModeManager = getSystemService(UI_MODE_SERVICE) as? UiModeManager
+                val modeType = uiModeManager?.currentModeType ?: Configuration.UI_MODE_TYPE_NORMAL
+                result.success(modeType == Configuration.UI_MODE_TYPE_TELEVISION)
             } else {
                 result.notImplemented()
             }

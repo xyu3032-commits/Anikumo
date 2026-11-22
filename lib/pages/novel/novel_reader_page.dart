@@ -26,6 +26,7 @@ import '../../services/novel/novel_sources.dart';
 import '../../services/novel/novel_downloads.dart';
 import '../../services/novel/novel_library.dart';
 import '../../services/storage/storage.dart';
+import 'novel_dict_sheet.dart';
 import 'novel_verification_dialog.dart';
 import 'novel_widgets.dart';
 import 'package:anikumo/bean/widget/anikumo_icons.dart';
@@ -986,12 +987,20 @@ class _NovelReaderPageState extends State<NovelReaderPage> {
                           // stutter and resist scrolling/page
                           // turns (ninth-build feedback). Text
                           // lays out and paints far cheaper.
-                          child: Text(
-                            '　　$text',
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              fontSize: fontSize,
-                              height: readerTheme?.lineHeight ?? 1.75,
-                              color: readerTheme?.foreground,
+                          // Batch 280 (#12): a long-press opens
+                          // the dictionary look-up panel for
+                          // this paragraph instead — the
+                          // selection-free route to 查词.
+                          child: GestureDetector(
+                            onLongPress: () =>
+                                showNovelDictSheet(context, text),
+                            child: Text(
+                              '　　$text',
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                fontSize: fontSize,
+                                height: readerTheme?.lineHeight ?? 1.75,
+                                color: readerTheme?.foreground,
+                              ),
                             ),
                           ),
                         ),
@@ -1217,6 +1226,20 @@ class _NovelReaderPageState extends State<NovelReaderPage> {
                     divisions: 30,
                     onChanged: (value) async {
                       await _tts.setPitch(value);
+                      refresh();
+                    },
+                  ),
+                  // Batch 280 (#14): dialogue in a second
+                  // voice (or a shifted pitch when the
+                  // engine has only one voice).
+                  SwitchListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(S.t('对话使用不同音色')),
+                    subtitle: Text(S.t('引号内的对话用另一种音色朗读')),
+                    value: _tts.multiVoice,
+                    onChanged: (value) async {
+                      await _tts.setMultiVoice(value);
                       refresh();
                     },
                   ),

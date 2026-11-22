@@ -28,16 +28,24 @@ class TmdbCastMember {
     required this.name,
     required this.character,
     this.profileUrl,
+    this.id = 0,
   });
 
   final String name;
   final String character;
   final String? profileUrl;
 
+  /// Batch 281: the person's TMDB id, carried so the
+  /// detail page's cast row can open the person page.
+  /// 0 = unknown (enrichments cached before this batch,
+  /// or a payload without one) — those rows stay untappable.
+  final int id;
+
   Map<String, dynamic> toJson() => {
     'n': name,
     'c': character,
     if (profileUrl != null) 'p': profileUrl,
+    if (id > 0) 'i': id,
   };
 
   static TmdbCastMember? fromJson(dynamic json) {
@@ -48,6 +56,7 @@ class TmdbCastMember {
       name: name,
       character: json['c']?.toString() ?? '',
       profileUrl: json['p']?.toString(),
+      id: (json['i'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -241,6 +250,9 @@ List<TmdbCastMember> parseTmdbCredits(dynamic json) {
           profileUrl: (row['profile_path']?.toString() ?? '').isEmpty
               ? null
               : 'https://image.tmdb.org/t/p/w185${row['profile_path']}',
+          // Batch 281: the credits payload always carried
+          // the person id; keep it for the person page.
+          id: (row['id'] as num?)?.toInt() ?? 0,
         ),
   ];
 }
@@ -909,11 +921,13 @@ class TmdbEnrichService {
 
   // Batch 264: the v5 prefix orphans enrichments cached
   // before TMDB followed the UI language; Batch 242/243: the v3 prefix orphans enrichments
-  // cached before the zh-first reviews switch; the mode
+  // cached before the zh-first reviews switch; Batch 281:
+  // the v6 prefix orphans enrichments cached before cast
+  // members carried person ids; the mode
   // segment keeps 国内 and 海外 enrichments apart (a
   // poster's language differs between the two).
   String _key(MediaItem item) =>
-      'v5|${tmdbOverseasMode() ? 'intl' : tmdbLanguageForCurrentMode()}|'
+      'v6|${tmdbOverseasMode() ? 'intl' : tmdbLanguageForCurrentMode()}|'
       '${normalizeTmdbTitle(item.title)}|${item.year ?? ''}|'
       '${item.mediaType == MediaType.series ? 'tv' : 'movie'}';
 

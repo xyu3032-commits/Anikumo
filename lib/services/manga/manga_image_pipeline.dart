@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 import 'package:anikumo/modules/manga/manga_item.dart';
+import 'package:anikumo/services/download/rate_limiter.dart';
 import 'package:anikumo/services/manga/js/js_manga_source.dart';
 import 'package:anikumo/services/manga/manga_source.dart';
 import 'package:anikumo/services/manga/manga_sources.dart';
@@ -292,6 +293,28 @@ Future<Uint8List> loadProcessedImageBytes({
       }
     }
     final raw = await mangaImageGate.run(() async {
+      if (store == null) {
+        // Batch 282 (#26): chapter downloads (the
+        // cacheManager == null callers) fetch through a
+        // stream so the shared download rate limiter
+        // can pace the transfer; the reader path keeps
+        // its whole-bytes fetch untouched.
+        final response = await _imageDio.get<ResponseBody>(
+          spec.url,
+          options: Options(
+            headers: _specHeaders(spec),
+            responseType: ResponseType.stream,
+            validateStatus: (status) =>
+                status != null && status >= 200 && status < 300,
+          ),
+        );
+        final bytes = <int>[];
+        await for (final chunk
+            in DownloadRateLimiter.throttle(response.data!.stream)) {
+          bytes.addAll(chunk);
+        }
+        return bytes;
+      }
       final response = await _imageDio.get<List<int>>(
         spec.url,
         options: Options(

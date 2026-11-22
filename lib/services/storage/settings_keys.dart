@@ -221,6 +221,17 @@ class SettingsKeys {
     '',
     group: SettingGroup.player,
   );
+
+  /// Batch 278: the user's own API key for the online
+  /// subtitle search. Bring-your-own like the TMDB key:
+  /// empty means the online subtitle entry explains
+  /// itself in the subtitle sheet and stays inert. The
+  /// key lives only in settings storage — never in code.
+  static const onlineSubtitleApiKey = SettingKey<String>(
+    'onlineSubtitleApiKey',
+    '',
+    group: SettingGroup.player,
+  );
   static const danmakuColor = SettingKey<bool>(
     _SettingBoxKey.danmakuColor,
     true,
@@ -414,6 +425,14 @@ class SettingsKeys {
     group: SettingGroup.misc,
   );
 
+  /// Batch 281: notify when a favorited film-zone series
+  /// gains episodes (checked at launch, local notification).
+  static const notifyFilmUpdates = SettingKey<bool>(
+    'notifyFilmUpdates',
+    false,
+    group: SettingGroup.misc,
+  );
+
   /// Batch 269: last known aired-episode count per Bangumi
   /// id (JSON object of id -> count). First sighting of a
   /// show baselines silently.
@@ -427,6 +446,15 @@ class SettingsKeys {
   /// key (JSON object of key -> count).
   static const notifyKnownNovelJson = SettingKey<String>(
     'notifyKnownNovelJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 281: last known episode total per film-zone
+  /// media id (JSON object of id -> count). First sighting
+  /// of a series baselines silently.
+  static const notifyKnownFilmJson = SettingKey<String>(
+    'notifyKnownFilmJson',
     '',
     group: SettingGroup.misc,
   );
@@ -481,6 +509,15 @@ class SettingsKeys {
   static const novelTtsRateByBookJson = SettingKey<String>(
     'novelTtsRateByBookJson',
     '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 280 (#14): read dialogue lines in a second
+  /// voice (or a shifted pitch when the engine has only
+  /// one voice). Off by default.
+  static const novelTtsMultiVoice = SettingKey<bool>(
+    'novelTtsMultiVoice',
+    false,
     group: SettingGroup.misc,
   );
 
@@ -763,6 +800,17 @@ class SettingsKeys {
   /// first), written by the detail page's speed probe.
   static const filmLineSpeedJson = SettingKey<String>(
     'filmLineSpeedJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 281: per-work pinned play line (JSON object:
+  /// work media id → {sourceId, lineKey}), written by the
+  /// film detail page's 收藏线路 toggle. A pin only applies
+  /// while the work is opened from the same source and a
+  /// line with the same key still exists.
+  static const filmLinePinsJson = SettingKey<String>(
+    'filmLinePinsJson',
     '',
     group: SettingGroup.misc,
   );
@@ -1097,6 +1145,15 @@ class SettingsKeys {
   /// Reader: keep the screen awake while reading.
   static const mangaKeepScreenOn = SettingKey<bool>(
     'mangaKeepScreenOn',
+    false,
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 279: reader auto-trim — cut the near-uniform
+  /// solid border (scan margins, blank gutters) off each
+  /// page image before display.
+  static const mangaAutoTrim = SettingKey<bool>(
+    'mangaAutoTrim',
     false,
     group: SettingGroup.misc,
   );
@@ -1784,6 +1841,107 @@ class SettingsKeys {
     group: SettingGroup.player,
   );
 
+  /// Batch 277 (#1): cross-work play queue,
+  /// [{b, n, e, r, a, s, c, at}] oldest first.
+  static const playQueueJson = SettingKey<String>(
+    'playQueueJson',
+    '',
+    group: SettingGroup.player,
+  );
+
+  /// Batch 282 (#20): in-app notification inbox,
+  /// [{t, b, at, c, r}] newest first, capped at 100.
+  static const notificationInboxJson = SettingKey<String>(
+    'notificationInboxJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 282 (#24): timed auto sync of the WebDAV
+  /// zone bundles (and GitHub when signed in). Runs
+  /// when the app opens / while it runs — the app has
+  /// no background executor.
+  static const autoSyncEnabled = SettingKey<bool>(
+    'autoSyncEnabled',
+    false,
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 282 (#24): hours between automatic syncs.
+  static const autoSyncIntervalHours = SettingKey<int>(
+    'autoSyncIntervalHours',
+    24,
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 282 (#24): epoch millis of the last
+  /// automatic sync run (attempted, win or lose).
+  static const autoSyncLastMs = SettingKey<int>(
+    'autoSyncLastMs',
+    0,
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 282 (#25): when on, anime/manga downloads
+  /// and auto sync only start on unmetered networks.
+  static const wifiOnlyDownloads = SettingKey<bool>(
+    'wifiOnlyDownloads',
+    false,
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 282 (#26): global download speed cap in
+  /// KB/s shared by anime + manga downloads; 0 = off.
+  static const downloadRateLimitKbps = SettingKey<int>(
+    'downloadRateLimitKbps',
+    0,
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 283 (#21): cross-zone favorite tags,
+  /// {itemKey: [tag, ...]} — see FavoriteTags for the
+  /// itemKey shapes per zone.
+  static const favoriteTagsJson = SettingKey<String>(
+    'favoriteTagsJson',
+    '',
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 283 (#23): move watching anime whose final
+  /// episode has aired (and been watched) to 看过
+  /// automatically. On by default — the rule only
+  /// fires on complete data.
+  static const autoArchiveFinished = SettingKey<bool>(
+    'autoArchiveFinished',
+    true,
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 283 (#23): epoch millis of the last
+  /// auto-archive run (attempted, win or lose).
+  static const autoArchiveLastMs = SettingKey<int>(
+    'autoArchiveLastMs',
+    0,
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 283 (#27): total cap for the cleanable
+  /// image/playback cache stores, in MB;
+  /// 0 = no cap (the per-store budgets still apply).
+  static const cacheCapMb = SettingKey<int>(
+    'cacheCapMb',
+    0,
+    group: SettingGroup.misc,
+  );
+
+  /// Batch 283 (#28): days of watch history to keep;
+  /// 0 = keep forever.
+  static const historyRetentionDays = SettingKey<int>(
+    'historyRetentionDays',
+    0,
+    group: SettingGroup.misc,
+  );
+
   /// Batch 273 (#54): what a double tap on the video
   /// does — 'toggle' (play/pause, the classic behavior),
   /// 'seek' (left/right thirds seek ∓10s, center
@@ -2088,6 +2246,17 @@ class SettingsKeys {
     playerControllerLayerDisappearTime,
     defaultVolume,
     playerMuted,
+    notificationInboxJson,
+    autoSyncEnabled,
+    autoSyncIntervalHours,
+    autoSyncLastMs,
+    wifiOnlyDownloads,
+    downloadRateLimitKbps,
+    favoriteTagsJson,
+    autoArchiveFinished,
+    autoArchiveLastMs,
+    cacheCapMb,
+    historyRetentionDays,
   ];
 
   static List<SettingKey<Object?>> byGroup(SettingGroup group) {

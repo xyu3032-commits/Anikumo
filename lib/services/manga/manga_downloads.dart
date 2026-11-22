@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:anikumo/modules/manga/manga_item.dart';
+import 'package:anikumo/services/download/rate_limiter.dart';
 import 'package:anikumo/services/manga/manga_api.dart';
 import 'package:anikumo/services/manga/manga_image_pipeline.dart';
 import 'package:anikumo/services/manga/manga_source.dart';
@@ -301,11 +302,25 @@ class MangaDownloadStore {
           await target.writeAsBytes(bytes, flush: true);
         } else {
           final part = File('${dir.path}/$name.img.part');
-          await dio.download(
+          // Batch 282 (#26): fetched as a stream (was
+          // dio.download) so the shared rate limiter
+          // can pace the transfer.
+          final response = await dio.get<ResponseBody>(
             page.url,
-            part.path,
-            options: Options(headers: page.headers),
+            options: Options(
+              headers: page.headers,
+              responseType: ResponseType.stream,
+            ),
           );
+          final sink = part.openWrite();
+          try {
+            await for (final chunk
+                in DownloadRateLimiter.throttle(response.data!.stream)) {
+              sink.add(chunk);
+            }
+          } finally {
+            await sink.close();
+          }
           await part.rename(target.path);
           if (!await storedPageIsImage(target)) {
             await target.delete();
@@ -343,6 +358,19 @@ class MangaDownloadStore {
       for (final e in current)
         if (e.key != entry.key) e,
     ]);
+  }
+
+  /// Batch 279: on-disk size of one downloaded chapter
+  /// (0 when its folder is gone). The read-chapter
+  /// cleanup quotes the space it can free before asking.
+  static Future<int> entrySizeBytes(MangaDownloadEntry entry) async {
+    final dir = await chapterDir(entry);
+    if (!await dir.exists()) return 0;
+    var total = 0;
+    await for (final entity in dir.list(recursive: true)) {
+      if (entity is File) total += await entity.length();
+    }
+    return total;
   }
 
   /// Total size of the downloads folder in bytes.

@@ -364,6 +364,12 @@ class _DiscoverPageState extends State<DiscoverPage> {
     if (MediaQuery.sizeOf(context).width > LayoutBreakpoint.medium['width']!) {
       crossCount = 6;
     }
+    // Batch 284 (#30): wide screens (tablet/desktop shell
+    // caps content at 1280) get two more columns instead
+    // of oversized cards.
+    if (MediaQuery.sizeOf(context).width >= 1280) {
+      crossCount = 8;
+    }
     return SliverGrid(
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         mainAxisSpacing: StyleString.cardSpace - 2,

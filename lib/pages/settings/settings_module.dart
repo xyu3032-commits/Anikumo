@@ -25,9 +25,11 @@ import 'package:anikumo/pages/settings/sync/bangumi_sync_page.dart';
 import 'package:anikumo/pages/settings/sync/sync_settings_page.dart';
 import 'package:anikumo/pages/settings/sync/webdav_server_page.dart';
 import 'package:anikumo/pages/settings/sync/sync_conflicts_page.dart';
+import 'package:anikumo/pages/notifications/notification_center_page.dart';
 import 'package:anikumo/pages/settings/sync/webdav_sync_page.dart';
 import 'package:anikumo/pages/settings/theme_settings_page.dart';
 import 'package:anikumo/pages/discover/backup_page.dart';
+import 'package:anikumo/services/sync/lan_transfer.dart';
 import 'package:anikumo/pages/discover/card_style_page.dart';
 import 'package:anikumo/pages/discover/glass_settings_page.dart';
 import 'package:anikumo/pages/settings/toolbox_page.dart';
@@ -55,6 +57,8 @@ final settingsModule = createModule(
               child: (context, state) => const WebDavServerPage())
           ..route('/webdav/conflicts',
               child: (context, state) => const SyncConflictsPage())
+          ..route('/notifications',
+              child: (context, state) => const NotificationCenterPage())
           ..route(
             '/update',
             child: (context, state) => const UpdateSettingsPage(),
@@ -121,7 +125,11 @@ final settingsModule = createModule(
           )
           ..route(
             '/toolbox/backup',
-            child: (context, state) => const BackupPage(),
+            // Batch 284 (#33): the scanner can hand over a
+            // LAN transfer endpoint to start receiving.
+            child: (context, state) => BackupPage(
+              lanEndpoint: state.arguments as LanTransferEndpoint?,
+            ),
           );
       },
     );

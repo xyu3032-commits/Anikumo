@@ -11,6 +11,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'package:anikumo/bean/appbar/drag_to_move_bar.dart' as dtb;
 import 'package:anikumo/bean/dialog/adaptive_bottom_sheet.dart';
+import 'package:anikumo/bean/dialog/dialog_helper.dart';
 import 'package:anikumo/bean/widget/embedded_native_control_area.dart';
 import 'package:anikumo/bean/widget/loading_indicator.dart';
 import 'package:anikumo/bean/widget/media_error_widget.dart';
@@ -34,6 +35,7 @@ import 'package:anikumo/pages/video/video_side_panel.dart';
 import 'package:anikumo/pages/video/video_system_bars.dart';
 import 'package:anikumo/services/player/mini_player_session.dart';
 import 'package:anikumo/services/player/pip_utils.dart';
+import 'package:anikumo/services/player/play_queue.dart';
 import 'package:anikumo/services/player/timed_shutdown_service.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/utils/device.dart';
@@ -791,6 +793,30 @@ class _VideoPageState extends State<VideoPage>
                   videoPageController: videoPageController,
                 ),
               ),
+        // Batch 277 (#1): line episodes up in the play
+        // queue. Online anime sessions only — entries
+        // resolve later through the anime source/history
+        // path, which offline and external sessions do
+        // not share.
+        onAddToQueue: (videoPageController.isExternalPlayback ||
+                videoPageController.isOfflineMode)
+            ? null
+            : (episode, road) async {
+                final item = videoPageController.bangumiItem;
+                await PlayQueue.add(
+                  PlayQueueEntry(
+                    bangumiId: item.id,
+                    name: item.nameCn.isNotEmpty ? item.nameCn : item.name,
+                    episode: episode,
+                    road: road,
+                    adapterName: videoPageController.currentPlugin.name,
+                    src: videoPageController.src,
+                    cover: item.images['large'] ?? '',
+                    addedAtMs: DateTime.now().millisecondsSinceEpoch,
+                  ),
+                );
+                AnikumoDialog.showToast(message: S.t('已加入播放队列'));
+              },
       );
     },
   );

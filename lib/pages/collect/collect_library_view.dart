@@ -34,6 +34,10 @@ class CollectLibraryView extends StatefulWidget {
     required this.canEdit,
     required this.layout,
     required this.onLayoutChanged,
+    this.selectionMode = false,
+    this.selectedIds = const {},
+    this.onToggleSelect,
+    this.onLongPressItem,
   });
 
   final List<CollectedBangumi> entries;
@@ -43,6 +47,15 @@ class CollectLibraryView extends StatefulWidget {
   final bool Function(BangumiItem) canEdit;
   final CollectLayout layout;
   final ValueChanged<CollectLayout> onLayoutChanged;
+
+  /// Batch 283 (#22): multi-select mode, owned by the
+  /// page. In selection mode a tap toggles instead of
+  /// opening; outside it a long press asks the page to
+  /// enter the mode with that item selected.
+  final bool selectionMode;
+  final Set<int> selectedIds;
+  final ValueChanged<BangumiItem>? onToggleSelect;
+  final ValueChanged<BangumiItem>? onLongPressItem;
 
   @override
   State<CollectLibraryView> createState() => _CollectLibraryViewState();
@@ -489,7 +502,11 @@ class _CollectLibraryViewState extends State<CollectLibraryView>
         key: ValueKey('collect-${entries[index].bangumiItem.id}'),
         entry: entries[index],
         showRating: widget.showRating,
-        onOpen: () => widget.onOpen(entries[index].bangumiItem),
+        onOpen: () => _activate(entries[index].bangumiItem),
+        onLongPress: () => _longPress(entries[index].bangumiItem),
+        selected: widget.selectionMode
+            ? widget.selectedIds.contains(entries[index].bangumiItem.id)
+            : null,
         onChangeType: _changeTypeFor(entries[index]),
       ),
     );
@@ -538,9 +555,17 @@ class _CollectLibraryViewState extends State<CollectLibraryView>
     final textScale = (scaler.scale(14) / 14).clamp(1.0, double.infinity);
     final minWidth =
         (contentWidth < 600 ? 136.0 : 172.0) + 32 * (textScale - 1);
-    final columns = portrait
-        ? 3
-        : ((contentWidth + spacing) / (minWidth + spacing)).floor().clamp(1, 6);
+    // Batch 284 (#30): at 600dp and up the column count
+    // follows the width by formula in BOTH orientations —
+    // a portrait tablet no longer sits on the phone's
+    // fixed 3 columns.
+    final columns = contentWidth >= 600
+        ? ((contentWidth + spacing) / (minWidth + spacing)).floor().clamp(3, 8)
+        : portrait
+            ? 3
+            : ((contentWidth + spacing) / (minWidth + spacing))
+                .floor()
+                .clamp(1, 6);
     final width = (contentWidth - spacing * (columns - 1)) / columns;
     return SliverGrid.builder(
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -560,10 +585,32 @@ class _CollectLibraryViewState extends State<CollectLibraryView>
         entry: entries[index],
         showRating: widget.showRating,
         showStatus: type == null,
-        onOpen: () => widget.onOpen(entries[index].bangumiItem),
+        onOpen: () => _activate(entries[index].bangumiItem),
+        onLongPress: () => _longPress(entries[index].bangumiItem),
+        selected: widget.selectionMode
+            ? widget.selectedIds.contains(entries[index].bangumiItem.id)
+            : null,
         onChangeType: _changeTypeFor(entries[index]),
       ),
     );
+  }
+
+  /// Batch 283 (#22): in selection mode activation
+  /// toggles; otherwise it opens, as before.
+  void _activate(BangumiItem item) {
+    if (widget.selectionMode) {
+      widget.onToggleSelect?.call(item);
+    } else {
+      widget.onOpen(item);
+    }
+  }
+
+  void _longPress(BangumiItem item) {
+    if (widget.selectionMode) {
+      widget.onToggleSelect?.call(item);
+    } else {
+      widget.onLongPressItem?.call(item);
+    }
   }
 
   Widget _emptyState(int matchCount, {required CollectType? type}) {

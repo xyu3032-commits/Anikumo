@@ -97,6 +97,8 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
   // Batch 234: reader-filter pack state + auto-scroll
   // pack state.
   ColorFilter? _readerFilter;
+  // Batch 279 (#8): auto-trim page borders.
+  bool _autoTrim = false;
   bool _autoScrolling = false;
   Timer? _autoScrollTimer;
 
@@ -257,6 +259,7 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
     _pageAnimation = GStorage.getSetting(SettingsKeys.mangaPageAnimation);
     _showPageNumber = GStorage.getSetting(SettingsKeys.mangaShowPageNumber);
     _autoPageSeconds = GStorage.getSetting(SettingsKeys.mangaAutoPageSeconds);
+    _autoTrim = GStorage.getSetting(SettingsKeys.mangaAutoTrim);
     _dim = GStorage.getSetting(SettingsKeys.mangaReaderDim);
     // Batch 234: the filter follows the pack + choice.
     _readerFilter = MangaFeatures.isInstalled(MangaFeatures.readerFiltersId)
@@ -969,6 +972,30 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
     }
   }
 
+  /// Batch 279 (#8): the raw bytes behind one page, from
+  /// the same source its untrimmed widget would use —
+  /// the local file for downloads, the processing
+  /// pipeline for spec pages, the page cache otherwise.
+  Future<Uint8List> _loadPageBytes(
+    MangaPage page,
+    MangaImageLoadSpec? spec,
+  ) async {
+    if (page.url.startsWith('file://')) {
+      return File(Uri.parse(page.url).toFilePath()).readAsBytes();
+    }
+    if (spec != null) {
+      return loadProcessedImageBytes(
+        cacheManager: mangaPageCacheManager,
+        spec: spec,
+      );
+    }
+    final file = await mangaPageCacheManager.getSingleFile(
+      page.url,
+      headers: page.headers,
+    );
+    return file.readAsBytes();
+  }
+
   Widget _pageImage(int realIndex) {
     final page = _pages[realIndex];
     // Batch 103: the page's load spec (transform / modify /
@@ -979,7 +1006,21 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
       page: page,
     );
     Widget image;
-    if (page.url.startsWith('file://')) {
+    if (_autoTrim) {
+      // Batch 279 (#8): every page kind funnels through
+      // the byte-level trim; the loader below is exactly
+      // the source the untrimmed branch would have used.
+      image = MangaTrimmedPageImage(
+        key: ValueKey('${page.url}#${_nonceFor(page.url)}#trim'),
+        loadBytes: () => _loadPageBytes(page, spec),
+        memCacheWidth: _decodeWidth,
+        fit: BoxFit.contain,
+        placeholder: const Center(
+          child: CircularProgressIndicator(color: Colors.white54),
+        ),
+        errorWidget: _pageErrorWidget(page.url, null),
+      );
+    } else if (page.url.startsWith('file://')) {
       // Downloaded chapter (M1): render from disk.
       image = Image.file(
         File(Uri.parse(page.url).toFilePath()),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -6,11 +7,16 @@ import 'package:media_kit/media_kit.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:anikumo/bean/dialog/dialog_helper.dart';
+import 'package:anikumo/pages/player/online_subtitle_sheet.dart';
 import 'package:anikumo/pages/player/player_controller.dart';
 import 'package:anikumo/services/i18n/app_strings.dart';
 import 'package:anikumo/services/logging/logger.dart';
 import 'package:anikumo/services/player/audio_eq.dart';
 import 'package:anikumo/services/player/video_bookmarks.dart';
+import 'package:anikumo/services/subtitle/online_subtitle_service.dart';
+import 'package:anikumo/services/subtitle/subtitle_document.dart';
+import 'package:anikumo/services/subtitle/subtitle_translation_service.dart';
+import 'package:anikumo/services/subtitle/subtitle_translator.dart';
 import 'package:anikumo/utils/format.dart';
 
 /// Batch 273 (#8, #51): the subtitle sheet — primary
@@ -34,14 +40,18 @@ Future<void> showSubtitleSheet(
   await showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
-    builder: (sheetContext) => _SubtitleSheet(player: player),
+    builder: (sheetContext) => _SubtitleSheet(
+      player: player,
+      playerController: playerController,
+    ),
   );
 }
 
 class _SubtitleSheet extends StatefulWidget {
-  const _SubtitleSheet({required this.player});
+  const _SubtitleSheet({required this.player, required this.playerController});
 
   final Player player;
+  final PlayerController playerController;
 
   @override
   State<_SubtitleSheet> createState() => _SubtitleSheetState();
@@ -51,7 +61,36 @@ class _SubtitleSheetState extends State<_SubtitleSheet> {
   String? _secondaryId;
   bool _busy = false;
 
+  /// Batch 278: external subtitle files mounted during
+  /// this sheet session, with the source language the
+  /// detector called for each (null = unjudged). The
+  /// machine-translation entry is offered per file.
+  final List<({String path, String name})> _mountedExternal = [];
+  final Map<String, String?> _externalLanguages = {};
+
+  /// Batch 278: file-translation progress, shown inline
+  /// while a run is active.
+  bool _translating = false;
+  int _translateDone = 0;
+  int _translateTotal = 0;
+  SubtitleTranslator? _ownedTranslator;
+
   Player get _player => widget.player;
+
+  @override
+  void dispose() {
+    final translator = _ownedTranslator;
+    if (translator != null) {
+      unawaited(translator.close());
+    }
+    super.dispose();
+  }
+
+  SubtitleTranslationService _translationService() {
+    return SubtitleTranslationService(
+      translator: _ownedTranslator ??= MlKitSubtitleTranslator(),
+    );
+  }
 
   String _trackLabel(SubtitleTrack track) {
     final title = track.title?.trim() ?? '';
@@ -91,7 +130,7 @@ class _SubtitleSheetState extends State<_SubtitleSheet> {
   /// Picks an external subtitle file and stages it in
   /// the temp dir (mpv needs a real path it can read
   /// for the whole session).
-  Future<String?> _pickExternalSubtitle() async {
+  Future<({String path, String name})?> _pickExternalSubtitle() async {
     final picked = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['srt', 'ass', 'ssa', 'vtt', 'sub'],
@@ -109,21 +148,63 @@ class _SubtitleSheetState extends State<_SubtitleSheet> {
       ),
     );
     await target.writeAsBytes(bytes);
-    return target.path;
+    return (path: target.path, name: file.name);
+  }
+
+  /// Batch 278: remembers a mounted external subtitle
+  /// for the machine-translation entry and starts the
+  /// source-language detection for it in the background.
+  void _registerMountedExternal(String path, String name) {
+    if (_mountedExternal.any((e) => e.path == path)) return;
+    setState(() => _mountedExternal.add((path: path, name: name)));
+    unawaited(_detectExternalLanguage(path));
+  }
+
+  Future<void> _detectExternalLanguage(String path) async {
+    String? detected;
+    try {
+      final bytes = await File(path).readAsBytes();
+      final content = decodeSubtitleBytes(bytes);
+      final format = p.extension(path).replaceAll('.', '');
+      final cues = parseSubtitleDocument(format, content);
+      final sample = StringBuffer();
+      for (final cue in cues) {
+        sample.write(stripSubtitleMarkup(cue.text));
+        sample.write('\n');
+        if (sample.length > 6000) break;
+      }
+      detected = detectSubtitleLanguage(sample.toString());
+    } catch (e) {
+      AnikumoLogger().w('Subtitle: language detect failed', error: e);
+      detected = null;
+    }
+    if (mounted) {
+      setState(() => _externalLanguages[path] = detected);
+    }
   }
 
   Future<void> _externalPrimary() async {
-    final path = await _pickExternalSubtitle();
-    if (path == null) return;
-    await _setPrimary(SubtitleTrack.uri(path));
+    final pickedFile = await _pickExternalSubtitle();
+    if (pickedFile == null) return;
+    await _setPrimary(SubtitleTrack.uri(pickedFile.path));
+    _registerMountedExternal(pickedFile.path, pickedFile.name);
     if (mounted) {
       AnikumoDialog.showToast(message: S.t('已加载外挂字幕'));
     }
   }
 
   Future<void> _externalSecondary() async {
-    final path = await _pickExternalSubtitle();
-    if (path == null) return;
+    final pickedFile = await _pickExternalSubtitle();
+    if (pickedFile == null) return;
+    await _mountFileAsSecondary(pickedFile.path);
+    _registerMountedExternal(pickedFile.path, pickedFile.name);
+  }
+
+  /// Loads [path] as an unselected track and points
+  /// mpv's secondary subtitle at it — the batch 273
+  /// dual-display path, shared by the external-file
+  /// entry and the machine-translation result.
+  Future<void> _mountFileAsSecondary(String path) async {
     final platform = _player.platform;
     if (platform is! NativePlayer) return;
     setState(() => _busy = true);
@@ -148,6 +229,77 @@ class _SubtitleSheetState extends State<_SubtitleSheet> {
       AnikumoLogger().w('Subtitle: external secondary failed', error: e);
     }
     if (mounted) setState(() => _busy = false);
+  }
+
+  /// Batch 278: translates one external subtitle file
+  /// end to end and mounts the Chinese result as the
+  /// secondary track. Progress paints inline; every
+  /// failure lands as a toast.
+  Future<void> _translateAndMount(File source) async {
+    if (_translating) return;
+    setState(() {
+      _translating = true;
+      _translateDone = 0;
+      _translateTotal = 0;
+    });
+    try {
+      final translated = await _translationService().translateFile(
+        source,
+        onProgress: (done, total) {
+          if (mounted) {
+            setState(() {
+              _translateDone = done;
+              _translateTotal = total;
+            });
+          }
+        },
+      );
+      await _mountFileAsSecondary(translated.path);
+      if (mounted) {
+        AnikumoDialog.showToast(message: S.t('已挂载机翻字幕'));
+      }
+    } on SubtitleTranslationException catch (e) {
+      AnikumoLogger().w('Subtitle: translation stopped', error: e);
+      if (mounted) {
+        AnikumoDialog.showToast(
+          message: switch (e.failure) {
+            SubtitleTranslationFailure.alreadyChinese =>
+              S.t('已经是中文字幕，无需机翻'),
+            SubtitleTranslationFailure.emptyDocument =>
+              S.t('没有从文件里读到字幕'),
+            SubtitleTranslationFailure.translatorFailed =>
+              S.t('机翻失败，请稍后重试'),
+          },
+        );
+      }
+    } catch (e) {
+      AnikumoLogger().w('Subtitle: translation failed', error: e);
+      if (mounted) {
+        AnikumoDialog.showToast(message: S.t('机翻失败，请稍后重试'));
+      }
+    } finally {
+      if (mounted) setState(() => _translating = false);
+    }
+  }
+
+  Future<void> _pickAndTranslate() async {
+    final pickedFile = await _pickExternalSubtitle();
+    if (pickedFile == null) return;
+    await _translateAndMount(File(pickedFile.path));
+  }
+
+  /// Batch 278: opens the online subtitle search and
+  /// mounts a downloaded file as the primary track.
+  Future<void> _openOnlineSubtitles() async {
+    final controller = widget.playerController;
+    final path = await showOnlineSubtitleSheet(
+      context,
+      initialQuery: controller.bangumiName,
+      episode: controller.currentEpisode,
+    );
+    if (path == null || !mounted) return;
+    await _setPrimary(SubtitleTrack.uri(path));
+    AnikumoDialog.showToast(message: S.t('已加载在线字幕'));
   }
 
   @override
@@ -233,6 +385,94 @@ class _SubtitleSheetState extends State<_SubtitleSheet> {
             title: Text(S.t('外挂字幕文件…')),
             onTap: _busy ? null : _externalSecondary,
           ),
+          if (subtitleTranslationSupported) ...[
+            const Divider(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              child: Text(
+                S.t('字幕机翻'),
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+            ),
+            if (_translating)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _translateTotal > 0
+                          ? S.f('正在机翻字幕… {}/{}', [
+                              _translateDone,
+                              _translateTotal,
+                            ])
+                          : S.t('正在机翻字幕…'),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 8),
+                    LinearProgressIndicator(
+                      value: _translateTotal > 0
+                          ? _translateDone / _translateTotal
+                          : null,
+                    ),
+                  ],
+                ),
+              ),
+            for (final mounted in _mountedExternal)
+              if (_externalLanguages[mounted.path] != 'zh')
+                ListTile(
+                  leading: const Icon(Icons.translate_rounded),
+                  title: Text(S.t('机翻这份字幕')),
+                  subtitle: Text(
+                    mounted.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onTap: (_busy || _translating)
+                      ? null
+                      : () => _translateAndMount(File(mounted.path)),
+                ),
+            ListTile(
+              leading: const Icon(Icons.translate_rounded),
+              title: Text(S.t('选择字幕文件机翻…')),
+              subtitle: Text(S.t('把外挂字幕整份译成中文，作为副字幕挂载')),
+              onTap: (_busy || _translating) ? null : _pickAndTranslate,
+            ),
+            ValueListenableBuilder<bool>(
+              valueListenable:
+                  widget.playerController.liveTranslateEnabled,
+              builder: (context, liveEnabled, _) => SwitchListTile(
+                secondary: const Icon(Icons.translate_rounded),
+                title: Text(S.t('实时机翻浮层')),
+                subtitle: Text(S.t('把当前字幕行实时译成中文，显示在画面下方')),
+                value: liveEnabled,
+                onChanged: (value) {
+                  widget.playerController.liveTranslateEnabled.value =
+                      value;
+                },
+              ),
+            ),
+          ],
+          const Divider(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+            child: Text(
+              S.t('在线字幕'),
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+          ),
+          if (OnlineSubtitleService.hasKey)
+            ListTile(
+              leading: const Icon(Icons.cloud_download_outlined),
+              title: Text(S.t('在线搜索字幕…')),
+              onTap: _busy ? null : _openOnlineSubtitles,
+            )
+          else
+            ListTile(
+              leading: const Icon(Icons.info_outline_rounded),
+              title: Text(S.t('在线字幕需要服务密钥')),
+              subtitle: Text(S.t('在「设置 → 播放设置 → 字幕」中填写字幕服务密钥后，即可在线搜索字幕')),
+            ),
         ],
       ),
     );

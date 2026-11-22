@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_volume_controller/flutter_volume_controller.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:flutter_modular/flutter_modular.dart';
@@ -88,6 +88,17 @@ class PlayerController implements Disposable {
   String videoUrl = '';
   String _bangumiName = '';
   String _episodeTitle = '';
+
+  /// The work's display name as handed to [init] ('' for
+  /// sessions that never named one). The online subtitle
+  /// search seeds its query from this.
+  String get bangumiName => _bangumiName;
+
+  /// Batch 278: live machine-translation overlay switch,
+  /// flipped from the subtitle sheet and watched by the
+  /// overlay widget in the player page. Plain notifier —
+  /// it changes at human pace and needs no MobX graph.
+  final ValueNotifier<bool> liveTranslateEnabled = ValueNotifier(false);
   bool isLocalPlayback = false;
   Timer? hideVolumeUITimer;
   Timer? _volumeGestureSyncTimer;
@@ -419,6 +430,7 @@ class PlayerController implements Disposable {
     if (_shutdownFuture != null) {
       return;
     }
+    liveTranslateEnabled.dispose();
     screenshots.dispose();
     final shutdown = _shutdownResources();
     _shutdownFuture = shutdown;

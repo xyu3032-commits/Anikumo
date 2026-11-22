@@ -19,6 +19,7 @@ import 'package:anikumo/services/platform/desktop_window_config.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:anikumo/bean/appbar/drag_to_move_bar.dart' as dtb;
 import 'package:anikumo/bean/widget/anikumo_icons.dart';
+import 'package:anikumo/services/ui/wide_layout.dart';
 
 class ScaffoldMenu extends StatefulWidget {
   const ScaffoldMenu({super.key, required this.location});
@@ -92,6 +93,11 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
   }
 
   DateTime? _lastExitPromptAt;
+
+  /// Batch 284 (#31): the channel entry currently holding
+  /// keyboard/remote focus, so the rails can draw a
+  /// visible focus border (a TV remote gives no hover).
+  int? _focusedChannel;
 
   /// The shell sits at the bottom of the root stack and stays mounted while
   /// other pages cover it, so it publishes that state for its subtree.
@@ -199,12 +205,24 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
             _handleSystemBack(context);
           }
         },
-        child: OrientationBuilder(
-          builder: (context, orientation) {
-            return orientation == Orientation.portrait
-                ? _portraitMenu(context, _selectedIndex)
-                : _sideMenu(context, _selectedIndex);
-          },
+        child: FocusTraversalGroup(
+          policy: WidgetOrderTraversalPolicy(),
+          child: OrientationBuilder(
+            builder: (context, orientation) {
+              // Batch 284 (#30/#31): a wide window (tablet,
+              // desktop, TV) always takes the left rail —
+              // orientation alone would leave a portrait
+              // tablet on the phone masthead. The traversal
+              // group gives remote/keyboard focus a defined
+              // order through the shell's key entries.
+              if (isWideLayout(MediaQuery.sizeOf(context).width)) {
+                return _sideMenu(context, _selectedIndex, wide: true);
+              }
+              return orientation == Orientation.portrait
+                  ? _portraitMenu(context, _selectedIndex)
+                  : _sideMenu(context, _selectedIndex);
+            },
+          ),
         ),
       ),
     );
@@ -349,10 +367,23 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
         itemBuilder: (context, index) {
           final (label, icon, selectedIcon) = _channels[index];
           final selected = index == selectedIndex;
+          final focused = _focusedChannel == index;
           return InkWell(
             onTap: () => _selectDestination(index),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 13),
+            onFocusChange: (hasFocus) {
+              if (hasFocus && _focusedChannel != index) {
+                setState(() => _focusedChannel = index);
+              }
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: focused ? scheme.primary : Colors.transparent,
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 11),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -412,7 +443,8 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
   // the same editorial language as the portrait channel
   // rail — numbered channels down a hairline, not the
   // stock Material rail.
-  Widget _sideMenu(BuildContext context, int selectedIndex) {
+  Widget _sideMenu(BuildContext context, int selectedIndex,
+      {bool wide = false}) {
     const borderRadius = BorderRadius.only(
       topLeft: Radius.circular(16),
       bottomLeft: Radius.circular(16),
@@ -448,18 +480,29 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
                         itemBuilder: (context, index) {
                           final (label, icon, selectedIcon) = _channels[index];
                           final selected = index == selectedIndex;
+                          final focused = _focusedChannel == index;
                           return InkWell(
                             onTap: () => _selectDestination(index),
+                            onFocusChange: (hasFocus) {
+                              if (hasFocus && _focusedChannel != index) {
+                                setState(() => _focusedChannel = index);
+                              }
+                            },
                             child: Container(
                               decoration: BoxDecoration(
-                                border: Border(
-                                  left: BorderSide(
-                                    color: selected
-                                        ? scheme.primary
-                                        : Colors.transparent,
-                                    width: 3,
-                                  ),
-                                ),
+                                border: focused
+                                    ? Border.all(
+                                        color: scheme.primary,
+                                        width: 2,
+                                      )
+                                    : Border(
+                                        left: BorderSide(
+                                          color: selected
+                                              ? scheme.primary
+                                              : Colors.transparent,
+                                          width: 3,
+                                        ),
+                                      ),
                               ),
                               padding: const EdgeInsets.symmetric(vertical: 9),
                               child: Column(
@@ -507,7 +550,19 @@ class _ScaffoldMenu extends State<ScaffoldMenu> with RouteAware {
               ),
             ),
           ),
-          Expanded(child: _outlet(context, borderRadius: borderRadius)),
+          // Batch 284 (#30): on wide screens the content
+          // stops at kWideContentMaxWidth and centers —
+          // side margin instead of a stretched phone page.
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: wide
+                    ? wideContentSideMargin(MediaQuery.sizeOf(context).width)
+                    : 0,
+              ),
+              child: _outlet(context, borderRadius: borderRadius),
+            ),
+          ),
         ],
       ),
     );

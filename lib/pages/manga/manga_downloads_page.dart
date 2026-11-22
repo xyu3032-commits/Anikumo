@@ -1,17 +1,23 @@
 import 'package:anikumo/services/i18n/app_strings.dart';
-import 'dart:typed_data';
 import 'dart:io';
 import 'package:anikumo/utils/tap_debouncer.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:anikumo/bean/dialog/dialog_helper.dart';
 import 'package:anikumo/bean/widget/motion_kit.dart';
 import 'package:anikumo/modules/manga/manga_item.dart';
 import 'package:anikumo/pages/manga/manga_widgets.dart';
+import 'package:anikumo/services/manga/manga_api.dart';
 import 'package:anikumo/services/manga/manga_cbz_export.dart';
+import 'package:anikumo/services/manga/manga_chapter_export.dart';
+import 'package:anikumo/services/manga/manga_library.dart';
+import 'package:anikumo/services/manga/manga_read_cleanup.dart';
 import 'package:anikumo/services/manga/manga_features.dart';
+import 'package:anikumo/services/download/download_gate.dart';
 import 'package:anikumo/services/manga/manga_download_queue.dart';
+import 'package:anikumo/services/network/metered_network_service.dart';
 import 'package:anikumo/services/manga/manga_downloads.dart';
 import 'package:anikumo/services/manga/manga_extras.dart';
 import 'package:anikumo/bean/widget/anikumo_icons.dart';
@@ -81,6 +87,205 @@ class _MangaDownloadsPageState extends State<MangaDownloadsPage> {
     }
   }
 
+  /// Batch 279 (#10): the local page bytes of one entry,
+  /// or null (with a toast) when the files are unusable.
+  Future<List<Uint8List>?> _entryPageBytes(
+    MangaDownloadEntry entry,
+  ) async {
+    final pages = await MangaDownloadStore.localPages(
+      entry.source,
+      entry.mangaId,
+      entry.chapterId,
+    );
+    if (pages == null || pages.isEmpty) {
+      if (mounted) {
+        AnikumoDialog.showToast(message: S.t('这一话的本地文件不完整，无法导出'));
+      }
+      return null;
+    }
+    final bytesList = <Uint8List>[];
+    for (final page in pages) {
+      final path = Uri.parse(page.url).toFilePath();
+      bytesList.add(await File(path).readAsBytes());
+    }
+    return bytesList;
+  }
+
+  /// Batch 279 (#10): save [bytes] through the same
+  /// save-file flow as the film favorites export (the
+  /// picker writes on mobile; desktop gets the bytes
+  /// written to the picked path explicitly).
+  Future<void> _saveExport(
+    MangaDownloadEntry entry, {
+    required String dialogTitle,
+    required String fileName,
+    required String extension,
+    required Uint8List bytes,
+    required int pageCount,
+  }) async {
+    try {
+      final path = await FilePicker.platform.saveFile(
+        dialogTitle: dialogTitle,
+        fileName: fileName,
+        type: FileType.custom,
+        allowedExtensions: [extension],
+        bytes: bytes,
+      );
+      if (path != null && !Platform.isAndroid && !Platform.isIOS) {
+        await File(path).writeAsBytes(bytes);
+      }
+      if (mounted && path != null) {
+        AnikumoDialog.showToast(message: S.f('已导出 {} 页', [pageCount]));
+      }
+    } catch (e) {
+      if (mounted) {
+        AnikumoDialog.showToast(message: S.f('导出失败：{}', [e]));
+      }
+    }
+  }
+
+  Future<void> _exportEntryPdf(MangaDownloadEntry entry) async {
+    final bytesList = await _entryPageBytes(entry);
+    if (bytesList == null) return;
+    final pdf = await buildChapterPdfBytes(bytesList);
+    await _saveExport(
+      entry,
+      dialogTitle: S.t('保存 PDF'),
+      fileName: chapterExportFileName(
+        entry.mangaTitle,
+        entry.chapterLabel,
+        'pdf',
+      ),
+      extension: 'pdf',
+      bytes: pdf,
+      pageCount: bytesList.length,
+    );
+  }
+
+  Future<void> _exportEntryLongImage(MangaDownloadEntry entry) async {
+    final bytesList = await _entryPageBytes(entry);
+    if (bytesList == null) return;
+    final stitched = await compute(buildLongImageBytes, bytesList);
+    if (stitched == null) {
+      if (mounted) {
+        AnikumoDialog.showToast(message: S.t('这一话的本地文件不完整，无法导出'));
+      }
+      return;
+    }
+    await _saveExport(
+      entry,
+      dialogTitle: S.t('保存长图'),
+      fileName: chapterExportFileName(
+        entry.mangaTitle,
+        entry.chapterLabel,
+        'jpg',
+      ),
+      extension: 'jpg',
+      bytes: stitched,
+      pageCount: bytesList.length,
+    );
+  }
+
+  bool _cleaning = false;
+
+  static String _formatSize(int bytes) {
+    final mb = bytes / (1024 * 1024);
+    return mb >= 100
+        ? '${mb.toStringAsFixed(0)} MB'
+        : '${mb.toStringAsFixed(1)} MB';
+  }
+
+  /// Batch 279 (#9): delete every downloaded chapter the
+  /// reading progress says is finished. The chapter
+  /// order comes from the source when reachable; without
+  /// it only the currently-open chapter's own completion
+  /// counts (see manga_read_cleanup.dart).
+  Future<void> _cleanupReadChapters() async {
+    if (_cleaning) return;
+    setState(() => _cleaning = true);
+    try {
+      final entries = await MangaDownloadStore.loadIndex();
+      final progress = MangaLibraryStore.loadProgressMap();
+      final orders = <String, List<String>>{};
+      final seen = <String>{};
+      for (final entry in entries) {
+        final key = '${entry.source}:${entry.mangaId}';
+        if (!seen.add(key) || !progress.containsKey(key)) continue;
+        try {
+          final chapters = await MangaApi.fetchChapters(
+            MangaItem(
+              id: entry.mangaId,
+              title: entry.mangaTitle,
+              description: '',
+              coverUrl: entry.coverUrl,
+              author: '',
+              status: '',
+              year: null,
+              tags: const [],
+              source: entry.source,
+            ),
+          );
+          orders[key] = [for (final c in chapters) c.id];
+        } catch (_) {
+          orders[key] = const [];
+        }
+      }
+      final read = readDownloadedChapters(
+        entries: entries,
+        progressByKey: progress,
+        chapterOrderByMangaKey: orders,
+      );
+      if (read.isEmpty) {
+        if (mounted) {
+          AnikumoDialog.showToast(message: S.t('没有已读完的下载章节'));
+        }
+        return;
+      }
+      var bytes = 0;
+      for (final entry in read) {
+        bytes += await MangaDownloadStore.entrySizeBytes(entry);
+      }
+      if (!mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(S.t('清理已读章节')),
+          content: Text(
+            S.f('将删除 {} 话已读章节，可释放约 {}', [
+              read.length,
+              _formatSize(bytes),
+            ]),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(S.t('取消')),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(S.t('删除')),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+      for (final entry in read) {
+        await MangaDownloadStore.deleteEntry(entry);
+      }
+      await _load();
+      if (mounted) {
+        AnikumoDialog.showToast(
+          message: S.f('已清理 {} 话，释放约 {}', [
+            read.length,
+            _formatSize(bytes),
+          ]),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _cleaning = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -88,6 +293,13 @@ class _MangaDownloadsPageState extends State<MangaDownloadsPage> {
       appBar: AppBar(
         title: Text(S.t('下载管理')),
         actions: [
+          // Batch 279 (#9): one-tap cleanup of read chapters.
+          if (_entries.isNotEmpty)
+            IconButton(
+              icon: const Icon(AnikumoIcons.cleaning_services_outlined),
+              tooltip: S.t('清理已读章节'),
+              onPressed: _cleaning ? null : _cleanupReadChapters,
+            ),
           if (_entries.isNotEmpty)
             IconButton(
               icon: const Icon(AnikumoIcons.delete_sweep_outlined),
@@ -154,6 +366,28 @@ class _MangaDownloadsPageState extends State<MangaDownloadsPage> {
                                 tooltip: S.t('导出 CBZ'),
                                 onPressed: () => _exportEntry(_entries[i]),
                               ),
+                            // Batch 279 (#10): PDF / long-image export.
+                            PopupMenuButton<String>(
+                              icon: const Icon(AnikumoIcons.ios_share_rounded),
+                              tooltip: S.t('导出'),
+                              onSelected: (value) {
+                                if (value == 'pdf') {
+                                  _exportEntryPdf(_entries[i]);
+                                } else if (value == 'long') {
+                                  _exportEntryLongImage(_entries[i]);
+                                }
+                              },
+                              itemBuilder: (context) => [
+                                PopupMenuItem(
+                                  value: 'pdf',
+                                  child: Text(S.t('导出 PDF')),
+                                ),
+                                PopupMenuItem(
+                                  value: 'long',
+                                  child: Text(S.t('导出长图')),
+                                ),
+                              ],
+                            ),
                             IconButton(
                               icon: const Icon(AnikumoIcons.delete_outline),
                               tooltip: S.t('删除这一话'),
@@ -200,14 +434,29 @@ class _MangaDownloadsPageState extends State<MangaDownloadsPage> {
   Widget _buildQueueSection(BuildContext context) {
     final queue = MangaDownloadQueue.instance;
     return AnimatedBuilder(
-      animation: queue,
+      animation:
+          Listenable.merge([queue, MeteredNetworkService.listenable]),
       builder: (context, _) {
         final jobs = queue.jobs;
         if (jobs.isEmpty) return const SizedBox.shrink();
         final theme = Theme.of(context);
+        // Batch 282 (#25): the Wi-Fi-only gate is
+        // holding queued chapters on a metered network.
+        final wifiHeld = DownloadGate.blockedNow() &&
+            jobs.any((job) => job.status == MangaDownloadJobStatus.queued);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (wifiHeld)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Text(
+                  S.t('仅 Wi-Fi 下载已开启：当前是移动网络，排队任务将在 Wi-Fi 下继续'),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
               child: Row(

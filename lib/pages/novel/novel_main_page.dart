@@ -30,6 +30,7 @@ import '../../services/storage/storage.dart';
 import '../../services/reader_chrome_prefs.dart';
 import 'novel_explore_tab.dart';
 import 'novel_sources_tab.dart';
+import 'novel_title_import_sheet.dart';
 import 'novel_widgets.dart';
 import 'package:anikumo/bean/widget/anikumo_icons.dart';
 
@@ -878,7 +879,16 @@ class _NovelFavoritesTabState extends State<NovelFavoritesTab> {
               );
             },
           ),
-          NovelSectionHeader(title: S.t('我的收藏')),
+          NovelSectionHeader(
+            title: S.t('我的收藏'),
+            // Batch 280 (#13): title-list import, the
+            // favorites tab's top-bar entry.
+            trailing: IconButton(
+              icon: const Icon(AnikumoIcons.upload_outlined),
+              tooltip: S.t('导入清单'),
+              onPressed: () => runNovelTitleImport(context),
+            ),
+          ),
           if (favorites.isEmpty)
             GeneralEmptyState(
               icon: AnikumoIcons.collections_bookmark_outlined,

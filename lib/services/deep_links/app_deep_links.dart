@@ -38,6 +38,22 @@ class AppDeepLinks {
     if (!_ready.isCompleted) _ready.complete();
   }
 
+  /// Batch 284 (#19): opens an already-parsed link through
+  /// the same landing path as an OS-delivered one — used
+  /// by the in-app scanner, whose codes carry the same
+  /// payloads as B276's shared work QR codes.
+  Future<void> openParsedLink(AnikumoDeepLink link) async {
+    final session = _sessions.begin();
+    _dialogs.cancel();
+    try {
+      await _open(link, session);
+    } catch (error) {
+      if (session.isStale) return;
+      AnikumoLogger().w('Deep link: failed to open', error: error);
+      AnikumoDialog.showToast(message: S.t('无法打开链接'));
+    }
+  }
+
   void _receive(Uri uri) {
     final link = AnikumoDeepLink.parse(uri);
     if (link == null) return;

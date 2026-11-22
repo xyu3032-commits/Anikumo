@@ -275,6 +275,28 @@ class MangaLibraryStore {
     return true;
   }
 
+  /// Batch 279 (#11): bulk-add favorites (title-list
+  /// import). Entries whose key is already a favorite
+  /// are skipped; new ones are prepended in order.
+  /// Returns how many were actually added.
+  static Future<int> addFavorites(List<MangaFavorite> incoming) async {
+    if (incoming.isEmpty) return 0;
+    final favorites = [...loadFavorites()];
+    final known = {for (final f in favorites) f.key};
+    final fresh = [
+      for (final f in incoming)
+        if (!known.contains(f.key)) f,
+    ];
+    if (fresh.isEmpty) return 0;
+    favorites.insertAll(0, fresh);
+    await GStorage.putSetting(
+      SettingsKeys.mangaFavoritesJson,
+      MangaLibraryCodec.encodeFavorites(favorites),
+    );
+    _bump();
+    return fresh.length;
+  }
+
   static Map<String, MangaProgress> loadProgressMap() {
     final raw = GStorage.getSetting(SettingsKeys.mangaProgressJson);
     if (_progressMemo != null && _progressRaw == raw) {

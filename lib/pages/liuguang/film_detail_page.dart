@@ -8,11 +8,13 @@ import 'package:anikumo/bean/dialog/dialog.dart';
 import 'package:anikumo/bean/widget/anikumo_icons.dart';
 import 'package:anikumo/bean/widget/editorial_kit.dart';
 import 'package:anikumo/pages/liuguang/film_discover_tab.dart';
+import 'package:anikumo/pages/liuguang/film_person_page.dart';
 import 'package:anikumo/pages/liuguang/film_widgets.dart';
 import 'package:anikumo/services/liuguang/bangumi_film.dart';
 import 'package:anikumo/services/liuguang/film_accounts.dart';
 import 'package:anikumo/services/liuguang/cms_api_source.dart';
 import 'package:anikumo/services/liuguang/film_downloads.dart';
+import 'package:anikumo/services/liuguang/film_line_favorites.dart';
 import 'package:anikumo/services/liuguang/tmdb_enrich.dart';
 import 'package:anikumo/services/liuguang/film_playback_bridge.dart';
 import 'package:anikumo/services/liuguang/tvmaze_covers.dart';
@@ -56,6 +58,19 @@ class _FilmDetailPageState extends State<FilmDetailPage>
   bool _reversed = false;
   PlaybackHistory? _resume;
   TabController? _tabs;
+
+  /// Batch 281: the detail before the line pin is
+  /// applied (speed order only) — unpinning restores it
+  /// exactly. [_detail] is always this, pin applied.
+  MediaDetail? _detailBase;
+
+  /// Batch 281: this work's pinned line, when one is
+  /// recorded for the source it was opened from.
+  FilmLinePin? _linePin;
+
+  /// The tab index the pin row last rendered for; the
+  /// tab listener only rebuilds on real index changes.
+  int _shownTabIndex = 0;
 
   MediaItem get _item => _detail?.item ?? widget.item;
 
@@ -238,12 +253,16 @@ class _FilmDetailPageState extends State<FilmDetailPage>
   /// Batch 245: the cast/character row's entries —
   /// Bangumi characters first (character name, played
   /// by), TMDB cast when Bangumi has none.
-  List<({String name, String sub, String? imageUrl})> get _castMembers {
+  /// Batch 281: TMDB members also carry their person id
+  /// (0 for Bangumi characters and pre-id cache entries);
+  /// an id makes the row entry open the person page.
+  List<({String name, String sub, String? imageUrl, int personId})>
+      get _castMembers {
     final bgm = _bgm;
     if (bgm != null && bgm.characters.isNotEmpty) {
       return [
         for (final c in bgm.characters)
-          (name: c.name, sub: c.actor, imageUrl: c.imageUrl),
+          (name: c.name, sub: c.actor, imageUrl: c.imageUrl, personId: 0),
       ];
     }
     if (_tmdb != null) {
@@ -253,6 +272,7 @@ class _FilmDetailPageState extends State<FilmDetailPage>
             name: m.name,
             sub: m.character.isEmpty ? '' : S.f('饰 {}', [m.character]),
             imageUrl: m.profileUrl,
+            personId: m.id,
           ),
       ];
     }
@@ -333,7 +353,7 @@ class _FilmDetailPageState extends State<FilmDetailPage>
           break;
         }
       }
-      _detail = detail == null
+      _detailBase = detail == null
           ? null
           : reorderDetailLines(
               detail,
@@ -341,9 +361,20 @@ class _FilmDetailPageState extends State<FilmDetailPage>
                   ? FilmLineSpeed.orderFor(widget.item.sourceId)
                   : const <String>[],
             );
+      // Batch 281: an explicit per-work line pin rides
+      // on top of the per-source speed order and wins.
+      _linePin = FilmLineFavorites.pinFor(widget.item.id);
+      _detail = _detailBase == null
+          ? null
+          : FilmLineFavorites.applyPinToDetail(
+              _detailBase!,
+              _linePin,
+              widget.item.sourceId,
+            );
       final seasons = _detail?.seasons ?? const [];
       if (seasons.isNotEmpty) {
         _tabs = TabController(length: seasons.length, vsync: this);
+        _tabs!.addListener(_onLineTabChanged);
       }
       _resolveTvmazeCover();
       _resolveTmdb();
@@ -407,12 +438,24 @@ class _FilmDetailPageState extends State<FilmDetailPage>
       if (!mounted) return;
       final fastest = sorted.first;
       setState(() {
-        _detail = reorderDetailLines(detail, [for (final r in sorted) r.$1]);
+        _detailBase = reorderDetailLines(
+          detail,
+          [for (final r in sorted) r.$1],
+        );
+        // Batch 281: the pin still wins over the fresh
+        // speed order.
+        _detail = FilmLineFavorites.applyPinToDetail(
+          _detailBase!,
+          _linePin,
+          widget.item.sourceId,
+        );
         final seasons = _detail?.seasons ?? const [];
         _tabs?.dispose();
         _tabs = seasons.isEmpty
             ? null
             : TabController(length: seasons.length, vsync: this);
+        _tabs?.addListener(_onLineTabChanged);
+        _shownTabIndex = 0;
         _lineProbeNote = fastest.$2 == null
             ? S.t('测速完成，但线路都没有响应')
             : S.f('测速完成：最快「{}」{}ms', [fastest.$1, fastest.$2]);
@@ -420,6 +463,71 @@ class _FilmDetailPageState extends State<FilmDetailPage>
     } finally {
       if (mounted) setState(() => _probingLines = false);
     }
+  }
+
+  /// Batch 281: rebuilds when the line tab really
+  /// changes, so the pin row tracks the visible line.
+  void _onLineTabChanged() {
+    final index = _tabs?.index ?? 0;
+    if (index == _shownTabIndex) return;
+    _shownTabIndex = index;
+    if (mounted) setState(() {});
+  }
+
+  /// Batch 281: pin or unpin [season]'s line for this
+  /// work. The visible detail re-orders around the pin
+  /// while the line the user is looking at stays
+  /// selected; unpinning restores the speed-ordered base.
+  Future<void> _toggleLinePin(Season season) async {
+    final key = FilmLineFavorites.lineKeyOfSeason(season);
+    final current = _linePin;
+    final isCurrent = current != null &&
+        current.sourceId == widget.item.sourceId &&
+        current.lineKey == key;
+    if (isCurrent) {
+      await FilmLineFavorites.clearPin(widget.item.id);
+      _applyLinePin(null, keepKey: key);
+    } else {
+      final pin = FilmLinePin(
+        sourceId: widget.item.sourceId,
+        lineKey: key,
+      );
+      await FilmLineFavorites.savePin(widget.item.id, pin);
+      _applyLinePin(pin, keepKey: key);
+    }
+  }
+
+  void _applyLinePin(FilmLinePin? pin, {required String keepKey}) {
+    final base = _detailBase ?? _detail;
+    if (base == null || !mounted) return;
+    final reordered = FilmLineFavorites.applyPinToDetail(
+      base,
+      pin,
+      widget.item.sourceId,
+    );
+    var index = 0;
+    for (var i = 0; i < reordered.seasons.length; i++) {
+      if (FilmLineFavorites.lineKeyOfSeason(reordered.seasons[i]) ==
+          keepKey) {
+        index = i;
+        break;
+      }
+    }
+    setState(() {
+      _linePin = pin;
+      _detail = reordered;
+      _tabs?.dispose();
+      final seasons = reordered.seasons;
+      _tabs = seasons.isEmpty
+          ? null
+          : TabController(
+              length: seasons.length,
+              vsync: this,
+              initialIndex: index,
+            );
+      _tabs?.addListener(_onLineTabChanged);
+      _shownTabIndex = index;
+    });
   }
 
   /// Batch 254: pull the TMDB account's marks for this
@@ -1263,9 +1371,12 @@ class _FilmDetailPageState extends State<FilmDetailPage>
   /// avatar, name, and a subtitle line (the character
   /// played for TMDB cast, the performer for Bangumi
   /// characters).
+  /// Batch 281: entries carrying a person id (TMDB cast)
+  /// open the person page on tap; the rest stay display
+  /// only, exactly as before.
   Widget _castRow(
     BuildContext context,
-    List<({String name, String sub, String? imageUrl})> members,
+    List<({String name, String sub, String? imageUrl, int personId})> members,
   ) {
     final scheme = Theme.of(context).colorScheme;
     return SizedBox(
@@ -1276,7 +1387,7 @@ class _FilmDetailPageState extends State<FilmDetailPage>
         separatorBuilder: (_, _) => const SizedBox(width: 12),
         itemBuilder: (context, i) {
           final member = members[i];
-          return SizedBox(
+          final cell = SizedBox(
             width: 62,
             child: Column(
               children: [
@@ -1320,6 +1431,19 @@ class _FilmDetailPageState extends State<FilmDetailPage>
                   ),
               ],
             ),
+          );
+          if (member.personId <= 0) return cell;
+          return InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () => context.pushNamed(
+              '/film/person',
+              arguments: FilmPersonArgs(
+                id: member.personId,
+                name: member.name,
+                imageUrl: member.imageUrl,
+              ),
+            ),
+            child: cell,
           );
         },
       ),
@@ -1404,6 +1528,63 @@ class _FilmDetailPageState extends State<FilmDetailPage>
     return ep == null ? '' : S.f('· 第{}集', [ep + 1]);
   }
 
+  String _lineTabLabel(Season season) => season.title.isEmpty
+      ? S.f('线路{}', [season.seasonNumber])
+      : season.title;
+
+  /// Batch 281: the 收藏线路 row under the line tabs —
+  /// names the line currently in view and toggles its
+  /// pin. A pinned line also carries the star on its tab
+  /// (see _lines) and opens first next time.
+  Widget _linePinRow(BuildContext context, List<Season> seasons) {
+    final scheme = Theme.of(context).colorScheme;
+    final index = (_tabs?.index ?? 0).clamp(0, seasons.length - 1);
+    final season = seasons[index];
+    final key = FilmLineFavorites.lineKeyOfSeason(season);
+    final pinned = _linePin != null &&
+        _linePin!.sourceId == widget.item.sourceId &&
+        _linePin!.lineKey == key;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
+      child: Row(
+        children: [
+          Icon(
+            pinned
+                ? AnikumoIcons.star_rounded
+                : AnikumoIcons.star_border_rounded,
+            size: 17,
+            color: pinned ? scheme.primary : scheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              S.f('线路：{}', [_lineTabLabel(season)]),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
+            ),
+          ),
+          if (pinned)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Text(
+                S.t('已收藏'),
+                style: TextStyle(
+                  color: scheme.primary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          TextButton(
+            onPressed: () => _toggleLinePin(season),
+            child: Text(pinned ? S.t('取消收藏') : S.t('收藏线路')),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _lines(BuildContext context) {
     final seasons = _detail?.seasons ?? const <Season>[];
     if (seasons.isEmpty || _tabs == null) {
@@ -1461,14 +1642,28 @@ class _FilmDetailPageState extends State<FilmDetailPage>
             isScrollable: true,
             tabAlignment: TabAlignment.start,
             tabs: [
-              for (final s in seasons)
-                Tab(
-                  text: s.title.isEmpty
-                      ? S.f('线路{}', [s.seasonNumber])
-                      : s.title,
-                ),
+              for (var si = 0; si < seasons.length; si++)
+                if (si ==
+                    FilmLineFavorites.pinnedIndexOf(
+                      seasons,
+                      _linePin,
+                      widget.item.sourceId,
+                    ))
+                  Tab(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(AnikumoIcons.star_rounded, size: 13),
+                        const SizedBox(width: 4),
+                        Text(_lineTabLabel(seasons[si])),
+                      ],
+                    ),
+                  )
+                else
+                  Tab(text: _lineTabLabel(seasons[si])),
             ],
           ),
+        if (seasons.length > 1) _linePinRow(context, seasons),
         SizedBox(
           height: 320,
           child: TabBarView(

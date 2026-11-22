@@ -21,7 +21,9 @@ import 'package:anikumo/modules/comments/comment_response.dart';
 import 'package:anikumo/request/apis/bangumi_api.dart';
 import 'package:anikumo/pages/player/controller/player_danmaku_controller.dart';
 import 'package:anikumo/services/player/danmaku_thinning.dart';
+import 'package:anikumo/services/player/episode_resolve_index.dart';
 import 'package:anikumo/services/player/road_preference.dart';
+import 'package:anikumo/services/video_source/resolved_source_cache.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:anikumo/utils/episode_url.dart';
 import 'package:anikumo/utils/http_headers.dart';
@@ -764,6 +766,25 @@ abstract class _VideoPageController with Store implements Disposable {
       next.pageUrl,
       useLegacyParser: currentPlugin.useLegacyParser,
     );
+    // Batch 277 (#3): mirror whatever the prefetch resolved
+    // into the semantic episode index, so the switch to the
+    // next episode can answer from (source, work, road,
+    // episode) without reproducing the page URL string.
+    final hit = ResolvedSourceCache.instance.lookup(
+      next.pageUrl,
+      currentPlugin.useLegacyParser,
+    );
+    if (hit != null) {
+      EpisodeResolveIndex.instance.store(
+        EpisodeResolveIndex.key(
+          adapterName: currentPlugin.name,
+          src: src,
+          road: next.roadIndex,
+          episode: next.listIndex,
+        ),
+        EpisodeResolveEntry(url: hit.url, format: hit.format),
+      );
+    }
   }
 
   /// Resolves and starts playback on one road. Returns whether
@@ -788,11 +809,39 @@ abstract class _VideoPageController with Store implements Disposable {
     });
 
     try {
-      final source = await _videoSourceService!.resolve(
-        url,
-        useLegacyParser: currentPlugin.useLegacyParser,
-        offset: offset,
+      // Batch 277 (#3): the semantic episode index gets
+      // first say — an entry means this exact (source,
+      // work, road, episode) already resolved, most often
+      // via the next-episode prefetch. Playback headers
+      // are plugin-derived and applied below either way.
+      final indexKey = EpisodeResolveIndex.key(
+        adapterName: currentPlugin.name,
+        src: src,
+        road: resolvedEpisode.roadIndex,
+        episode: resolvedEpisode.listIndex,
       );
+      final indexed = EpisodeResolveIndex.instance.lookup(indexKey);
+      final VideoSource source;
+      if (indexed != null) {
+        source = VideoSource(
+          url: indexed.url,
+          offset: offset,
+          type: VideoSourceType.online,
+          format: indexed.format,
+        );
+        AnikumoLogger()
+            .i('VideoPageController: resolved video URL from episode index');
+      } else {
+        source = await _videoSourceService!.resolve(
+          url,
+          useLegacyParser: currentPlugin.useLegacyParser,
+          offset: offset,
+        );
+        EpisodeResolveIndex.instance.store(
+          indexKey,
+          EpisodeResolveEntry(url: source.url, format: source.format),
+        );
+      }
 
       if (session.isStale) {
         return (ok: false, error: null);

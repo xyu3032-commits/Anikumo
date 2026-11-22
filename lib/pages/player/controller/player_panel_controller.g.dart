@@ -63,6 +63,24 @@ mixin _$PlayerPanelController on _PlayerPanelController, Store {
     });
   }
 
+  late final _$touchLockedAtom = Atom(
+    name: '_PlayerPanelController.touchLocked',
+    context: context,
+  );
+
+  @override
+  bool get touchLocked {
+    _$touchLockedAtom.reportRead();
+    return super.touchLocked;
+  }
+
+  @override
+  set touchLocked(bool value) {
+    _$touchLockedAtom.reportWrite(value, super.touchLocked, () {
+      super.touchLocked = value;
+    });
+  }
+
   late final _$showVideoControllerAtom = Atom(
     name: '_PlayerPanelController.showVideoController',
     context: context,
@@ -248,6 +266,7 @@ mixin _$PlayerPanelController on _PlayerPanelController, Store {
 aspectRatioMode: ${aspectRatioMode},
 brightness: ${brightness},
 lockPanel: ${lockPanel},
+touchLocked: ${touchLocked},
 showVideoController: ${showVideoController},
 showSeekTime: ${showSeekTime},
 seekCancelPending: ${seekCancelPending},

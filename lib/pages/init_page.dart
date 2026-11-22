@@ -20,8 +20,11 @@ import 'package:anikumo/services/platform/platform_environment_service.dart';
 import 'package:anikumo/services/platform/app_exit.dart';
 import 'package:anikumo/services/announcement/announcement_service.dart';
 import 'package:anikumo/services/backup/auto_backup.dart';
+import 'package:anikumo/services/sync/auto_sync.dart';
 import 'package:anikumo/services/platform/home_widget_publisher.dart';
 import 'package:anikumo/services/notifications/update_notification_service.dart';
+import 'package:anikumo/services/collect/auto_archive.dart';
+import 'package:anikumo/services/storage/library_housekeeping.dart';
 import 'package:anikumo/services/update/startup_update_check.dart';
 import 'package:anikumo/navigation.dart';
 import 'package:anikumo/services/i18n/app_strings.dart';
@@ -119,12 +122,48 @@ class _InitPageState extends State<InitPage> {
         () => AutoBackupService.runIfDue(),
       ),
     );
+    // Batch 282 (#24): timed auto sync — checked a
+    // little after the backup so the two never race
+    // the first frame; the service re-checks every
+    // 30 minutes while the app keeps running.
+    AutoSyncService.startPeriodicChecks();
+    unawaited(
+      Future<void>.delayed(
+        const Duration(seconds: 18),
+        () => AutoSyncService.runIfDue(),
+      ),
+    );
     // Batch 276 (#61): refresh the home-screen
     // continue-watching widget (Android only inside).
     unawaited(
       Future<void>.delayed(
         const Duration(seconds: 20),
         HomeWidgetPublisher.publishContinue,
+      ),
+    );
+    // Batch 283 (#23): finished-show auto archive —
+    // same deferred rhythm as the checks above, with
+    // its own throttle inside the service.
+    unawaited(
+      Future<void>.delayed(
+        const Duration(seconds: 22),
+        AutoArchiveService.runIfDue,
+      ),
+    );
+    // Batch 283 (#27/#28): cache cap + history
+    // retention housekeeping, last in the chain.
+    unawaited(
+      Future<void>.delayed(
+        const Duration(seconds: 24),
+        LibraryHousekeeping.runStartupChecks,
+      ),
+    );
+    // Batch 284 (#32): refresh the home-screen
+    // calendar widget on the same deferred rhythm.
+    unawaited(
+      Future<void>.delayed(
+        const Duration(seconds: 26),
+        HomeWidgetPublisher.publishCalendar,
       ),
     );
     context.navigate(GStorage.getSetting(SettingsKeys.defaultStartupPage));

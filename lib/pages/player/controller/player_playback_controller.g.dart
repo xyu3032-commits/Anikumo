@@ -117,6 +117,42 @@ mixin _$PlayerPlaybackController on _PlayerPlaybackController, Store {
     });
   }
 
+  late final _$abLoopAAtom = Atom(
+    name: '_PlayerPlaybackController.abLoopA',
+    context: context,
+  );
+
+  @override
+  Duration? get abLoopA {
+    _$abLoopAAtom.reportRead();
+    return super.abLoopA;
+  }
+
+  @override
+  set abLoopA(Duration? value) {
+    _$abLoopAAtom.reportWrite(value, super.abLoopA, () {
+      super.abLoopA = value;
+    });
+  }
+
+  late final _$abLoopBAtom = Atom(
+    name: '_PlayerPlaybackController.abLoopB',
+    context: context,
+  );
+
+  @override
+  Duration? get abLoopB {
+    _$abLoopBAtom.reportRead();
+    return super.abLoopB;
+  }
+
+  @override
+  set abLoopB(Duration? value) {
+    _$abLoopBAtom.reportWrite(value, super.abLoopB, () {
+      super.abLoopB = value;
+    });
+  }
+
   late final _$currentPositionAtom = Atom(
     name: '_PlayerPlaybackController.currentPosition',
     context: context,
@@ -206,6 +242,39 @@ mixin _$PlayerPlaybackController on _PlayerPlaybackController, Store {
   }
 
   @override
+  void setAbLoopA() {
+    final _$actionInfo = _$_PlayerPlaybackControllerActionController
+        .startAction(name: '_PlayerPlaybackController.setAbLoopA');
+    try {
+      return super.setAbLoopA();
+    } finally {
+      _$_PlayerPlaybackControllerActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void setAbLoopB() {
+    final _$actionInfo = _$_PlayerPlaybackControllerActionController
+        .startAction(name: '_PlayerPlaybackController.setAbLoopB');
+    try {
+      return super.setAbLoopB();
+    } finally {
+      _$_PlayerPlaybackControllerActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void clearAbLoop() {
+    final _$actionInfo = _$_PlayerPlaybackControllerActionController
+        .startAction(name: '_PlayerPlaybackController.clearAbLoop');
+    try {
+      return super.clearAbLoop();
+    } finally {
+      _$_PlayerPlaybackControllerActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
   void updateVolume(double value) {
     final _$actionInfo = _$_PlayerPlaybackControllerActionController
         .startAction(name: '_PlayerPlaybackController.updateVolume');
@@ -247,6 +316,8 @@ loading: ${loading},
 playing: ${playing},
 isBuffering: ${isBuffering},
 completed: ${completed},
+abLoopA: ${abLoopA},
+abLoopB: ${abLoopB},
 currentPosition: ${currentPosition},
 buffer: ${buffer},
 duration: ${duration},

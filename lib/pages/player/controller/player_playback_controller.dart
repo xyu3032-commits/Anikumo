@@ -1,5 +1,6 @@
 // ignore_for_file: library_private_types_in_public_api
 
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -12,6 +13,7 @@ import 'package:anikumo/utils/constants.dart';
 import 'package:anikumo/services/logging/logger.dart';
 import 'package:anikumo/services/network/proxy_utils.dart';
 import 'package:anikumo/services/network/system_proxy_service.dart';
+import 'package:anikumo/services/player/ab_loop.dart';
 import 'package:anikumo/services/player/audio_eq.dart';
 import 'package:anikumo/services/player/playback_cache_policy.dart';
 import 'package:anikumo/services/player/playback_tuner.dart';
@@ -112,6 +114,13 @@ abstract class _PlayerPlaybackController with Store {
   bool isBuffering = true;
   @observable
   bool completed = false;
+  /// Batch 277 (#2): A-B segment loop points. Session
+  /// state only; cleared on every episode init.
+  @observable
+  Duration? abLoopA;
+  @observable
+  Duration? abLoopB;
+
   @observable
   Duration currentPosition = Duration.zero;
   @observable
@@ -149,6 +158,32 @@ abstract class _PlayerPlaybackController with Store {
     duration = Duration.zero;
     completed = false;
     startOffset = 0;
+    // Batch 277 (#2): A-B points belong to one episode;
+    // an episode switch always drops them.
+    abLoopA = null;
+    abLoopB = null;
+  }
+
+  /// Batch 277 (#2): marks point A at the playhead.
+  @action
+  void setAbLoopA() {
+    final next = abLoopApplyA(a: abLoopA, b: abLoopB, point: currentPosition);
+    abLoopA = next.a;
+    abLoopB = next.b;
+  }
+
+  /// Batch 277 (#2): marks point B at the playhead.
+  @action
+  void setAbLoopB() {
+    final next = abLoopApplyB(a: abLoopA, b: abLoopB, point: currentPosition);
+    abLoopA = next.a;
+    abLoopB = next.b;
+  }
+
+  @action
+  void clearAbLoop() {
+    abLoopA = null;
+    abLoopB = null;
   }
 
   /// 本次会话是否从距结尾 [nearEndWatchedThreshold] 以内的位置起播。
@@ -655,6 +690,18 @@ abstract class _PlayerPlaybackController with Store {
     }
     if (completed != state.completed) {
       completed = state.completed;
+    }
+    // Batch 277 (#2): A-B loop — once the playhead reaches
+    // point B, jump back to point A. Fires on the regular
+    // 1-second state sync, which is precise enough for a
+    // segment loop and costs nothing while unarmed.
+    final abTarget = abLoopSeekTarget(
+      position: state.position,
+      a: abLoopA,
+      b: abLoopB,
+    );
+    if (abTarget != null) {
+      unawaited(player.seek(abTarget).catchError((_) {}));
     }
   }
 

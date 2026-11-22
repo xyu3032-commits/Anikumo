@@ -12,6 +12,9 @@ import 'package:anikumo/utils/format.dart' as fmt;
 import 'package:anikumo/utils/file_system.dart';
 import 'package:anikumo/services/logging/logger.dart';
 import 'package:anikumo/services/download/download_directory_service.dart';
+import 'package:anikumo/services/download/download_gate.dart';
+import 'package:anikumo/services/download/rate_limiter.dart';
+import 'package:anikumo/services/network/metered_network_service.dart';
 import 'package:anikumo/services/storage/storage.dart';
 import 'package:path/path.dart' as path;
 
@@ -136,6 +139,13 @@ class _SpeedTracker {
 class DownloadManager implements IDownloadManager {
   DownloadManager() {
     _loadSettings();
+    // Batch 282 (#25): when the network turns
+    // unmetered, Wi-Fi-gated queue entries may start.
+    MeteredNetworkService.listenable.addListener(_onNetworkChanged);
+  }
+
+  void _onNetworkChanged() {
+    if (!MeteredNetworkService.isMetered) _processQueue();
   }
 
   final DownloadHttpClient _http = DownloadHttpClient.instance;
@@ -266,7 +276,10 @@ class DownloadManager implements IDownloadManager {
       episodeNumber: request.episodeNumber,
     );
 
-    if (_runningCount < maxParallelEpisodes) {
+    // Batch 282 (#25): the Wi-Fi-only gate queues the
+    // request exactly like the parallel limit does.
+    if (_runningCount < maxParallelEpisodes &&
+        !DownloadGate.blockedNow()) {
       _runningCount++;
       _activeTasks[key] = task;
       _runEpisodeDownload(
@@ -300,6 +313,16 @@ class DownloadManager implements IDownloadManager {
       recordKey: request.recordKey,
       episodeNumber: request.episodeNumber,
     );
+
+    // Batch 282 (#25): even a priority download waits
+    // for Wi-Fi when the gate is on — it queues at the
+    // front instead of starting.
+    if (DownloadGate.blockedNow()) {
+      request.episode.status = DownloadStatus.pending;
+      _queue.insert(0, request);
+      _activeTasks[key] = task;
+      return;
+    }
 
     // Start immediately, bypassing the parallel limit (priority download)
     _runningCount++;
@@ -336,7 +359,8 @@ class DownloadManager implements IDownloadManager {
     );
     _activeTasks[key] = task;
 
-    if (_runningCount < maxParallelEpisodes) {
+    if (_runningCount < maxParallelEpisodes &&
+        !DownloadGate.blockedNow()) {
       _runningCount++;
       _runEpisodeDownload(
         task: task,
@@ -348,6 +372,9 @@ class DownloadManager implements IDownloadManager {
         episode: request.episode,
       );
     } else {
+      if (DownloadGate.blockedNow()) {
+        request.episode.status = DownloadStatus.pending;
+      }
       _queue.add(request);
     }
   }
@@ -368,6 +395,8 @@ class DownloadManager implements IDownloadManager {
   }
 
   void _processQueue() {
+    // Batch 282 (#25): gated starts stay queued.
+    if (DownloadGate.blockedNow()) return;
     while (_runningCount < maxParallelEpisodes && _queue.isNotEmpty) {
       final request = _queue.removeAt(0);
       final key = _taskKey(request.recordKey, request.episodeNumber);
@@ -731,7 +760,10 @@ class DownloadManager implements IDownloadManager {
       _speedTrackers[key] = _SpeedTracker();
 
       try {
-        await for (final chunk in response.data!.stream) {
+        // Batch 282 (#26): the shared rate limiter
+        // paces this stream when a cap is configured.
+        await for (final chunk
+            in DownloadRateLimiter.throttle(response.data!.stream)) {
           if (task.isPaused || task.cancelToken.isCancelled) break;
           await raf.writeFrom(chunk);
           received += chunk.length;
@@ -859,14 +891,38 @@ class DownloadManager implements IDownloadManager {
     }
   }
 
-  Future<void> _downloadFile(String url, String savePath,
-      Map<String, String> headers, CancelToken cancelToken) async {
-    await _http.download(
+  /// Batch 282 (#26): streamed file download used by
+  /// segments and key files. Dio's `download()` hides
+  /// the byte stream, so the shared rate limiter can
+  /// only pace transfers that are consumed as a Dart
+  /// stream — this helper is that consumption point.
+  /// Cancel works exactly like before: cancelling the
+  /// token aborts the request and errors the stream.
+  Future<void> _downloadToFileStreamed(
+    String url,
+    String savePath,
+    Map<String, String> headers,
+    CancelToken cancelToken,
+  ) async {
+    final response = await _http.getStream(
       url,
-      savePath,
       headers: headers,
       cancelToken: cancelToken,
     );
+    final sink = File(savePath).openWrite();
+    try {
+      await for (final chunk
+          in DownloadRateLimiter.throttle(response.data!.stream)) {
+        sink.add(chunk);
+      }
+    } finally {
+      await sink.close();
+    }
+  }
+
+  Future<void> _downloadFile(String url, String savePath,
+      Map<String, String> headers, CancelToken cancelToken) async {
+    await _downloadToFileStreamed(url, savePath, headers, cancelToken);
   }
 
   Future<int> _downloadSegmentWithRetry(
@@ -880,12 +936,7 @@ class DownloadManager implements IDownloadManager {
     int retryCount = 0;
     while (true) {
       try {
-        await _http.download(
-          url,
-          tmpPath,
-          headers: headers,
-          cancelToken: cancelToken,
-        );
+        await _downloadToFileStreamed(url, tmpPath, headers, cancelToken);
         await File(tmpPath).rename(savePath);
         return await File(savePath).length();
       } catch (e) {
