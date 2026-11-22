@@ -80,17 +80,17 @@ Anikumo 是一款**使用 Kazumi 的整体框架制作的动漫软件**，漫画
 
 ## 下载
 
-当前发布版 **v1.1.0**，点对应平台直接下载（全部版本与历史版本见 [Releases](https://github.com/xyu3032-commits/Anikumo/releases)）：
+当前发布版 **v1.2.0**，点对应平台直接下载（全部版本与历史版本见 [Releases](https://github.com/xyu3032-commits/Anikumo/releases)）：
 
 | 平台 | 说明 | 大小 | 下载 |
 |---|---|---|---|
-| Android（arm64） | 64 位手机（新机）：约 2017 年后的手机基本都是这个 · Android 7.0–16 | 32.7 MB | [⬇ 下载 APK](https://github.com/xyu3032-commits/Anikumo/releases/download/v1.1.0/Anikumo-1.1.0-arm64.apk) |
-| Android（armeabi-v7a） | 32 位手机（老机）：约 2016 年及以前的老机、少数低端机 · Android 7.0–10 | 31.8 MB | [⬇ 下载 APK](https://github.com/xyu3032-commits/Anikumo/releases/download/v1.1.0/Anikumo-1.1.0-armeabi-v7a.apk) |
-| Android（x86_64） | 电脑安卓模拟器专用，手机不要下这个 | 33.8 MB | [⬇ 下载 APK](https://github.com/xyu3032-commits/Anikumo/releases/download/v1.1.0/Anikumo-1.1.0-x86_64.apk) |
-| Windows | 解压即用 | 40.8 MB | [⬇ 下载 ZIP](https://github.com/xyu3032-commits/Anikumo/releases/download/v1.1.0/Anikumo-1.1.0-windows-x64.zip) |
-| macOS | 未签名，首次打开请右键点「打开」 | 66.0 MB | [⬇ 下载 DMG](https://github.com/xyu3032-commits/Anikumo/releases/download/v1.1.0/Anikumo-1.1.0-macos.dmg) |
-| Linux | 解压后运行 | 40.8 MB | [⬇ 下载 TAR.GZ](https://github.com/xyu3032-commits/Anikumo/releases/download/v1.1.0/Anikumo-1.1.0-linux-x64.tar.gz) |
-| iOS | 未签名版，需要自签后安装 | 31.4 MB | [⬇ 下载 IPA](https://github.com/xyu3032-commits/Anikumo/releases/download/v1.1.0/Anikumo-1.1.0-ios-unsigned.ipa) |
+| Android（arm64） | 64 位手机（新机）：约 2017 年后的手机基本都是这个 · Android 7.0–16 | 44.1 MB | [⬇ 下载 APK](https://github.com/xyu3032-commits/Anikumo/releases/download/v1.2.0/Anikumo-1.2.0-arm64.apk) |
+| Android（armeabi-v7a） | 32 位手机（老机）：约 2016 年及以前的老机、少数低端机 · Android 7.0–10 | 42.1 MB | [⬇ 下载 APK](https://github.com/xyu3032-commits/Anikumo/releases/download/v1.2.0/Anikumo-1.2.0-armeabi-v7a.apk) |
+| Android（x86_64） | 电脑安卓模拟器专用，手机不要下这个 | 45.8 MB | [⬇ 下载 APK](https://github.com/xyu3032-commits/Anikumo/releases/download/v1.2.0/Anikumo-1.2.0-x86_64.apk) |
+| Windows | 解压即用 | 41.2 MB | [⬇ 下载 ZIP](https://github.com/xyu3032-commits/Anikumo/releases/download/v1.2.0/Anikumo-1.2.0-windows-x64.zip) |
+| macOS | 未签名，首次打开请右键点「打开」 | 66.0 MB | [⬇ 下载 DMG](https://github.com/xyu3032-commits/Anikumo/releases/download/v1.2.0/Anikumo-1.2.0-macos.dmg) |
+| Linux | 解压后运行 | 41.1 MB | [⬇ 下载 TAR.GZ](https://github.com/xyu3032-commits/Anikumo/releases/download/v1.2.0/Anikumo-1.2.0-linux-x64.tar.gz) |
+| iOS | 未签名版，需要自签后安装 | 46.4 MB | [⬇ 下载 IPA](https://github.com/xyu3032-commits/Anikumo/releases/download/v1.2.0/Anikumo-1.2.0-ios-unsigned.ipa) |
 
 - 本应用需要 Android 7.0 或以上，7.0 以下装不了；不知道自己手机是哪种，先下 arm64，提示不兼容再换 v7a。
 - 安卓版与已发布版本同签名，可直接覆盖安装，不用卸载。

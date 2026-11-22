@@ -86,8 +86,8 @@
 
 在本页下方 Assets 中按设备选择：
 
-- 安卓：`Anikumo-1.2.0-android-arm64-v8a.apk`（主流机型）、`Anikumo-1.2.0-android-armeabi-v7a.apk`（老机型）、`Anikumo-1.2.0-android-x86_64.apk`（模拟器）
+- 安卓：`Anikumo-1.2.0-arm64.apk`（主流机型）、`Anikumo-1.2.0-armeabi-v7a.apk`（老机型）、`Anikumo-1.2.0-x86_64.apk`（模拟器）
 - Windows：`Anikumo-1.2.0-windows-x64.zip`，解压后运行
-- macOS：`Anikumo-1.2.0-macos-arm64.zip`（Apple 芯片）
+- macOS：`Anikumo-1.2.0-macos.dmg`（Apple 芯片）
 - Linux：`Anikumo-1.2.0-linux-x64.tar.gz`
 - iOS：`Anikumo-1.2.0-ios-unsigned.ipa`（未签名，需自签安装）
